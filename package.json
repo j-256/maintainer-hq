@@ -25,7 +25,7 @@
     "db:migrate": "wrangler d1 migrations apply HQ_DB --local --config wrangler.dev.jsonc",
     "db:seed": "wrangler d1 execute HQ_DB --local --config wrangler.dev.jsonc --file fixtures/development.sql",
     "dev:prepare": "npm run db:migrate && npm run db:seed",
-    "check:publication": "node scripts/check-publication.mjs",
+    "check:publication": "tsx scripts/check-publication.mjs",
     "check:dependencies": "tsx cli/dependencies.ts check",
     "dependencies:report": "tsx cli/dependencies.ts check --json",
     "check": "npm run check:dependencies && npm run typecheck && npm test && npm run build && npm run check:publication",
