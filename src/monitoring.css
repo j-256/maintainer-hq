@@ -1,0 +1,227 @@
+.monitoring-workspace {
+  min-width: 0;
+}
+.monitor-run-status {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--hq-text-ui);
+}
+.monitor-run-status h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.monitor-evidence-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.monitor-check-times {
+  display: grid;
+  gap: 6px;
+}
+.monitor-card-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.monitor-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  min-width: 0;
+  font-size: var(--hq-text-ui);
+}
+.monitor-card h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.monitor-card .hook-section-heading {
+  flex-wrap: wrap;
+}
+.monitor-card > button {
+  justify-self: start;
+}
+.monitor-private-url {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: var(--hq-text-ui);
+}
+.monitor-private-url > span {
+  display: block;
+  color: var(--muted-foreground);
+}
+.monitor-remove {
+  color: var(--destructive);
+}
+.hook-metrics dd.monitor-metric-label {
+  font-size: 1.25rem;
+  line-height: 1.8;
+}
+.monitor-editor-dialog,
+.monitor-review-dialog {
+  width: min(960px, calc(100vw - 32px));
+  max-width: 960px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  font-size: var(--hq-text-ui);
+  line-height: 1.6;
+}
+.monitor-review-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.monitor-review-body {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+}
+.monitor-target-facts {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.monitor-target-facts > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+  gap: 16px;
+  padding-block: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.monitor-target-facts dt {
+  color: var(--muted-foreground);
+}
+.monitor-target-facts dd {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.monitor-review-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.monitor-review-comparison > section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+.monitor-review-comparison h3,
+.monitor-editor-dialog h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.monitor-review-comparison .monitor-target-facts > div {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.monitor-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.monitor-form-grid [role="combobox"] {
+  width: 100%;
+}
+.monitor-assertions {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.monitor-assertions legend {
+  font-weight: 600;
+  padding-inline: 6px;
+}
+.monitor-json-editor {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.monitor-json-editor > button {
+  justify-self: start;
+}
+.monitor-json-field {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-inline-start: 2px solid var(--border);
+  min-width: 0;
+}
+.monitor-json-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 150px) auto;
+  gap: 8px;
+  align-items: center;
+}
+.monitor-json-row [role="combobox"] {
+  width: 100%;
+}
+.monitor-json-summary {
+  display: grid;
+  gap: 6px;
+  border-inline-start: 2px solid var(--border);
+  padding-inline-start: 12px;
+}
+.monitor-json-summary > div {
+  display: grid;
+  grid-template-columns: minmax(40px, 1fr) minmax(0, 2fr);
+  gap: 12px;
+}
+.monitor-action-list {
+  display: grid;
+  gap: 16px;
+}
+.monitor-action-list li {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+@media (max-width: 900px) {
+  .monitor-card-list {
+    grid-template-columns: 1fr;
+  }
+  .monitoring-workspace .hook-section-heading {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 600px) {
+  .monitor-form-grid,
+  .monitor-review-comparison {
+    grid-template-columns: 1fr;
+  }
+  .monitor-target-facts > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .monitor-json-field {
+    padding: 6px;
+  }
+  .monitor-json-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .monitor-json-row > input {
+    grid-column: 1 / -1;
+  }
+  .monitor-json-summary > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .monitor-card {
+    padding: 16px;
+  }
+}

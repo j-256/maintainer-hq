@@ -1,0 +1,27 @@
+{
+  "name": "hq-documentation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static product documentation for Maintainer HQ",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro build",
+    "preview": "astro preview --host 127.0.0.1",
+    "typecheck": "astro check",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm run build && npm test"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@astrojs/markdown-remark": "7.3.0",
+    "@astrojs/starlight": "0.42.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "astro": "7.3.1",
+    "parse5": "8.0.1",
+    "typescript": "6.0.3"
+  }
+}

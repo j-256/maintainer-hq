@@ -1,0 +1,47 @@
+[data-tone="success"] {
+  --status-fg: var(--hq-success);
+  --status-bg: var(--hq-success-soft);
+  --status-border: var(--hq-success-border);
+}
+[data-tone="danger"] {
+  --status-fg: var(--hq-danger);
+  --status-bg: var(--hq-danger-soft);
+  --status-border: var(--hq-danger-border);
+}
+[data-tone="warning"] {
+  --status-fg: var(--hq-warning);
+  --status-bg: var(--hq-warning-soft);
+  --status-border: var(--hq-warning-border);
+}
+[data-tone="info"] {
+  --status-fg: var(--hq-info);
+  --status-bg: var(--hq-info-soft);
+  --status-border: var(--hq-info-border);
+}
+[data-tone="neutral"] {
+  --status-fg: var(--muted-foreground);
+  --status-bg: var(--muted);
+  --status-border: var(--border);
+}
+.status-icon {
+  color: var(--status-fg);
+  flex-shrink: 0;
+}
+.status-badge[data-slot="badge"] {
+  color: var(--status-fg);
+  background: var(--status-bg);
+  border-color: var(--status-border);
+  height: auto;
+  min-height: 24px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 3px 8px;
+  line-height: 1.4;
+}
+.status-badge > svg {
+  flex-shrink: 0;
+}

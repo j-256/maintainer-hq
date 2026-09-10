@@ -1,0 +1,25 @@
+name: Improvement proposal
+description: Propose a focused product, documentation, or maintenance improvement
+title: "proposal: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What maintainer workflow or failure mode needs improvement?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior rather than a preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Security and operational boundaries
+      description: Note affected roles, workspaces, credentials, providers, deployments, migrations, and recovery paths.
+    validations:
+      required: true

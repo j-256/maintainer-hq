@@ -1,0 +1,16 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "hq-docs",
+  "compatibility_date": "2026-09-07",
+  "send_metrics": false,
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "docs.hq.lasers.app", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

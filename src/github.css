@@ -1,0 +1,142 @@
+.github-policy-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.github-metadata {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  row-gap: 20px;
+}
+.github-evidence {
+  margin-top: 16px;
+}
+.github-evidence code {
+  overflow-wrap: anywhere;
+}
+.github-checks {
+  margin-top: 14px;
+  display: grid;
+}
+.github-checks > div {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.github-checks dt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--hq-text-support);
+  font-weight: 500;
+}
+.github-checks dd {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+  line-height: 1.7;
+  margin-top: 6px;
+}
+.github-count {
+  font-family: "Geist Mono Variable", monospace;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+.github-refresh-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.github-refresh-summary strong {
+  font-size: var(--hq-text-ui);
+}
+.github-refresh-summary p {
+  flex-basis: 100%;
+  font-size: var(--hq-text-ui);
+  line-height: 1.65;
+}
+.github-results {
+  display: grid;
+  gap: 24px;
+}
+.github-result {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  min-width: 0;
+}
+.github-result h3 {
+  font-size: var(--hq-text-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.github-result > p {
+  font-size: var(--hq-text-support);
+  line-height: 1.7;
+  margin-top: 10px;
+}
+.github-history-dialog .source-form-scroll {
+  flex: 1;
+}
+.github-refresh-reference {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 18px 0;
+  font-size: var(--hq-text-support);
+}
+.github-refresh-reference label {
+  flex-basis: 100%;
+}
+.github-refresh-reference input {
+  min-width: 0;
+  flex: 1 1 240px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: "Geist Mono Variable", monospace;
+}
+.github-diagnostics {
+  margin: 16px 0;
+  font-size: var(--hq-text-support);
+  line-height: 1.7;
+}
+.github-diagnostics summary {
+  cursor: pointer;
+}
+.github-diagnostics p {
+  margin-top: 10px;
+  color: var(--muted-foreground);
+}
+.github-diagnostics summary:focus-visible,
+.github-refresh-reference input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.github-repository-evidence {
+  grid-column: 1 / -1;
+}
+.github-repository-evidence > details {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 16px;
+}
+.github-repository-evidence summary {
+  font-size: var(--hq-text-ui);
+  cursor: pointer;
+}
+.github-repository-evidence summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 5px;
+}
+@media (max-width: 650px) {
+  .github-policy-fields,
+  .github-metadata {
+    grid-template-columns: 1fr;
+  }
+  .github-checks dt {
+    align-items: flex-start;
+  }
+  .github-refresh-summary {
+    gap: 8px;
+  }
+}

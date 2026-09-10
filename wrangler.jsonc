@@ -1,0 +1,40 @@
+{
+  "name": "maintainer-hq",
+  "main": "worker/index.ts",
+  "durable_objects": {
+    "bindings": [
+      { "name": "WORKSPACE_EVENTS", "class_name": "WorkspaceEvents" },
+    ],
+  },
+  "migrations": [
+    { "tag": "workspace-events-v1", "new_sqlite_classes": ["WorkspaceEvents"] },
+  ],
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "limits": {
+    "cpu_ms": 2000,
+    "subrequests": 1000,
+  },
+  "triggers": {
+    "crons": ["* * * * *"],
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp", "/healthz"],
+  },
+  "d1_databases": [
+    {
+      "binding": "HQ_DB",
+      "database_name": "maintainer-hq",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}

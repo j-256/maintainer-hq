@@ -1,0 +1,74 @@
+.preferences-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+.preferences-summary h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.preferences-editor {
+  max-width: 58rem;
+}
+.preferences-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1.75rem 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.preferences-field {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.preferences-field:last-child {
+  grid-column: 1 / -1;
+}
+.preferences-field label {
+  font-weight: 500;
+}
+.preferences-preview {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--accent);
+  overflow-wrap: anywhere;
+}
+.preferences-preview time {
+  font-family: "Geist Mono Variable", monospace;
+  font-size: clamp(1.05rem, 2.4vw, 1.5rem);
+  font-variant-numeric: tabular-nums;
+}
+.preferences-preview > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.preferences-editor .preferences-explanation {
+  margin: 1rem 0 1.5rem;
+}
+.preferences-saved {
+  color: var(--primary);
+}
+@media (max-width: 640px) {
+  .preferences-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .preferences-fields {
+    grid-template-columns: 1fr;
+  }
+  .preferences-preview {
+    padding: 1rem;
+  }
+  .preferences-editor .form-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,116 @@
+.release-workspace,
+.project-release-workspace {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.release-toolbar,
+.release-deployment-heading,
+.release-project-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.release-toolbar h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.release-workspace p,
+.release-provenance,
+.release-selector,
+.release-project-context {
+  font-size: var(--hq-text-ui);
+  line-height: 1.6;
+}
+.release-workspace p,
+.release-provenance,
+.release-record-id,
+.release-project-context > span {
+  color: var(--muted-foreground);
+}
+.release-workspace p + p,
+.release-workspace p + .quiet-link,
+.release-workspace .release-footnote {
+  margin-top: 10px;
+}
+.release-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.release-workspace [data-slot="card-title"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--hq-text-body);
+}
+.release-workspace [data-slot="card"],
+.release-workspace [data-slot="card-content"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--hq-text-ui);
+}
+.release-value {
+  display: block;
+  font-size: 1.4rem;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+.release-provenance {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.release-selector {
+  display: grid;
+  gap: 6px;
+  max-width: 32rem;
+  min-width: 0;
+}
+.release-selector [data-slot="select-trigger"] {
+  width: 100%;
+}
+.release-notice {
+  border-left: 3px solid var(--hq-warning);
+  padding: 10px 14px;
+}
+.release-empty {
+  padding-block: 20px;
+}
+.release-deployments {
+  display: grid;
+  margin-top: 12px;
+}
+.release-deployments article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 20px;
+  padding-block: 14px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.release-deployments article > div {
+  display: flex;
+  gap: 10px 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.release-failed {
+  color: var(--destructive);
+  font-weight: 600;
+}
+.release-record-id {
+  font-size: var(--hq-text-ui);
+}
+@media (max-width: 700px) {
+  .release-summary-grid,
+  .release-deployments article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .release-toolbar > button {
+    width: 100%;
+  }
+}

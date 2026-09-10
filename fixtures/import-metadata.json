@@ -1,0 +1,38 @@
+{
+  "formatVersion": 2,
+  "sourceLabel": "Reviewed example metadata",
+  "projects": [
+    {
+      "key": "observatory",
+      "name": "Observatory",
+      "description": "A shared view of project health",
+      "lifecycle": "active",
+      "importance": "standard",
+      "importanceNote": "",
+      "portfolio": {
+        "status": "undecided",
+        "reason": "",
+        "url": null,
+        "reviewDate": null
+      }
+    }
+  ],
+  "repositories": [
+    {
+      "fullName": "example/observatory",
+      "description": "The Observatory application repository",
+      "projectKey": "observatory",
+      "classification": "maintained",
+      "lifecycle": "active",
+      "expectations": {
+        "ci": "required",
+        "security": "required",
+        "monitoring": "unmanaged",
+        "hooks": "unmanaged",
+        "visibility": "public",
+        "reviewDate": null,
+        "note": "Repository intent only. Connect sources separately to collect fresh evidence."
+      }
+    }
+  ]
+}
