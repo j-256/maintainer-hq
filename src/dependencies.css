@@ -1,0 +1,328 @@
+.dependencies-view {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.dependency-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.dependency-toolbar h2 {
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+.dependency-toolbar p {
+  margin-top: 0.35rem;
+  color: var(--muted-foreground);
+}
+.dependency-search {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 36rem;
+}
+.dependency-search > div {
+  display: flex;
+  gap: 0.65rem;
+}
+.dependency-search input {
+  font-size: 1rem;
+  min-height: 2.5rem;
+}
+.dependency-meta,
+.dependency-repository > span {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.dependency-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+.dependency-inventory {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.dependency-inventory:empty {
+  display: none;
+}
+.dependency-inventory > li {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.2fr) minmax(10rem, 0.8fr) minmax(
+      12rem,
+      1fr
+    );
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  padding: 1rem 1.2rem;
+}
+.dependency-inventory > li + li {
+  border-top: 1px solid var(--border);
+}
+.dependency-repository,
+.dependency-row-status,
+.dependency-inventory .dependency-meta {
+  display: grid;
+  gap: 0.3rem;
+  justify-items: start;
+  min-width: 0;
+}
+.dependency-repository > a {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 0.2em;
+}
+.dependency-row-status > span:not([data-slot]) {
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+.dependency-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.dependency-empty,
+.dependency-notice {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  overflow-wrap: anywhere;
+}
+.dependency-empty h3,
+.dependency-notice h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.dependency-empty p,
+.dependency-notice p {
+  color: var(--muted-foreground);
+}
+.dependency-notice ul {
+  padding-left: 1.25rem;
+  list-style: disc;
+  display: grid;
+  gap: 0.5rem;
+}
+.dependency-inspection-options {
+  display: grid;
+  gap: 0.4rem;
+}
+.dependency-inspection-options label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.dependency-inspection-options input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
+}
+.dependency-inspection-options > span {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+}
+.dependency-source {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 25rem;
+}
+.dependency-provenance {
+  align-items: center;
+}
+.dependency-inspection-details {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+}
+.dependency-inspection-details summary {
+  cursor: pointer;
+}
+.dependency-inspection-details dl {
+  margin-top: 1rem;
+}
+.dependency-finding {
+  display: grid;
+  gap: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  padding: 1.3rem;
+  min-width: 0;
+}
+.dependency-finding-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.7rem 1.25rem;
+}
+.dependency-finding-heading h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.dependency-finding-heading h3 span {
+  color: var(--muted-foreground);
+  font-weight: 450;
+}
+.dependency-finding-heading p {
+  margin-top: 0.35rem;
+  color: var(--muted-foreground);
+}
+.dependency-finding code {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.dependency-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.5rem;
+}
+.dependency-facts dt {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+.dependency-facts dd {
+  overflow-wrap: anywhere;
+}
+.dependency-upstream {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+.dependency-upstream > span {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+}
+.dependency-finding details {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.dependency-finding summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+.dependency-finding details > p {
+  margin-block: 1rem;
+}
+.dependency-matches {
+  display: grid;
+  gap: 0.7rem;
+  margin-block: 1rem;
+}
+.dependency-matches li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.95rem;
+}
+.dependency-dialog {
+  max-width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.dependency-change-form,
+.dependency-change-form fieldset,
+.dependency-change-form label {
+  display: grid;
+  gap: 0.6rem;
+}
+.dependency-change-form fieldset {
+  gap: 1rem;
+}
+.dependency-change-form input,
+.dependency-change-form textarea {
+  font-size: 1rem;
+  min-height: 2.5rem;
+}
+.dependency-change-form textarea {
+  min-height: 7rem;
+}
+.dependency-change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  margin-top: 0.6rem;
+}
+.dependency-history {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.dependency-history > summary {
+  font-weight: 550;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+.dependency-history-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+.dependency-history-list li {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.dependency-history-list a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.dependency-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.dependency-diff > div {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+.dependency-diff h4 {
+  color: var(--muted-foreground);
+}
+@media (min-width: 1400px) {
+  .dependency-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .dependency-inventory > li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+  .dependency-row-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+@media (max-width: 480px) {
+  .dependency-facts,
+  .dependency-diff {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dependency-finding {
+    padding: 1rem;
+  }
+  .dependency-pagination {
+    font-size: 0.9rem;
+  }
+}

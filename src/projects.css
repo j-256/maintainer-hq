@@ -1,0 +1,171 @@
+.project-dialog {
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(740px, calc(100vw - 32px));
+  max-width: min(740px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.project-dialog > [data-slot="dialog-header"] {
+  padding: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.project-dialog > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.project-form-scroll {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  overflow-y: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+.project-fields,
+.project-field-group {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.project-field-group {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.project-field-group legend {
+  font-size: var(--hq-text-body);
+  font-weight: 600;
+  padding-right: 12px;
+}
+.project-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.project-dialog [data-slot="select-trigger"] {
+  width: 100%;
+}
+.project-checkbox {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  font-size: var(--hq-text-body);
+}
+.project-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+.project-dialog-actions button {
+  white-space: normal;
+}
+.project-footnote {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+  line-height: 1.65;
+  margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+.project-footnote a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.project-summary-strip,
+.project-section-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.project-summary-strip > span {
+  font-size: var(--hq-text-support);
+}
+.project-evidence-summary {
+  display: grid;
+  gap: 4px;
+}
+.project-metadata {
+  display: grid;
+  gap: 18px;
+  margin: 20px 0;
+}
+.project-metadata > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.project-metadata dt {
+  color: var(--muted-foreground);
+}
+.project-metadata dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.project-metadata a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.project-metadata a svg {
+  display: inline;
+}
+.project-inventory thead th:nth-child(1) {
+  width: 28%;
+}
+.project-inventory thead th:nth-child(2) {
+  width: 13%;
+}
+.project-inventory thead th:nth-child(3) {
+  width: 15%;
+}
+.project-inventory thead th:nth-child(4) {
+  width: 13%;
+}
+.project-repository-picker {
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+.project-repository-choices {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+.project-repository-choices button {
+  height: auto;
+  min-height: 56px;
+  display: grid;
+  justify-items: start;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.project-repository-choices button span:last-child {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+}
+@media (max-width: 600px) {
+  .project-metadata > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .project-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-form-scroll,
+  .project-dialog > [data-slot="dialog-header"] {
+    padding: 18px;
+  }
+  .project-dialog-actions {
+    padding: 14px 18px;
+  }
+}

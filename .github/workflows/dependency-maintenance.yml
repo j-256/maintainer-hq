@@ -1,0 +1,71 @@
+name: Dependency maintenance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-maintenance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts --no-fund
+      - name: Verify application
+        run: npm run check
+      - name: Inspect overrides and upstream releases
+        run: npm run --silent dependencies:report -- --upstream > dependency-report.json
+      - name: Audit application dependencies
+        run: npm audit --audit-level=high
+      - name: Retain bounded lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-lifecycle
+          path: dependency-report.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      - name: Install application dependencies
+        run: npm ci --ignore-scripts --no-fund
+      - name: Install documentation dependencies
+        working-directory: site
+        run: npm ci --ignore-scripts --no-fund
+      - name: Verify documentation
+        working-directory: site
+        run: npm run check
+      - name: Audit documentation dependencies
+        working-directory: site
+        run: npm audit --audit-level=high

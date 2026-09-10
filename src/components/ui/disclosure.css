@@ -1,0 +1,77 @@
+.hq-disclosure {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--popover);
+}
+.hq-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 16px;
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--hq-text-ui);
+  font-weight: 550;
+  border-radius: inherit;
+}
+.hq-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.hq-disclosure > summary > svg {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+.hq-disclosure > summary:hover {
+  background: var(--muted);
+}
+.disclosure-label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.disclosure-description {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+  font-weight: 400;
+}
+.disclosure-chevron {
+  margin-left: auto;
+}
+.hq-disclosure[open] > summary .disclosure-chevron {
+  transform: rotate(90deg);
+}
+.disclosure-content {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  font-size: var(--hq-text-support);
+}
+.disclosure-content .form-grid {
+  margin-bottom: 0;
+}
+.dialog-heading,
+.editor-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dialog-heading > svg,
+.editor-section > h2 > svg {
+  flex-shrink: 0;
+  color: var(--hq-info);
+}
+.dialog-heading > svg {
+  box-sizing: content-box;
+  padding: 9px;
+  border-radius: 10px;
+  background: var(--hq-info-soft);
+}
+.dialog-heading[data-slot="dialog-title"] {
+  font-size: var(--hq-text-heading);
+  font-weight: 600;
+  line-height: 1.35;
+}

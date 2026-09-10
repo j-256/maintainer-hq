@@ -1,0 +1,42 @@
+name: Bug report
+description: Report reproducible incorrect behavior without sensitive data
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private repository data, production identifiers, database exports, or raw provider responses. Report suspected vulnerabilities through the private security link instead.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide synthetic steps, inputs, or a small repository that reproduces the problem.
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Maintainer HQ revision
+      description: Provide a release tag or commit identifier.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include relevant Node.js, browser, and deployment-platform versions without private identifiers.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: This report contains no credential, private data, or undisclosed vulnerability.
+          required: true

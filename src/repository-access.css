@@ -1,0 +1,93 @@
+.repository-access-dialog {
+  width: min(48rem, calc(100% - 2rem));
+  max-width: min(48rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  font-size: 1rem;
+}
+.repository-access-dialog [data-slot="dialog-header"] {
+  padding-right: 2rem;
+  overflow-wrap: anywhere;
+}
+.repository-access-dialog [data-slot="dialog-title"] {
+  font-size: 1.25rem;
+}
+.repository-access-dialog [data-slot="dialog-description"] {
+  font-size: inherit;
+}
+.repository-access-dialog [data-slot="badge"] {
+  font-size: 0.9rem;
+  min-height: 1.6rem;
+  white-space: normal;
+}
+.repository-access-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem 0.5rem 0.5rem 0.25rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.repository-access-body section + section {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+.repository-access-body h3 {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+.repository-access-role {
+  text-transform: capitalize;
+}
+.repository-access-body p {
+  margin-top: 0.65rem;
+}
+.repository-access-body a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.repository-access-gates {
+  margin-top: 1rem;
+}
+.repository-access-gates > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.repository-access-gates dd {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+}
+.repository-access-sources {
+  list-style: none;
+  padding: 0;
+}
+.repository-access-sources li {
+  margin-top: 0.85rem;
+}
+.repository-access-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.repository-access-time {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.9rem;
+}
+@media (max-width: 480px) {
+  .repository-access-gates > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
+  }
+  .repository-access-time {
+    align-self: start;
+  }
+}

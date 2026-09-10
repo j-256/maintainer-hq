@@ -1,0 +1,87 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+:root {
+  --sl-font: "Geist Variable", sans-serif;
+  --sl-font-mono: "Geist Mono Variable", monospace;
+  --sl-text-base: 1.0625rem;
+  --sl-text-sm: 0.9375rem;
+  --sl-text-xs: 0.875rem;
+  --sl-line-height: 1.75;
+  --sl-content-width: 50rem;
+  --sl-sidebar-width: 18rem;
+  --sl-color-accent-low: #13382f;
+  --sl-color-accent: #5ccca7;
+  --sl-color-accent-high: #b7efdb;
+  --sl-color-bg: #101619;
+  --sl-color-bg-nav: #161e22;
+  --sl-color-bg-sidebar: #161e22;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #e0f4ec;
+  --sl-color-accent: #157052;
+  --sl-color-accent-high: #104d3c;
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #f7faf9;
+  --sl-color-bg-sidebar: #f7faf9;
+}
+.sl-markdown-content {
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content h2 {
+  margin-top: 2.5rem;
+}
+.sl-markdown-content pre,
+.sl-markdown-content table {
+  overflow-x: auto;
+}
+.sl-markdown-content a {
+  text-underline-offset: 0.2em;
+}
+.sidebar-content a {
+  padding-block: 0.375rem;
+}
+.documentation-search-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+  font-weight: 600;
+}
+#starlight__search {
+  --pagefind-ui-scale: 0.85;
+  line-height: 1.5;
+}
+#starlight__search .pagefind-ui__search-input {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+#starlight__search .pagefind-ui__result-title {
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+#starlight__search .pagefind-ui__result-nested .pagefind-ui__result-title {
+  font-size: 1rem;
+}
+#starlight__search .pagefind-ui__result-link {
+  font-size: inherit;
+}
+#starlight__search .pagefind-ui__result-excerpt {
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+}
+#starlight__search .pagefind-ui__message {
+  height: auto;
+  padding-block: 0.75rem;
+  font-size: var(--sl-text-xs);
+  line-height: 1.5;
+}
+:focus-visible {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 3px;
+}
+@media (max-width: 50rem) {
+  :root {
+    --sl-content-pad-x: 1.25rem;
+  }
+}

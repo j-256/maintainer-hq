@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "manifests": [
+    {
+      "path": "package.json",
+      "overrides": [
+        {
+          "id": "sharp-libheif",
+          "lifecycle": "active",
+          "parent": "miniflare",
+          "package": "sharp",
+          "requested": "0.35.2",
+          "replacement": "0.35.4",
+          "advisory": "GHSA-rgj7-g3m4-5g8c",
+          "vulnerable": "<0.35.4",
+          "reason": "Miniflare's local image tooling pins a Sharp release containing vulnerable libheif decoders. HQ does not use that image-processing path, but the development toolchain must use the patched decoder.",
+          "owner": "HQ maintainers",
+          "reviewedAt": "2026-09-09T16:00:00.000Z",
+          "reviewBy": "2026-10-09T16:00:00.000Z",
+          "removeWhen": "Remove the override after both the development and test toolchains stop requesting Sharp 0.35.2, and the regenerated lockfile contains no Sharp version affected by this advisory."
+        }
+      ]
+    }
+  ]
+}

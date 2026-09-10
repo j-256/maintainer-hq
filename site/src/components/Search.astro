@@ -1,0 +1,30 @@
+---
+import Search from "@astrojs/starlight/components/Search.astro";
+---
+
+<Search {...Astro.props} />
+
+<script>
+  const search = document.querySelector("site-search");
+  const dialog = search?.querySelector("dialog");
+  if (search && dialog && !search.querySelector("input")) {
+    let openingFocus: Element | null = null;
+    dialog.addEventListener("toggle", () => {
+      if (dialog.open) openingFocus = document.activeElement;
+    });
+    const observer = new MutationObserver(() => {
+      const input = search.querySelector("input");
+      if (!input) return;
+      observer.disconnect();
+      input.id ||= "hq-documentation-search";
+      const label = document.createElement("label");
+      label.htmlFor = input.id;
+      label.className = "documentation-search-label";
+      label.textContent = "Search documentation";
+      search.querySelector(".search-container")?.prepend(label);
+      if (dialog.open && (document.activeElement === dialog || document.activeElement === openingFocus))
+        input.focus();
+    });
+    observer.observe(search, { childList: true, subtree: true });
+  }
+</script>

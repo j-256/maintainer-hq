@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cloudflare-tooling:
+        patterns:
+          - wrangler
+          - "@cloudflare/*"
+    ignore:
+      - dependency-name: vitest
+        versions:
+          - "5.x"
+      - dependency-name: "@vitest/coverage-v8"
+        versions:
+          - "5.x"
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: typescript
+        versions:
+          - "7.x"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2

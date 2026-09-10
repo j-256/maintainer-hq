@@ -1,0 +1,115 @@
+.automation-toolbar {
+  margin-bottom: 16px;
+}
+.automation-toolbar > button {
+  max-width: 100%;
+  height: auto;
+  min-height: 40px;
+  padding-block: 8px;
+  white-space: normal;
+}
+.automation-boundary {
+  max-width: 78ch;
+  margin-bottom: 20px;
+}
+.automation-boundary summary {
+  cursor: pointer;
+  font-size: var(--hq-text-ui);
+  color: var(--muted-foreground);
+}
+.automation-boundary p {
+  margin-top: 8px;
+}
+.automation-empty {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 24px;
+  background: var(--muted);
+  border-radius: 10px;
+}
+.automation-empty > svg {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+.automation-record {
+  min-width: 0;
+}
+.automation-record p,
+.automation-record h2 {
+  overflow-wrap: anywhere;
+}
+.automation-record details {
+  margin-top: 6px;
+  font-size: var(--hq-text-support);
+  color: var(--muted-foreground);
+}
+.automation-record summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.automation-record summary:focus-visible,
+.automation-boundary summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.automation-card dl,
+.automation-review dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  font-size: var(--hq-text-support);
+  margin: 12px 0;
+}
+.automation-card dd,
+.automation-review dd {
+  overflow-wrap: anywhere;
+}
+.automation-card dt,
+.automation-review dt {
+  color: var(--muted-foreground);
+}
+.automation-dialog {
+  max-width: min(540px, calc(100vw - 32px));
+}
+.automation-value,
+.automation-review {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.automation-review > p,
+.automation-value > p {
+  font-size: var(--hq-text-ui);
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+.automation-review .automation-scopes {
+  font-family: var(--font-mono);
+  font-size: var(--hq-text-support);
+  overflow-wrap: anywhere;
+  padding: 12px;
+  background: var(--muted);
+  border-radius: 8px;
+}
+.automation-value > label {
+  font-size: var(--hq-text-ui);
+  font-weight: 600;
+}
+@media (max-width: 520px) {
+  .automation-card .access-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .automation-review dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .automation-review dd {
+    margin-bottom: 10px;
+  }
+  .automation-empty {
+    padding: 16px;
+    align-items: flex-start;
+  }
+}

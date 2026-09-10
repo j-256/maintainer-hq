@@ -1,0 +1,205 @@
+.expectation-dialog {
+  width: min(900px, calc(100vw - 24px));
+  max-width: min(900px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.expectation-dialog > [data-slot="dialog-header"] {
+  padding: 24px 48px 18px 24px;
+  background: var(--popover);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.expectation-scroll {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-height: 0;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: var(--hq-text-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.expectation-content {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 20px;
+}
+.expectation-scroll h3,
+.expectation-scroll h4 {
+  font-size: var(--hq-text-body);
+  font-weight: 600;
+}
+.expectation-scroll p {
+  margin: 0;
+}
+.expectation-steps,
+.expectation-muted {
+  font-size: var(--hq-text-support);
+  color: var(--muted-foreground);
+}
+.expectation-stack {
+  display: grid;
+  gap: 16px;
+}
+.expectation-actions,
+.expectation-selection-controls,
+.expectation-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.expectation-footer {
+  border-top: 1px solid var(--border);
+  padding: 16px 24px;
+  justify-content: flex-end;
+}
+.expectation-actions > p,
+.expectation-actions > h4 {
+  margin-right: auto;
+}
+.expectation-selection-controls > input {
+  flex: 1 1 230px;
+  min-width: 0;
+}
+.expectation-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+.expectation-choice label {
+  cursor: pointer;
+}
+.expectation-selection {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.expectation-selection > li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  padding: 10px 2px;
+}
+.expectation-selection label {
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+.expectation-selection label span {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+}
+.expectation-notice {
+  border-left: 3px solid var(--border);
+  background: var(--muted);
+  padding: 14px 16px;
+}
+.expectation-notice button {
+  margin-top: 12px;
+}
+.expectation-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+.expectation-field {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.expectation-field [data-slot="select-trigger"],
+.expectation-field textarea {
+  width: 100%;
+}
+.expectation-field:last-child {
+  grid-column: 1 / -1;
+}
+.expectation-row {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.expectation-diff {
+  display: grid;
+  gap: 10px;
+  font-size: var(--hq-text-support);
+}
+.expectation-diff > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(0, 3fr);
+  gap: 12px;
+}
+.expectation-diff dt {
+  font-weight: 500;
+}
+.expectation-diff dd {
+  white-space: pre-wrap;
+}
+.expectation-before {
+  color: var(--muted-foreground);
+}
+.expectation-scroll summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: var(--hq-text-support);
+}
+.expectation-scroll summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.expectation-scroll details[open] > :not(summary) {
+  margin-top: 12px;
+}
+.expectation-reference {
+  font-family: var(--font-mono);
+  font-size: var(--hq-text-support);
+}
+.expectation-dialog button {
+  transition-property: background-color, border-color, box-shadow;
+}
+@media (max-width: 600px) {
+  .expectation-dialog > [data-slot="dialog-header"] {
+    padding: 18px 42px 16px 16px;
+  }
+  .expectation-scroll {
+    padding: 16px;
+    gap: 18px;
+  }
+  .expectation-footer {
+    padding: 12px 16px;
+    gap: 8px;
+  }
+  .expectation-footer button {
+    flex: 1 1 auto;
+    white-space: normal;
+    height: auto;
+    min-height: 40px;
+  }
+  .expectation-fields,
+  .expectation-diff > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .expectation-diff > div {
+    gap: 4px;
+  }
+}

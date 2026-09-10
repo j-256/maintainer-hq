@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "accountId": "11111111111111111111111111111111",
+  "workerName": "maintainer-hq-candidate-test",
+  "databaseName": "maintainer-hq-candidate-test",
+  "databaseId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  "retainedWorkerName": "maintainer-hq-retained-test",
+  "retainedDatabaseId": "11111111-2222-4333-8444-555555555555",
+  "intendedHostname": "workspace.example",
+  "accessIssuer": "https://fixture.cloudflareaccess.com",
+  "accessAudience": "1111111111111111111111111111111111111111111111111111111111111111",
+  "scheduledCollection": false
+}
