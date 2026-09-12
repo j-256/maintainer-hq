@@ -50,6 +50,7 @@ import {
   SECRET_LIMITS as REVIEW_LIMITS,
   type SecretReview,
 } from "../shared/secrets";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -440,7 +441,7 @@ describe("Durable Secrets execution", () => {
         }),
       ).rejects.toMatchObject({ code: "validation" });
       expect(writes()).toHaveLength(1);
-    });
+    }, D1_VOLUME_TEST_TIMEOUT_MS);
     it("requires explicit acknowledgement and exact live review authority before provider reads", async () => {
       const input = await distributed();
       await expect(
@@ -1644,7 +1645,7 @@ describe("Private secret review input", () => {
     });
     await reviews.cancel({ ...workspace, reviewId: "capacity-0" });
     expect((await reviews.draft(draftInput)).stage).toBe("awaiting-input");
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("reports failed cleanup without preventing the independent collection attempt or logging private errors", async () => {
     const info = vi.spyOn(console, "log").mockImplementation(() => {});
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

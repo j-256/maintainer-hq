@@ -27,6 +27,8 @@ npm run test:release
 
 Checks exercise the Workers/D1 runtime, authorization, revisions, exact retries, evidence assessment, reviewed operations, scoped push, and publication hygiene. Browser tests use synthetic workspaces and an isolated database on port 5179. Their reset must never target the development journal or a production database.
 
+D1 volume tests use `D1_VOLUME_TEST_TIMEOUT_MS` from `test/helpers/timeouts.ts` to allow repeated domain operations to finish on shared CI runners. Ordinary tests retain Vitest's default timeout. This test completion budget is separate from application deadlines and does not relax capacity, query-budget, or recovery assertions. When investigating a timeout, also inspect the following test for unfinished database work from the timed-out case.
+
 To test alongside an interactive preview, give the test run its own state directory and port. `HQ_E2E_STATE` selects both Wrangler's synthetic database state and the E2E Vite cache; it has no effect on production builds or normal development mode. Do not reuse an active preview's state directory. Run one browser test process per state directory and output directory.
 
 ```bash
