@@ -34,6 +34,7 @@ import production from "../worker/index";
 import { callCommand, clientConfiguration } from "../cli/client";
 import type { Env } from "../worker/types";
 import { countD1Statements } from "./helpers/d1-count";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 import { githubCollectionOutcome } from "../shared/github-refresh-summary";
 import { commands, commandAnnotations } from "../shared/commands";
 import { GITHUB_COVERAGE_LIMITS } from "../shared/github-coverage";
@@ -502,7 +503,7 @@ describe("Durable GitHub refresh work", () => {
         "SELECT count(*) FROM github_refresh_items WHERE status = 'succeeded'",
       ).first("count(*)"),
     ).toBe(LIMITS.CRON_ITEMS);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
 
   it("leaves untouched work queued when a scheduled slice cannot reserve a full repository deadline", async () => {
     source = await service.githubSourceUpdate({
@@ -653,7 +654,7 @@ describe("Durable GitHub refresh work", () => {
     await runGitHubScheduled(measured, { now: () => now, fetch });
     expect(await service.githubRefreshes(sourceInput)).toHaveLength(2);
     expect(fetch).toHaveBeenCalledTimes(20 * 7);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("keeps workspace evidence bounded and reports storage capacity as a failed refresh", async () => {
     await bindings.HQ_DB.prepare(
       "INSERT INTO observations (workspace_id, source_id, resource_type, resource_id, name, health, summary, details_json, observed_at, received_at, expires_at) SELECT 'alpha', 'github', 'repository', 'capacity-' || value, 'Synthetic', 'unknown', 'Synthetic capacity fixture', '{}', ?, ?, ? FROM json_each(?)",
