@@ -11,7 +11,6 @@ import {
   ArrowUpRight,
   BookOpen,
   ChevronRight,
-  LoaderCircle,
   Radio,
   RefreshCw,
 } from "lucide-react";
@@ -28,7 +27,7 @@ import { ActivityView } from "./activity";
 import { command, request } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
-import { Skeleton } from "./components/ui/skeleton";
+import { WorkspaceLoading } from "./workspace-loading";
 import {
   DEFAULT_PREFERENCES,
   type PreferenceRecord,
@@ -169,6 +168,10 @@ export function App() {
   );
   const pushStatus = push.status;
   const error = session.error ?? snapshot.error;
+  const opening =
+    !error &&
+    online &&
+    (session.isPending || (workspaceAvailable && snapshot.isPending));
   const data = useMemo(
     () =>
       workspaceAvailable && snapshot.data
@@ -368,18 +371,6 @@ export function App() {
                 </Button>
               </div>
             ) : null}
-            {!data &&
-            !error &&
-            online &&
-            (session.isPending ||
-              (workspaceAvailable && snapshot.isPending)) ? (
-              <div className="loading-state" role="status">
-                <LoaderCircle className="animate-spin" size={20} />
-                <span>Opening your workspace...</span>
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-64 w-full" />
-              </div>
-            ) : null}
             {session.data && workspaceId && !workspaceAvailable ? (
               <section className="settings-card navigation-recovery">
                 <h1>Workspace unavailable</h1>
@@ -419,130 +410,128 @@ export function App() {
                 />
               </Suspense>
             ) : null}
-            {data && workspaceAvailable ? (
-              <Suspense
-                fallback={
-                  <div className="loading-state" role="status">
-                    <LoaderCircle className="animate-spin" size={18} />
-                    Opening view...
-                  </div>
-                }
+            {opening || (data && workspaceAvailable) ? (
+              <WorkspaceLoading
+                key={params.get("workspace") ?? "default"}
+                pending={Boolean(!data && opening)}
               >
-                <Routes>
-                  <Route path="/dependencies" element={<DependenciesView key={data.workspace.id} snapshot={data} />} />
-                  <Route
-                    path="/overview"
-                    element={<OverviewView snapshot={data} />}
-                  />
-                  <Route
-                    path="/activity"
-                    element={
-                      <ActivityView key={data.workspace.id} snapshot={data} />
-                    }
-                  />
-                  <Route
-                    path="/repositories"
-                    element={
-                      <RepositoriesView
-                        key={data.workspace.id}
-                        snapshot={data}
-                        setParams={setParams}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/projects"
-                    element={
-                      <ProjectsView
-                        key={data.workspace.id}
-                        snapshot={data}
-                        setParams={setParams}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/projects/:projectId"
-                    element={
-                      <ProjectDetail
-                        key={data.workspace.id + location.pathname}
-                        snapshot={data}
-                        setParams={setParams}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/repositories/:repositoryId"
-                    element={
-                      <RepositoryDetail
-                        key={data.workspace.id + location.pathname}
-                        snapshot={data}
-                      />
-                    }
-                  />
-                  <Route
-                    path="/hooks"
-                    element={
-                      <HooksView key={data.workspace.id} snapshot={data} />
-                    }
-                  />
-                  <Route
-                    path="/secrets"
-                    element={
-                      <SecretsView key={data.workspace.id} snapshot={data} />
-                    }
-                  />
-                  <Route
-                    path="/monitoring"
-                    element={
-                      <MonitoringView key={data.workspace.id} snapshot={data} />
-                    }
-                  />
-                  <Route
-                    path="/settings/*"
-                    element={
-                      <SettingsView
-                        snapshot={data}
-                        record={preferences}
-                        onSaved={(record) =>
-                          queryClient.setQueryData<Session>(
-                            ["session"],
-                            (prior) =>
-                              prior ? { ...prior, preferences: record } : prior,
-                          )
-                        }
-                      />
-                    }
-                  />
-                  <Route
-                    path="/"
-                    element={<Navigate replace to={"/overview" + suffix} />}
-                  />
-                  <Route
-                    path="*"
-                    element={
-                      <section className="settings-card navigation-recovery">
-                        <h1>Page not found</h1>
-                        <p>
-                          This link does not match an HQ page. Your workspace is
-                          still available.
-                        </p>
-                        <div className="navigation-recovery-links">
-                          <Button asChild>
-                            <NavLink to={"/overview" + suffix}>
-                              Open overview
-                            </NavLink>
-                          </Button>
-                          <Button variant="outline" asChild>
-                            <NavLink to={"/projects" + suffix}>
-                              Browse projects
-                            </NavLink>
-                          </Button>
-                        </div>
-                      </section>
-                    }
-                  />
-                </Routes>
-              </Suspense>
+                {data && workspaceAvailable ? (
+                  <Routes>
+                    <Route path="/dependencies" element={<DependenciesView key={data.workspace.id} snapshot={data} />} />
+                    <Route
+                      path="/overview"
+                      element={<OverviewView snapshot={data} />}
+                    />
+                    <Route
+                      path="/activity"
+                      element={
+                        <ActivityView key={data.workspace.id} snapshot={data} />
+                      }
+                    />
+                    <Route
+                      path="/repositories"
+                      element={
+                        <RepositoriesView
+                          key={data.workspace.id}
+                          snapshot={data}
+                          setParams={setParams}
+                        />
+                      }
+                    />
+                    <Route
+                      path="/projects"
+                      element={
+                        <ProjectsView
+                          key={data.workspace.id}
+                          snapshot={data}
+                          setParams={setParams}
+                        />
+                      }
+                    />
+                    <Route
+                      path="/projects/:projectId"
+                      element={
+                        <ProjectDetail
+                          key={data.workspace.id + location.pathname}
+                          snapshot={data}
+                          setParams={setParams}
+                        />
+                      }
+                    />
+                    <Route
+                      path="/repositories/:repositoryId"
+                      element={
+                        <RepositoryDetail
+                          key={data.workspace.id + location.pathname}
+                          snapshot={data}
+                        />
+                      }
+                    />
+                    <Route
+                      path="/hooks"
+                      element={
+                        <HooksView key={data.workspace.id} snapshot={data} />
+                      }
+                    />
+                    <Route
+                      path="/secrets"
+                      element={
+                        <SecretsView key={data.workspace.id} snapshot={data} />
+                      }
+                    />
+                    <Route
+                      path="/monitoring"
+                      element={
+                        <MonitoringView key={data.workspace.id} snapshot={data} />
+                      }
+                    />
+                    <Route
+                      path="/settings/*"
+                      element={
+                        <SettingsView
+                          snapshot={data}
+                          record={preferences}
+                          onSaved={(record) =>
+                            queryClient.setQueryData<Session>(
+                              ["session"],
+                              (prior) =>
+                                prior ? { ...prior, preferences: record } : prior,
+                            )
+                          }
+                        />
+                      }
+                    />
+                    <Route
+                      path="/"
+                      element={<Navigate replace to={"/overview" + suffix} />}
+                    />
+                    <Route
+                      path="*"
+                      element={
+                        <section className="settings-card navigation-recovery">
+                          <h1>Page not found</h1>
+                          <p>
+                            This link does not match an HQ page. Your workspace is
+                            still available.
+                          </p>
+                          <div className="navigation-recovery-links">
+                            <Button asChild>
+                              <NavLink to={"/overview" + suffix}>
+                                Open overview
+                              </NavLink>
+                            </Button>
+                            <Button variant="outline" asChild>
+                              <NavLink to={"/projects" + suffix}>
+                                Browse projects
+                              </NavLink>
+                            </Button>
+                          </div>
+                        </section>
+                      }
+                    />
+                  </Routes>
+                ) : null}
+              </WorkspaceLoading>
             ) : null}
             <footer className="workspace-footer">
               <span>

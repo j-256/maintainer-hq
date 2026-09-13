@@ -926,6 +926,16 @@ h1 {
   gap: 20px;
   color: var(--muted-foreground);
 }
+.workspace-loading-placeholder {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+.workspace-loading-label {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
 .repository-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
