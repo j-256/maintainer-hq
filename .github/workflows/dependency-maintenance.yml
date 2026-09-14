@@ -29,6 +29,8 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts --no-fund
+      - name: Verify cover workflow authorization
+        run: node --test scripts/start-cover-checks.test.mjs
       - name: Verify application
         run: npm run check
       - name: Install the cover browser
@@ -99,6 +101,7 @@ jobs:
       - name: Open an automatically merged cover pull request
         env:
           GH_TOKEN: ${{ github.token }}
+          COVER_WORKFLOWS: dependency-maintenance.yml
         run: |
           set -eu
           git fetch origin main
@@ -132,5 +135,6 @@ jobs:
           EOF
             pr_url="$(gh pr create --base main --head "$branch" --title 'docs: refresh generated project cover' --body-file "$body_file")"
           fi
-          gh workflow run dependency-maintenance.yml --ref "$branch"
+          pr_number="$(gh pr view "$pr_url" --json number --jq .number)"
+          node scripts/start-cover-checks.mjs "$pr_number"
           gh pr merge "$pr_url" --auto --squash
