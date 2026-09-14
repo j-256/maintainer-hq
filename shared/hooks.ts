@@ -1,3 +1,4 @@
+import { hookSetupResults } from "./hook-setup";
 import { z } from "zod";
 import { idSchema, workspaceInput } from "./domain";
 
@@ -373,6 +374,7 @@ export const hookDeliveriesSchema = z
   })
   .strict();
 export const hookResultSchemas = {
+  ...hookSetupResults,
   snapshot: hookSnapshotSchema,
   subscriptions: hookSubscriptionsSchema,
   deliveries: hookDeliveriesSchema,
@@ -458,7 +460,13 @@ export type HookReview = {
   provider: HookReceipt | null;
   operation: {
     id: string;
-    status: "pending" | "running" | "succeeded" | "failed" | "indeterminate";
+    status:
+      | "pending"
+      | "running"
+      | "succeeded"
+      | "partial"
+      | "failed"
+      | "indeterminate";
     summary: string;
     updatedAt: string;
   } | null;

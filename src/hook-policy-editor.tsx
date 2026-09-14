@@ -48,20 +48,22 @@ import { HookFilterFields, HookPolicyIdentity } from "./hook-policy-fields";
 type Detail = HookResult<"configuration_subscription">;
 type Base = { detail: Detail; connectionRevision: number };
 
-function Destinations({
+export function HookDestinations({
   workspaceId,
   connectionId,
   base,
   selected,
   onChange,
   disabled,
+  limit = HOOK_POLICY_LIMITS.DESTINATIONS,
 }: {
   workspaceId: string;
   connectionId: string;
-  base: Detail;
+  base: Pick<Detail, "authorityId" | "revision">;
   selected: string[];
   onChange: (selected: string[]) => void;
   disabled: boolean;
+  limit?: number;
 }) {
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const cursor = cursors.at(-1) ?? null;
@@ -122,8 +124,7 @@ function Destinations({
                   disabled={
                     disabled ||
                     item.retired ||
-                    (!selected.includes(item.name) &&
-                      selected.length >= HOOK_POLICY_LIMITS.DESTINATIONS)
+                    (!selected.includes(item.name) && selected.length >= limit)
                   }
                   onCheckedChange={(checked) =>
                     onChange(
@@ -433,7 +434,7 @@ export function HookPolicyEditor({
               </fieldset>
               <fieldset disabled={busy}>
                 <legend>Destinations ({draft.sinks.length} selected)</legend>
-                <Destinations
+                <HookDestinations
                   key={base.detail.authorityId + "/" + base.detail.revision}
                   workspaceId={workspaceId}
                   connectionId={connection.id}

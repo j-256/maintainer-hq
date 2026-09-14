@@ -1,3 +1,8 @@
+import {
+  hookSetupConnectionInput,
+  hookSetupPlanInput,
+  hookSetupStatusInput,
+} from "./hook-setup";
 import { activityFeedInput, goalActivityInput } from "./activity";
 import {
   fleetDiscoveryInput,
@@ -111,9 +116,20 @@ import {
 import { githubCoverageInput } from "./github-coverage";
 import { releaseInput } from "./releases";
 import { workInput } from "./repository-work";
-import { dependenciesListInput, dependencyInspectionInput } from "./dependencies";
-import { dependencyChangePlanInput, dependencyChangeReviewInput, dependencyWriteAccessInput, dependencyChangeApplyInput } from "./dependency-changes";
-import { dependencyOperationInput, dependencyOperationsInput } from "./dependency-operations";
+import {
+  dependenciesListInput,
+  dependencyInspectionInput,
+} from "./dependencies";
+import {
+  dependencyChangePlanInput,
+  dependencyChangeReviewInput,
+  dependencyWriteAccessInput,
+  dependencyChangeApplyInput,
+} from "./dependency-changes";
+import {
+  dependencyOperationInput,
+  dependencyOperationsInput,
+} from "./dependency-operations";
 import {
   identityInput,
   setupApplyInput,
@@ -721,6 +737,43 @@ export const commands = {
     title: "Read bounded workspace Hooks operation history",
     readOnly: true,
   },
+  hooks_setup_configuration: {
+    schema: hookSetupConnectionInput,
+    method: "hooksSetupConfiguration",
+    title: "Read online hook setup availability and missing grants",
+    readOnly: true,
+  },
+  hooks_setup_status: {
+    schema: hookSetupStatusInput,
+    method: "hooksSetupStatus",
+    title:
+      "Check routing, GitHub installation and observed delivery separately",
+    readOnly: true,
+  },
+  hooks_setup_plan: {
+    schema: hookSetupPlanInput,
+    method: "hooksSetupPlan",
+    title: "Review repository hook creation or installation with exact scope",
+    readOnly: false,
+  },
+  hooks_setup_get: {
+    schema: hookRetryInput,
+    method: "hooksSetupGet",
+    title: "Read a saved hook setup review and operation",
+    readOnly: true,
+  },
+  hooks_setup_apply: {
+    schema: hookRetryApplyInput,
+    method: "hooksSetupApply",
+    title: "Apply reviewed hook setup with durable intent",
+    readOnly: false,
+  },
+  hooks_setup_reconcile: {
+    schema: hookRetryInput,
+    method: "hooksSetupReconcile",
+    title: "Reconcile hook setup without repeating an uncertain installation",
+    readOnly: false,
+  },
   hooks_configuration: {
     schema: hookConnectionInput,
     method: "hooksConfiguration",
@@ -1225,6 +1278,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
       "github_refresh_cancel",
       "hooks_connection_save",
       "hooks_policy_apply",
+      "hooks_setup_apply",
       "monitoring_connection_save",
       "secrets_connection_save",
       "secrets_cancel",
@@ -1249,11 +1303,16 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "provider_credential_verify",
         "hooks_snapshot",
         "hooks_configuration",
+        "hooks_setup_configuration",
+        "hooks_setup_status",
         "hooks_policy_subscriptions",
         "hooks_policy_destinations",
         "hooks_policy_subscription",
         "hooks_policy_plan",
+        "hooks_setup_plan",
+        "hooks_setup_reconcile",
         "hooks_policy_apply",
+        "hooks_setup_apply",
         "hooks_policy_reconcile",
         "hooks_subscriptions",
         "hooks_deliveries",
@@ -1313,7 +1372,10 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "hooks_retry_reconcile",
         "monitoring_apply",
         "hooks_policy_plan",
+        "hooks_setup_plan",
+        "hooks_setup_reconcile",
         "hooks_policy_apply",
+        "hooks_setup_apply",
         "hooks_policy_reconcile",
         "monitoring_reconcile",
         "secrets_draft",

@@ -1,3 +1,6 @@
+import { useFlowBlocker as useBlocker } from "./lib/flow-blocker";
+import { sameExpectationFlow } from "../shared/expectation-resolution";
+import { HookExpectationAction, HookResolution } from "./hook-resolution";
 import {
   useCallback,
   useEffect,
@@ -7,7 +10,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { useBeforeUnload, useBlocker } from "react-router-dom";
+import { useBeforeUnload, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -184,6 +187,26 @@ export function RepositoryEditor({
   defaultProjectId?: string;
   suggestedProjectId?: string;
 }) {
+  const [params, setParams] = useSearchParams();
+  const resolving = Boolean(initial && params.get("resolve") === "hooks");
+  function resolveHooks(open: boolean) {
+    const next = new URLSearchParams(params);
+    next.set("dialog", "expectations");
+    if (open) next.set("resolve", "hooks");
+    else
+      for (const key of [
+        "resolve",
+        "connection",
+        "policy",
+        "policyReview",
+        "setup",
+        "setupReview",
+        "resume",
+        "verify",
+      ])
+        next.delete(key);
+    setParams(next);
+  }
   const initialProjectId =
     defaultProjectId ??
     (snapshot.projects.length === 1 ? snapshot.projects[0]!.id : undefined);
@@ -212,6 +235,7 @@ export function RepositoryEditor({
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       dirty &&
+      !sameExpectationFlow(currentLocation, nextLocation) &&
       !allowNavigation.current &&
       (currentLocation.pathname !== nextLocation.pathname ||
         currentLocation.search !== nextLocation.search),
@@ -319,7 +343,10 @@ export function RepositoryEditor({
       setRevision(latest.revision);
       save.reset();
       setErrors({});
-    } else onClose();
+    } else {
+      allowNavigation.current = true;
+      onClose();
+    }
     setDiscard(null);
   }
   const conflict =
@@ -329,7 +356,7 @@ export function RepositoryEditor({
   return (
     <>
       <Dialog
-        open
+        open={!resolving}
         onOpenChange={(open) => {
           if (!open) close();
         }}
@@ -349,7 +376,7 @@ export function RepositoryEditor({
             </DialogTitle>
             <DialogDescription>
               {initial
-                ? "Set workspace expectations and context. Provider settings are managed separately."
+                ? "Set expectations and use the coverage actions to satisfy them."
                 : "Track a repository in this workspace. Enrollment does not grant GitHub access or change provider settings."}
             </DialogDescription>
           </DialogHeader>
@@ -491,6 +518,13 @@ export function RepositoryEditor({
                             options={REQUIREMENT_LABELS}
                             onChange={(value) => expectation(key, value)}
                           />
+                          {key === "hooks" && initial ? (
+                            <HookExpectationAction
+                              repository={initial}
+                              snapshot={snapshot}
+                              onOpen={() => resolveHooks(true)}
+                            />
+                          ) : null}
                         </div>
                       );
                     })}
@@ -656,6 +690,13 @@ export function RepositoryEditor({
           </form>
         </DialogContent>
       </Dialog>
+      {resolving && initial ? (
+        <HookResolution
+          repository={initial}
+          snapshot={snapshot}
+          onBack={() => resolveHooks(false)}
+        />
+      ) : null}
       <AlertDialog
         open={discard !== null || blocker.state === "blocked"}
         onOpenChange={(open) => {

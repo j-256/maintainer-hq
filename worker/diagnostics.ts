@@ -16,6 +16,31 @@ const context = z.object({
 const diagnosticSchema = z.discriminatedUnion("event", [
   z
     .object({
+      event: z.literal("hq.hooks.setup"),
+      action: z.enum(["apply", "reconcile"]),
+      reference: z.uuid(),
+      workspaceId: identity,
+      repositoryId: identity,
+      state: z.enum([
+        "ready",
+        "configured",
+        "installing",
+        "installed",
+        "rejected",
+        "indeterminate",
+        "expired",
+        "conflict",
+        "unavailable",
+      ]),
+      linked: z.boolean(),
+      reason: z
+        .enum(["github_rejected", "github_unavailable", "github_limited"])
+        .nullable(),
+      elapsedMs: elapsed,
+    })
+    .strict(),
+  z
+    .object({
       event: z.literal("hq.dependencies.operation"),
       action: z.enum(["submit", "reconcile"]),
       reference: z.uuid(),
@@ -112,6 +137,8 @@ export function emitDiagnostic(event: Diagnostic) {
     )
       console.error(value);
     else if (
+      (value.event === "hq.hooks.setup" &&
+        (value.state !== "installed" || !value.linked)) ||
       (value.event === "hq.dependencies.operation" &&
         value.status !== "succeeded") ||
       (value.event === "hq.dependencies.inspected" &&

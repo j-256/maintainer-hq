@@ -1,3 +1,5 @@
+import { HOOK_SETUP_KIND } from "../shared/hook-setup";
+import { HookSetupReviewDialog } from "./hook-resolution";
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -913,6 +915,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
   const planId = params.get("review");
   const policyId = params.get("policy");
   const policyReviewId = params.get("policyReview");
+  const setupReviewId = params.get("setupReview");
   function navigate(fields: Record<string, string | null>) {
     const next = new URLSearchParams(params);
     next.set("workspace", workspaceId);
@@ -1144,7 +1147,11 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
               onReceipt={(id, kind) => {
                 rememberFocus();
                 navigate({
-                  review: kind === HOOK_POLICY_KIND ? null : id,
+                  review:
+                    kind === HOOK_POLICY_KIND || kind === HOOK_SETUP_KIND
+                      ? null
+                      : id,
+                  setupReview: kind === HOOK_SETUP_KIND ? id : null,
                   policyReview: kind === HOOK_POLICY_KIND ? id : null,
                   policy: null,
                   event: null,
@@ -1211,6 +1218,13 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
           returnFocus={focus.current}
           onClose={() => navigate({ policy: null, policyReview: null })}
           onReview={(id) => navigate({ policyReview: id })}
+        />
+      ) : null}
+      {setupReviewId ? (
+        <HookSetupReviewDialog
+          snapshot={snapshot}
+          planId={setupReviewId}
+          onClose={() => navigate({ setupReview: null })}
         />
       ) : null}
       {policyReviewId ? (

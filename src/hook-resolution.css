@@ -1,0 +1,90 @@
+.hook-resolution {
+  width: min(48rem, calc(100vw - 2rem));
+  max-width: 48rem;
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+}
+.hook-resolution [data-slot="dialog-title"] {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.hook-resolution-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0.25rem 0.25rem 0.5rem;
+  display: grid;
+  gap: 1rem;
+}
+.hook-resolution-stack {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.hook-resolution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.hook-resolution-subscription {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hook-resolution-subscription h3 {
+  font-weight: 600;
+}
+.hook-setup-summary {
+  display: grid;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.hook-setup-summary > div {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.hook-setup-summary dt {
+  color: var(--muted-foreground);
+}
+.hook-setup-events {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  padding-top: 0.5rem;
+}
+.expectation-resolution-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+}
+.hook-resolution .hook-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+.hook-resolution button:not([role="checkbox"]) {
+  min-height: 44px;
+}
+@media (max-width: 540px) {
+  .hook-resolution {
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    padding: 1rem;
+  }
+  .hook-setup-summary > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .hook-setup-events {
+    grid-template-columns: 1fr;
+  }
+}

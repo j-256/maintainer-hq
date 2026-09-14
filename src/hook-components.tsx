@@ -3,13 +3,14 @@ import type { HookDelivery } from "../shared/hooks";
 import { StatusBadge, type StatusTone } from "./components/ui/status";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { useDateTime } from "./date-time";
+import { restoreVisibleFocus } from "./lib/focus";
 
 export const HOOK_REQUEST_TIMEOUT_MS = 30000;
 export function restoreHookFocus(target: HTMLElement | null) {
   const element = target?.isConnected
     ? target
     : document.querySelector<HTMLElement>(".hooks-workspace h1");
-  element?.focus();
+  restoreVisibleFocus(element);
 }
 export const HOOK_STATUS_LABELS: Record<HookDelivery["status"], string> = {
   pending: "Awaiting queue",

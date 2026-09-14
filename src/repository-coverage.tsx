@@ -1,3 +1,4 @@
+import { expectationHref } from "../shared/expectation-resolution";
 import {
   useQuery,
   useQueryClient,
@@ -237,13 +238,14 @@ export function RepositoryOperationalChecks({
                 coverageAssessment(item.observation.details.coverage, now)
                   .health === "warning",
             );
-            const browse =
-              (hook ? "/hooks?" : "/monitoring?") +
-              new URLSearchParams({
-                workspace: workspaceId,
-                repository: repository.id,
-                view: hook ? "subscriptions" : "targets",
-              });
+            const browse = hook
+              ? expectationHref(workspaceId, repository.id, "hooks")
+              : "/monitoring?" +
+                new URLSearchParams({
+                  workspace: workspaceId,
+                  repository: repository.id,
+                  view: hook ? "subscriptions" : "targets",
+                });
             return (
               <article
                 className="repository-preview-card"

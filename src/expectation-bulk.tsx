@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { sameExpectationFlow } from "../shared/expectation-resolution";
+import { HookResolution } from "./hook-resolution";
+import { restoreVisibleFocus } from "./lib/focus";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Location } from "react-router-dom";
+import { useSearchParams, type Location } from "react-router-dom";
 import { CAPABILITY, type Repository, type Snapshot } from "../shared/domain";
 import {
   EXPECTATION_BULK_LIMITS,
@@ -106,9 +109,37 @@ export function ExpectationBulkEditor({
   initialReviewId: string | null;
   onReview: (id: string | null) => void;
   onClose: () => void;
-  returnFocus: HTMLButtonElement | null;
+  returnFocus: RefObject<HTMLButtonElement | null>;
   projectId?: string;
 }) {
+  const [params, setParams] = useSearchParams();
+  const resolutionRepository =
+    params.get("resolve") === "hooks"
+      ? snapshot.repositories.find(
+          (repo) => repo.id === params.get("resolveRepository"),
+        )
+      : undefined;
+  function resolveHooks(repositoryId: string | null) {
+    const next = new URLSearchParams(params);
+    next.set("dialog", "expectations");
+    if (repositoryId) {
+      next.set("resolve", "hooks");
+      next.set("resolveRepository", repositoryId);
+    } else
+      for (const key of [
+        "resolve",
+        "resolveRepository",
+        "connection",
+        "policy",
+        "policyReview",
+        "setup",
+        "setupReview",
+        "resume",
+        "verify",
+      ])
+        next.delete(key);
+    setParams(next);
+  }
   const workspaceId = snapshot.workspace.id;
   const pending = (planId: string, value?: boolean) =>
     pendingReview("expectations", workspaceId, planId, value);
@@ -142,7 +173,8 @@ export function ExpectationBulkEditor({
   const guard = useCloseGuard(
     !receipt && (selected.length > 0 || Boolean(review) || busy || uncertain),
     onClose,
-    ownReviewNavigation,
+    (current, next) =>
+      ownReviewNavigation(current, next) || sameExpectationFlow(current, next),
   );
   const candidates = snapshot.repositories
     .filter(
@@ -394,7 +426,7 @@ export function ExpectationBulkEditor({
   return (
     <>
       <Dialog
-        open
+        open={!resolutionRepository}
         onOpenChange={(open) => {
           if (!open && !busy) guard.requestClose();
         }}
@@ -408,9 +440,11 @@ export function ExpectationBulkEditor({
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (returnFocus?.isConnected) returnFocus.focus();
-            else
-              document.querySelector<HTMLElement>("main h1,main h2")?.focus();
+            restoreVisibleFocus(
+              returnFocus.current?.isConnected
+                ? returnFocus.current
+                : document.querySelector<HTMLElement>("main h1,main h2"),
+            );
           }}
         >
           <DialogHeader>
@@ -701,6 +735,12 @@ export function ExpectationBulkEditor({
                         <div className="expectation-actions">
                           <h4>{row.fullName}</h4>
                           <Button
+                            variant="outline"
+                            onClick={() => resolveHooks(row.repositoryId)}
+                          >
+                            Set up hooks
+                          </Button>
+                          <Button
                             variant="ghost"
                             aria-label={"Exclude " + row.fullName}
                             onClick={() =>
@@ -914,6 +954,13 @@ export function ExpectationBulkEditor({
           </div>
         </DialogContent>
       </Dialog>
+      {resolutionRepository ? (
+        <HookResolution
+          snapshot={snapshot}
+          repository={resolutionRepository}
+          onBack={() => resolveHooks(null)}
+        />
+      ) : null}
       <DiscardDialog
         guard={guard}
         busy={busy}

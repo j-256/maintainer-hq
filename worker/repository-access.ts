@@ -116,7 +116,7 @@ export async function repositoryAccess(
         gates: hqOperationGates(role, effective),
       },
       github: {
-        webhookAdapter: "not_supported",
+        webhookAdapter: "hookrelay_setup",
         administration: "not_verified",
         sources: enrolled.map((source) => {
           let configurationValid = false;

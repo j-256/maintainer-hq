@@ -8,6 +8,7 @@ import {
 import { MEMBERSHIP_LIMITS } from "../shared/membership";
 import { SOURCE_LIMITS } from "../shared/sources";
 import { HOOK_POLICY_KIND, HOOK_RETRY_KIND } from "../shared/hooks";
+import { HOOK_SETUP_KIND } from "../shared/hook-setup";
 import { MANAGED_CONFIGURATION_OPERATION_KIND } from "../shared/managed-configurations";
 import { MONITOR_OPERATION_KIND } from "../shared/monitoring";
 import {
@@ -171,6 +172,7 @@ export async function buildTransferPreview(
   const providerKinds = JSON.stringify([
     HOOK_RETRY_KIND,
     HOOK_POLICY_KIND,
+    HOOK_SETUP_KIND,
     MONITOR_OPERATION_KIND,
     MANAGED_CONFIGURATION_OPERATION_KIND,
   ]);
