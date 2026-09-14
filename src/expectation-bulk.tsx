@@ -1,5 +1,9 @@
-import { sameExpectationFlow } from "../shared/expectation-resolution";
-import { HookResolution } from "./hook-resolution";
+import {
+  sameExpectationFlow,
+  clearExpectationResolution,
+  expectationResolutionKind,
+} from "../shared/expectation-resolution";
+import { ExpectationResolution } from "./expectation-resolution";
 import { restoreVisibleFocus } from "./lib/focus";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -113,31 +117,20 @@ export function ExpectationBulkEditor({
   projectId?: string;
 }) {
   const [params, setParams] = useSearchParams();
-  const resolutionRepository =
-    params.get("resolve") === "hooks"
-      ? snapshot.repositories.find(
-          (repo) => repo.id === params.get("resolveRepository"),
-        )
-      : undefined;
-  function resolveHooks(repositoryId: string | null) {
+  const resolutionKind = expectationResolutionKind(params.get("resolve"));
+  const resolutionRepository = resolutionKind
+    ? snapshot.repositories.find(
+        (repo) => repo.id === params.get("resolveRepository"),
+      )
+    : undefined;
+  function resolveExpectation(repositoryId: string | null, kind = "all") {
     const next = new URLSearchParams(params);
+    clearExpectationResolution(next);
     next.set("dialog", "expectations");
     if (repositoryId) {
-      next.set("resolve", "hooks");
+      next.set("resolve", kind);
       next.set("resolveRepository", repositoryId);
-    } else
-      for (const key of [
-        "resolve",
-        "resolveRepository",
-        "connection",
-        "policy",
-        "policyReview",
-        "setup",
-        "setupReview",
-        "resume",
-        "verify",
-      ])
-        next.delete(key);
+    }
     setParams(next);
   }
   const workspaceId = snapshot.workspace.id;
@@ -736,9 +729,17 @@ export function ExpectationBulkEditor({
                           <h4>{row.fullName}</h4>
                           <Button
                             variant="outline"
-                            onClick={() => resolveHooks(row.repositoryId)}
+                            onClick={() =>
+                              resolveExpectation(row.repositoryId, "hooks")
+                            }
                           >
                             Set up hooks
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => resolveExpectation(row.repositoryId)}
+                          >
+                            Resolve expectations
                           </Button>
                           <Button
                             variant="ghost"
@@ -954,11 +955,38 @@ export function ExpectationBulkEditor({
           </div>
         </DialogContent>
       </Dialog>
-      {resolutionRepository ? (
-        <HookResolution
+      {resolutionRepository && resolutionKind ? (
+        <ExpectationResolution
+          kind={resolutionKind}
           snapshot={snapshot}
           repository={resolutionRepository}
-          onBack={() => resolveHooks(null)}
+          expectations={
+            rows.find((row) => row.repositoryId === resolutionRepository.id)
+              ?.after
+          }
+          onCompleted={(receipt) => {
+            setSelection((previous) => {
+              const row = previous[receipt.repositoryId];
+              if (!row || row.revision !== receipt.previousRevision)
+                return previous;
+              return {
+                ...previous,
+                [row.id]: {
+                  ...row,
+                  revision: receipt.revision,
+                  expectations: {
+                    ...row.expectations,
+                    reviewDate: receipt.nextReviewDate,
+                  },
+                },
+              };
+            });
+            setReview(null);
+            initialId.current = null;
+            onReview(null);
+            if (step === "review") setStep("configure");
+          }}
+          onBack={() => resolveExpectation(null)}
         />
       ) : null}
       <DiscardDialog

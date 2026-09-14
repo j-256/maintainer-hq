@@ -1,4 +1,5 @@
 import { HookSetup } from "./hook-setup";
+import { ExpectationReviews } from "./expectation-review";
 import {
   CAPABILITY,
   LIMITS,
@@ -346,6 +347,12 @@ export class WorkspaceService {
   }
   repositoryCoverageGet(input: unknown) {
     return new RepositoryCoverageService(this).read(input, false);
+  }
+  expectationReviewComplete(input: unknown) {
+    return new ExpectationReviews(this).complete(input);
+  }
+  expectationReviewGet(input: unknown) {
+    return new ExpectationReviews(this).get(input);
   }
 
   repositoryAccess(input: unknown) {

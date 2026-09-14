@@ -30,6 +30,7 @@ Discovery works without a running dashboard. The schema command is authoritative
 | Read retained operational coverage and progress without contacting providers | [Saved operational coverage](repositories.md#shared-commands-and-bounds), `repository_coverage_get` |
 | Discover repositories and reconcile reviewed enrollment changes | [Fleet enrollment](fleet-enrollment.md) |
 | Reviewed expectation presets, exceptions and bulk changes | [Bulk expectations](repositories.md#set-expectations-across-repositories) |
+| Expectation resolution and recorded review outcomes | [Resolve an expectation](repositories.md#resolve-an-expectation) |
 | Goal and progress reports | [Activity](activity.md) |
 | Saved repository coverage and latest collection results | [GitHub coverage](github.md) |
 | Read-only GitHub collection | [GitHub evidence](github-evidence.md) |

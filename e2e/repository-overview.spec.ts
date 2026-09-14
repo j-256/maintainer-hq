@@ -508,7 +508,11 @@ test("missing operational coverage offers setup, not a setting that silently cre
     .getByRole("link", { name: "Set up monitoring", exact: true })
     .click();
   await expect(page).toHaveURL(
-    new RegExp("/monitoring\\?.*repository=" + repo.id),
+    new RegExp(
+      "/repositories/" +
+        repo.id +
+        "\\?.*dialog=expectations.*resolve=monitoring",
+    ),
   );
   expect(
     requests.some((call) => /(?:_save|_apply|_plan)$/.test(call.name)),

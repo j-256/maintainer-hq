@@ -238,14 +238,11 @@ export function RepositoryOperationalChecks({
                 coverageAssessment(item.observation.details.coverage, now)
                   .health === "warning",
             );
-            const browse = hook
-              ? expectationHref(workspaceId, repository.id, "hooks")
-              : "/monitoring?" +
-                new URLSearchParams({
-                  workspace: workspaceId,
-                  repository: repository.id,
-                  view: hook ? "subscriptions" : "targets",
-                });
+            const browse = expectationHref(
+              workspaceId,
+              repository.id,
+              hook ? "hooks" : "monitoring",
+            );
             return (
               <article
                 className="repository-preview-card"

@@ -16,18 +16,9 @@ import {
   type HookSetupReview,
   type HookSetupStatus,
 } from "../shared/hook-setup";
-import type { RepositoryCoverage } from "../shared/repository-coverage";
-import { COVERAGE_LIMITS } from "../shared/coverage-evidence";
 import type { ResourceLinks } from "../shared/resource-links";
-import {
-  expectationHref,
-  hookExpectationResolution,
-} from "../shared/expectation-resolution";
+import { expectationHref } from "../shared/expectation-resolution";
 import { command } from "./lib/api";
-import {
-  coverageObservationVersion,
-  invalidateSupersededCoverage,
-} from "./lib/coverage-convergence";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
@@ -52,68 +43,6 @@ import { HookPolicyReviewDialog } from "./hook-policy-review";
 import { DiscardDialog, useCloseGuard } from "./source-editor";
 import "./hook-resolution.css";
 import "./hooks.css";
-
-const EVIDENCE_CLOCK_MS = 10_000;
-
-export function HookExpectationAction({
-  repository,
-  snapshot,
-  onOpen,
-}: {
-  repository: Repository;
-  snapshot: Snapshot;
-  onOpen: () => void;
-}) {
-  const query = useQuery({
-    queryKey: [
-      "repository-coverage-cache",
-      snapshot.workspace.id,
-      repository.id,
-      repository.revision,
-      snapshot.connections
-        .filter(
-          (item) =>
-            item.provider === "hookrelay" ||
-            item.provider === "endpoint-monitor",
-        )
-        .map((item) => [item.id, item.revision, item.enabled]),
-      coverageObservationVersion(repository.id, snapshot.observations),
-    ],
-    queryFn: ({ signal }) =>
-      command<RepositoryCoverage>(
-        "repository_coverage_get",
-        { workspaceId: snapshot.workspace.id, repositoryId: repository.id },
-        signal,
-      ),
-    staleTime: COVERAGE_LIMITS.REFRESH_MS,
-  });
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const refresh = () => {
-      if (!document.hidden) setNow(Date.now());
-    };
-    const timer = setInterval(refresh, EVIDENCE_CLOCK_MS);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, []);
-  const state = hookExpectationResolution(
-    invalidateSupersededCoverage(query.data, snapshot.observations),
-    now,
-  );
-  return (
-    <div className="expectation-resolution-action">
-      <StatusBadge tone={query.error ? "warning" : state.tone}>
-        {query.error ? "Coverage unavailable" : state.label}
-      </StatusBadge>
-      <Button type="button" variant="outline" onClick={onOpen}>
-        {state.action}
-      </Button>
-    </div>
-  );
-}
 
 type Navigate = (fields: Record<string, string | null>) => void;
 function HookVerification({

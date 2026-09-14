@@ -5,6 +5,10 @@ import {
 } from "./hook-setup";
 import { activityFeedInput, goalActivityInput } from "./activity";
 import {
+  expectationReviewCompleteInput,
+  expectationReviewGetInput,
+} from "./expectation-review";
+import {
   fleetDiscoveryInput,
   fleetReconciliationPlanInput,
   fleetReconciliationReviewInput,
@@ -224,6 +228,19 @@ export const commands = {
     method: "repositoryCoverageGet",
     title:
       "Read retained HQ coverage and check progress without provider calls or state changes",
+    readOnly: true,
+  },
+  expectation_review_complete: {
+    schema: expectationReviewCompleteInput,
+    method: "expectationReviewComplete",
+    title:
+      "Record a repository review outcome and next date atomically with a stable receipt",
+    readOnly: false,
+  },
+  expectation_review_get: {
+    schema: expectationReviewGetInput,
+    method: "expectationReviewGet",
+    title: "Read a completed repository review in its authorized workspace",
     readOnly: true,
   },
   repository_coverage: {
@@ -1266,6 +1283,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
       "fleet_reconciliation_apply",
       "projects_organize_apply",
       "expectations_apply",
+      "expectation_review_complete",
       "provider_credential_apply",
       "project_transfer_apply",
       "member_update",
@@ -1351,6 +1369,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "fleet_reconciliation_apply",
         "projects_organize_apply",
         "expectations_apply",
+        "expectation_review_complete",
         "provider_credential_apply",
         "project_transfer_plan",
         "project_transfer_apply",

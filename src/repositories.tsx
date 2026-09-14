@@ -1,3 +1,4 @@
+import { clearExpectationResolution } from "../shared/expectation-resolution";
 import {
   lazy,
   Suspense,
@@ -213,21 +214,11 @@ export function RepositoriesView({
   function setBulkOpen(open: boolean) {
     const next = new URLSearchParams(params);
     if (open) next.set("dialog", "expectations");
-    else
-      for (const key of [
-        "dialog",
-        "resolve",
-        "resolveRepository",
-        "connection",
-        "policy",
-        "policyReview",
-        "setup",
-        "setupReview",
-        "resume",
-        "verify",
-        EXPECTATION_REVIEW_PARAM,
-      ])
-        next.delete(key);
+    else {
+      clearExpectationResolution(next);
+      next.delete("dialog");
+      next.delete(EXPECTATION_REVIEW_PARAM);
+    }
     setParams(next);
   }
   const [fleetOpen, setFleetOpen] = useState(false);
@@ -700,19 +691,11 @@ export function RepositoryDetail({ snapshot }: { snapshot: Snapshot }) {
   function setEditing(open: boolean) {
     const next = new URLSearchParams(params);
     if (open) next.set("dialog", "expectations");
-    else
-      for (const key of [
-        "dialog",
-        "resolve",
-        "connection",
-        "policy",
-        "policyReview",
-        "setup",
-        "setupReview",
-        "resume",
-        "verify",
-      ])
-        next.delete(key);
+    else {
+      clearExpectationResolution(next);
+      next.delete("dialog");
+      next.delete(EXPECTATION_REVIEW_PARAM);
+    }
     setParams(next);
   }
   const [saved, setSaved] = useState(false);

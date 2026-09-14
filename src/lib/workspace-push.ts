@@ -50,6 +50,7 @@ const QUERY_TOPICS: Record<string, readonly PushTopic[]> = {
     "access",
   ],
   "repository-access": ["access"],
+  "repository-review": ["workspace", "operations", "access"],
   "project-resources": ["associations", "workspace", "access"],
   "resource-project": ["associations", "workspace", "access"],
   "departed-resource": ["workspace", "access"],

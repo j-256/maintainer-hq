@@ -1,6 +1,7 @@
+import { sameExpectationFlow } from "../shared/expectation-resolution";
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { Snapshot } from "../shared/domain";
+import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
   MONITOR_DEFAULTS,
   MONITOR_LIMITS,
@@ -61,6 +62,8 @@ type EditorProps = {
   onClose: () => void;
   onReceipt: (id: string) => void;
   returnFocus: HTMLElement | null;
+  reviewId?: string | null;
+  onReview?: (id: string | null) => void;
 };
 function newTarget(defaults: MonitorDefaults): MonitorTarget {
   return {
@@ -231,12 +234,29 @@ function ConfigurationForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [reload, setReload] = useState(false);
-  const [reviewId, setReviewId] = useState<string | null>(null);
+  const [localReviewId, setLocalReviewId] = useState<string | null>(null);
+  const reviewId = props.onReview ? (props.reviewId ?? null) : localReviewId;
+  const setReviewId = props.onReview ?? setLocalReviewId;
   const attempt = useRef<{ id: string; serialized: string } | null>(null);
   const reviewButton = useRef<HTMLButtonElement>(null);
   const dirty = JSON.stringify(draft) !== baseline;
-  const guard = useCloseGuard(dirty || busy, onClose);
-  const allowed = base.capabilities.includes("configure");
+  const guard = useCloseGuard(
+    dirty || busy,
+    onClose,
+    props.onReview
+      ? (current, next) => {
+          if (!sameExpectationFlow(current, next)) return false;
+          const from = new URLSearchParams(current.search);
+          const to = new URLSearchParams(next.search);
+          from.delete("monitorReview");
+          to.delete("monitorReview");
+          return from.toString() === to.toString();
+        }
+      : undefined,
+  );
+  const allowed =
+    snapshot.capabilities.includes(CAPABILITY.OPERATE) &&
+    base.capabilities.includes("configure");
   async function loadSaved() {
     setBusy(true);
     setError(null);
@@ -359,7 +379,7 @@ function ConfigurationForm({
   return (
     <>
       <Dialog
-        open
+        open={!reviewId}
         onOpenChange={(open) => {
           if (!open && !busy) guard.requestClose();
         }}
@@ -683,6 +703,7 @@ function ConfigurationForm({
 }
 export function MonitoringConfigurationEditor(props: EditorProps) {
   const { snapshot, connection, targetId, onClose } = props;
+  const [resumingReview] = useState(Boolean(props.reviewId));
   const query = useQuery({
     queryKey: [
       "monitoring",
@@ -699,7 +720,18 @@ export function MonitoringConfigurationEditor(props: EditorProps) {
       ),
     refetchOnWindowFocus: false,
     retry: false,
+    enabled: !resumingReview || !props.reviewId,
   });
+  if (resumingReview && props.reviewId)
+    return (
+      <MonitoringReview
+        snapshot={snapshot}
+        planId={props.reviewId}
+        returnFocus={props.returnFocus}
+        onClose={() => props.onReview?.(null)}
+        onOperation={props.onReceipt}
+      />
+    );
   const missing =
     targetId &&
     query.data &&

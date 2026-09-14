@@ -72,19 +72,27 @@ export function GitHubEditor({
   onClose,
   onSaved,
   returnFocus,
+  includeRepositoryId,
 }: {
   initial?: GitHubSource;
   snapshot: Snapshot;
   onClose: () => void;
   onSaved: (source: GitHubSource) => void;
   returnFocus: HTMLElement | null;
+  includeRepositoryId?: string;
 }) {
   const [base, setBase] = useState(() =>
     editable(initial, Boolean(snapshot.repositories.length)),
   );
-  const [draft, setDraft] = useState(() =>
-    editable(initial, Boolean(snapshot.repositories.length)),
-  );
+  const [draft, setDraft] = useState(() => {
+    const fields = editable(initial, Boolean(snapshot.repositories.length));
+    if (
+      includeRepositoryId &&
+      !fields.repositoryIds.includes(includeRepositoryId)
+    )
+      fields.repositoryIds.push(includeRepositoryId);
+    return fields;
+  });
   const [sourceId] = useState(() => initial?.id ?? crypto.randomUUID());
   const [revision, setRevision] = useState(initial?.revision);
   const [search, setSearch] = useState("");
@@ -161,8 +169,8 @@ export function GitHubEditor({
         AbortSignal.timeout(SOURCE_REQUEST_TIMEOUT_MS),
       );
       void client.invalidateQueries({ queryKey: ["workspace", workspaceId] });
-      onSaved(source);
       guard.saved();
+      onSaved(source);
     } catch (error) {
       setError(
         error instanceof Error

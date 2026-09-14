@@ -1,0 +1,31 @@
+.expectation-resolution .resolution-card {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.expectation-resolution .resolution-card h3 {
+  font-weight: 600;
+}
+.expectation-resolution .resolution-field {
+  display: grid;
+  gap: 0.4rem;
+}
+.expectation-resolution .resolution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.expectation-resolution .resolution-outcome {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.expectation-resolution .monitor-target-facts {
+  grid-template-columns: 1fr;
+}
+.expectation-resolution .monitor-run-status h2 {
+  font-size: 1rem;
+}
