@@ -30,7 +30,8 @@
     "dependencies:report": "tsx cli/dependencies.ts check --json",
     "check": "npm run check:dependencies && npm run typecheck && npm test && npm run build && npm run check:publication",
     "cli": "tsx cli/index.ts",
-    "mcp": "tsx cli/mcp.ts"
+    "mcp": "tsx cli/mcp.ts",
+    "capture:cover": "node scripts/capture-cover.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "5.3.0",
