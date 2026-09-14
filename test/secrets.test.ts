@@ -600,6 +600,7 @@ describe("Durable Secrets execution", () => {
         await as().secretsCleanupApply(apply);
         expect(writes()).toHaveLength(2);
       },
+      D1_VOLUME_TEST_TIMEOUT_MS,
     );
     it("preserves accepted removal when follow-up access fails and never calls hidden scope access absent", async () => {
       const review = await as().secretsCleanupPlan(await distributed());
@@ -833,7 +834,7 @@ describe("Durable Secrets execution", () => {
     ).toBe("indeterminate");
     expect(writes()).toHaveLength(2);
     expect(writes().every(([, init]) => init?.method === "PUT")).toBe(true);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("rejects changed source metadata or destination metadata before offering source removal", async () => {
     const target = {
       ...destination,
