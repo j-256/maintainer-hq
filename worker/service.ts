@@ -1,3 +1,4 @@
+import { HookSetup } from "./hook-setup";
 import {
   CAPABILITY,
   LIMITS,
@@ -400,6 +401,24 @@ export class WorkspaceService {
   }
   hooksConfiguration(input: unknown) {
     return new HookPolicies(this).configuration(input);
+  }
+  hooksSetupConfiguration(input: unknown) {
+    return new HookSetup(this).configuration(input);
+  }
+  hooksSetupStatus(input: unknown) {
+    return new HookSetup(this).status(input);
+  }
+  hooksSetupPlan(input: unknown) {
+    return new HookSetup(this).plan(input);
+  }
+  hooksSetupGet(input: unknown) {
+    return new HookSetup(this).get(input);
+  }
+  hooksSetupApply(input: unknown) {
+    return new HookSetup(this).apply(input);
+  }
+  hooksSetupReconcile(input: unknown) {
+    return new HookSetup(this).reconcile(input);
   }
   hooksPolicySubscriptions(input: unknown) {
     return new HookPolicies(this).page(input, "subscriptions");

@@ -121,7 +121,7 @@ it("distinguishes live HQ roles from provider administration without calls or mu
       gates: hqOperationGates(role, ROLE_CAPABILITIES[role]),
     });
     expect(result.github).toMatchObject({
-      webhookAdapter: "not_supported",
+      webhookAdapter: "hookrelay_setup",
       administration: "not_verified",
       sources: [
         {

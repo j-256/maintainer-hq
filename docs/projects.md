@@ -13,7 +13,7 @@ Open **Projects** and choose **Create project**. Record the name and description
 
 Select **Enroll a repository with this project** when you want to add its first repository at the same time. Leave it unchecked for a repository-free project. Creation succeeds for the complete selection or leaves neither new record behind.
 
-Open a project to switch between its Overview, Repositories, Releases, Hooks, Monitoring, Secrets, and Activity. [Releases](releases.md) reads one explicitly linked repository at a time, retaining that repository's source and provider evidence. These sections gather relevant resources without duplicating their provider configuration. Resources shared with other projects or repositories retain that wider scope when you open their controls.
+Open a project to switch between its Overview, Repositories, Releases, Hooks, Monitoring, Secrets, and Activity. The Overview lists its linked repositories by name, including labeled archived repositories, with links to their HQ details. **Manage repositories** opens the full repository inventory and assignment controls. [Releases](releases.md) reads one explicitly linked repository at a time, retaining that repository's source and provider evidence. These sections gather relevant resources without duplicating their provider configuration. Resources shared with other projects or repositories retain that wider scope when you open their controls.
 
 Use the project editor to update metadata with Save/Cancel. To regroup an existing repository, use the linking control in the project's repository section and review its assignment in the repository editor. Moving the whole project to a different membership boundary requires [Move to workspace](project-transfers.md), with a separate exact review.
 

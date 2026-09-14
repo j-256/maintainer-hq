@@ -90,7 +90,9 @@ const RepositoryWork = lazy(() =>
   })),
 );
 const RepositoryDependencies = lazy(() =>
-  import("./dependencies").then((module) => ({ default: module.RepositoryDependencies })),
+  import("./dependencies").then((module) => ({
+    default: module.RepositoryDependencies,
+  })),
 );
 const ExpectationBulkEditor = lazy(() =>
   import("./expectation-bulk").then((module) => ({
@@ -123,7 +125,12 @@ const REPOSITORY_SECTIONS = [
     Icon: Tag,
     description: "Published releases and deployment evidence",
   },
-  { id: "dependencies", label: "Dependencies", Icon: PackageCheck, description: "Temporary overrides and dependency maintenance" },
+  {
+    id: "dependencies",
+    label: "Dependencies",
+    Icon: PackageCheck,
+    description: "Temporary overrides and dependency maintenance",
+  },
   {
     id: "hooks",
     label: "Hooks",
@@ -202,7 +209,27 @@ export function RepositoriesView({
 }) {
   const [params] = useSearchParams();
   const [enrolling, setEnrolling] = useState(false);
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const bulkOpen = params.get("dialog") === "expectations";
+  function setBulkOpen(open: boolean) {
+    const next = new URLSearchParams(params);
+    if (open) next.set("dialog", "expectations");
+    else
+      for (const key of [
+        "dialog",
+        "resolve",
+        "resolveRepository",
+        "connection",
+        "policy",
+        "policyReview",
+        "setup",
+        "setupReview",
+        "resume",
+        "verify",
+        EXPECTATION_REVIEW_PARAM,
+      ])
+        next.delete(key);
+    setParams(next);
+  }
   const [fleetOpen, setFleetOpen] = useState(false);
   const fleetButton = useRef<HTMLButtonElement>(null);
   const bulkButton = useRef<HTMLButtonElement>(null);
@@ -602,10 +629,10 @@ export function RepositoriesView({
             snapshot={snapshot}
             initialReviewId={params.get(EXPECTATION_REVIEW_PARAM)}
             projectId={scopedProject?.id}
-            returnFocus={bulkButton.current}
+            returnFocus={bulkButton}
             onReview={(id) => {
-              setBulkOpen(true);
               const next = new URLSearchParams(params);
+              next.set("dialog", "expectations");
               if (id) next.set(EXPECTATION_REVIEW_PARAM, id);
               else next.delete(EXPECTATION_REVIEW_PARAM);
               setParams(next, {
@@ -614,18 +641,7 @@ export function RepositoriesView({
                 flushSync: true,
               });
             }}
-            onClose={() => {
-              setBulkOpen(false);
-              if (params.has(EXPECTATION_REVIEW_PARAM)) {
-                const next = new URLSearchParams(params);
-                next.delete(EXPECTATION_REVIEW_PARAM);
-                setParams(next, {
-                  replace: true,
-                  preventScrollReset: true,
-                  flushSync: true,
-                });
-              }
-            }}
+            onClose={() => setBulkOpen(false)}
           />
         </Suspense>
       ) : null}
@@ -676,11 +692,29 @@ export function RepositoriesView({
 
 export function RepositoryDetail({ snapshot }: { snapshot: Snapshot }) {
   const { repositoryId } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const section =
     REPOSITORY_SECTIONS.find((item) => item.id === params.get("section"))?.id ??
     "overview";
-  const [editing, setEditing] = useState(false);
+  const editing = params.get("dialog") === "expectations";
+  function setEditing(open: boolean) {
+    const next = new URLSearchParams(params);
+    if (open) next.set("dialog", "expectations");
+    else
+      for (const key of [
+        "dialog",
+        "resolve",
+        "connection",
+        "policy",
+        "policyReview",
+        "setup",
+        "setupReview",
+        "resume",
+        "verify",
+      ])
+        next.delete(key);
+    setParams(next);
+  }
   const [saved, setSaved] = useState(false);
   const editButton = useRef<HTMLButtonElement>(null);
   const accessButton = useRef<HTMLButtonElement>(null);
@@ -791,8 +825,14 @@ export function RepositoryDetail({ snapshot }: { snapshot: Snapshot }) {
           snapshot={snapshot}
         />
       ) : section === "dependencies" ? (
-        <Suspense fallback={<p role="status">Loading dependency maintenance...</p>}>
-          <RepositoryDependencies key={repository.id} snapshot={snapshot} repository={repository} />
+        <Suspense
+          fallback={<p role="status">Loading dependency maintenance...</p>}
+        >
+          <RepositoryDependencies
+            key={repository.id}
+            snapshot={snapshot}
+            repository={repository}
+          />
         </Suspense>
       ) : section === "work" ? (
         <Suspense

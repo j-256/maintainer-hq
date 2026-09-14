@@ -98,7 +98,7 @@ export const repositoryAccessSchema = z
       .strict(),
     github: z
       .object({
-        webhookAdapter: z.literal("not_supported"),
+        webhookAdapter: z.literal("hookrelay_setup"),
         administration: z.literal("not_verified"),
         sources: z
           .array(

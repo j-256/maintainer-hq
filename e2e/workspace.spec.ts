@@ -464,6 +464,9 @@ test("keyboard dismissal, failed saves, and browser navigation preserve an unsav
   await page
     .getByRole("button", { name: "Discard changes", exact: true })
     .click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goBack();
   await expect(
     page.getByRole("heading", { name: "Repositories", exact: true }),
   ).toBeVisible();

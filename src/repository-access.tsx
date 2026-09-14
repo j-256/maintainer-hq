@@ -5,6 +5,7 @@ import {
   HQ_GATE_LABELS,
   repositoryAccessSchema,
 } from "../shared/repository-access";
+import { expectationHref } from "../shared/expectation-resolution";
 import { githubRepositoryUrl } from "../shared/github-context";
 import { githubCoverageHref } from "../shared/github-coverage";
 import { type Repository, type Snapshot } from "../shared/domain";
@@ -213,9 +214,9 @@ export function RepositoryAccessDialog({
               <section aria-label="Provider ownership and support">
                 <h3>GitHub webhooks and Hookrelay are separate</h3>
                 <p>
-                  GitHub owns repository webhooks. HQ does not create or edit
-                  them. Administration permission has not been verified here,
-                  even when observation succeeds.
+                  GitHub owns repository webhooks. Reviewed installation is
+                  available through Hookrelay setup. Administration permission
+                  has not been verified here, even when observation succeeds.
                 </p>
                 {upstream ? (
                   <p>
@@ -234,8 +235,21 @@ export function RepositoryAccessDialog({
                   <Link onClick={onClose} to={sectionHref("hooks")}>
                     Repository Hooks
                   </Link>{" "}
-                  shows linked Hookrelay subscriptions and delivery retries, not
-                  GitHub webhook administration.
+                  shows linked Hookrelay subscriptions and delivery retries.
+                </p>
+                <p>
+                  <Link
+                    onClick={onClose}
+                    to={expectationHref(
+                      snapshot.workspace.id,
+                      repository.id,
+                      "hooks",
+                    )}
+                  >
+                    Set up hook coverage
+                  </Link>{" "}
+                  checks the connection and provider prerequisites before
+                  preparing a review.
                 </p>
                 <p>
                   <Link onClick={onClose} to={sectionHref("monitoring")}>

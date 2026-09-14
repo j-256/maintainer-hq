@@ -1,3 +1,4 @@
+import { expectationHref } from "./expectation-resolution";
 import { z } from "zod";
 import { idSchema, reviewIsDue, workspaceInput, type Snapshot } from "./domain";
 import {
@@ -162,8 +163,14 @@ export function workspaceAttention(
           reason: observations.length
             ? "Linked-resource evidence is incomplete, expired, or does not meet the assessment rule."
             : "Check this repository's linked resources, or configure and link the required coverage.",
-          action: "Inspect operational checks",
-          href: href + "#repository-operational-title",
+          action:
+            key === "hooks"
+              ? "Resolve hook coverage"
+              : "Inspect operational checks",
+          href:
+            key === "hooks"
+              ? expectationHref(workspaceId, repository.id, "hooks")
+              : href + "#repository-operational-title",
         });
     }
     if (reviewIsDue(repository, now))

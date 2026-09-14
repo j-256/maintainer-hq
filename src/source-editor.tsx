@@ -1,3 +1,4 @@
+import { useFlowBlocker as useBlocker } from "./lib/flow-blocker";
 import {
   useCallback,
   useEffect,
@@ -6,7 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useBeforeUnload, useBlocker, type Location } from "react-router-dom";
+import { useBeforeUnload, type Location } from "react-router-dom";
 import { TriangleAlert } from "lucide-react";
 import { type Connection, type Snapshot } from "../shared/domain";
 import {
@@ -75,6 +76,9 @@ export function useCloseGuard(
       allow.current = true;
       if (blocker.state === "blocked") blocker.proceed();
       else onClose();
+    },
+    permitNavigation: () => {
+      allow.current = true;
     },
     saved: () => {
       allow.current = true;

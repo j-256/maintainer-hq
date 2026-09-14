@@ -6,6 +6,7 @@ import {
   type Principal,
 } from "../shared/domain";
 import { commands, commandAnnotations } from "../shared/commands";
+import { HOOK_SETUP_KIND } from "../shared/hook-setup";
 import {
   TRANSFER_LIMITS,
   type TransferFields,
@@ -869,7 +870,11 @@ it("shows pending invitations and credential access without exposing bearer mate
   expect(JSON.stringify(preview)).not.toContain("PRIVATE-HASH");
 });
 
-it.each(["hookrelay.delivery.retry", "hookrelay.subscription.policy"])(
+it.each([
+  "hookrelay.delivery.retry",
+  "hookrelay.subscription.policy",
+  HOOK_SETUP_KIND,
+])(
   "blocks live %s reviews and unresolved operations",
   async (kind) => {
     const { fields } = await create();

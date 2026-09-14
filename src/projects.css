@@ -92,6 +92,43 @@
   display: grid;
   gap: 4px;
 }
+.project-overview-repositories {
+  grid-column: 1 / -1;
+}
+.project-overview-repositories .detail-card-heading {
+  flex-wrap: wrap;
+}
+.project-repository-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-repository-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.project-repository-list li + li {
+  border-top: 1px solid var(--border);
+}
+.project-repository-list a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  min-width: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.project-repository-list a svg {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+.project-repository-list a span {
+  overflow-wrap: anywhere;
+}
 .project-metadata {
   display: grid;
   gap: 18px;

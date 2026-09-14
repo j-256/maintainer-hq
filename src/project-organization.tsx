@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Location } from "react-router-dom";
+import { restoreVisibleFocus } from "./lib/focus";
 import {
   CAPABILITY,
   type Project,
@@ -633,9 +634,11 @@ export function ProjectOrganizationEditor({
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (returnFocus?.isConnected) returnFocus.focus();
-            else
-              document.querySelector<HTMLElement>("main h1,main h2")?.focus();
+            restoreVisibleFocus(
+              returnFocus?.isConnected
+                ? returnFocus
+                : document.querySelector<HTMLElement>("main h1,main h2"),
+            );
           }}
         >
           <DialogHeader>
