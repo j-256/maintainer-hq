@@ -49,6 +49,8 @@ import {
 } from "./components/ui/dialog";
 import { ActivityView } from "./activity";
 import { RepositoriesView } from "./repositories";
+import { repositoryHref } from "./resource-repositories";
+import { withInventoryContext } from "./repository-inventory";
 import { ProjectResourcesView } from "./project-resources";
 import { useDateTime } from "./date-time";
 import {
@@ -60,6 +62,7 @@ import {
   projectHref,
   projectInventory,
   projectInventoryRows,
+  projectListContext,
   projectQuery,
   projectsHref,
   type ProjectInventoryRow,
@@ -540,6 +543,9 @@ export function ProjectDetail({
   const row = projectInventoryRows(snapshot, now).find(
     (row) => row.project.id === project.id,
   )!;
+  const projectRepositories = snapshot.repositories
+    .filter((repository) => repository.projectId === project.id)
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
   const projectNames = new Map(
     snapshot.projects.map((value) => [value.id, value.name]),
   );
@@ -639,6 +645,54 @@ export function ProjectDetail({
             </span>
           </div>
           <div className="detail-grid">
+            <section
+              className="detail-card project-overview-repositories"
+              aria-labelledby="project-repositories-heading"
+            >
+              <div className="detail-card-heading">
+                <h2 id="project-repositories-heading">Repositories</h2>
+                <Button asChild variant="outline">
+                  <Link
+                    to={projectHref(
+                      snapshot.workspace.id,
+                      project.id,
+                      "repositories",
+                      params,
+                    )}
+                  >
+                    Manage repositories
+                  </Link>
+                </Button>
+              </div>
+              {projectRepositories.length ? (
+                <ul className="project-repository-list">
+                  {projectRepositories.map((repository) => (
+                    <li key={repository.id}>
+                      <Link
+                        to={withInventoryContext(
+                          repositoryHref(snapshot.workspace.id, repository.id),
+                          new URLSearchParams({
+                            fromProject: project.id,
+                            projectList: projectListContext(params),
+                            ...(repository.lifecycle === "archived"
+                              ? { filter: "archived" }
+                              : {}),
+                          }),
+                        )}
+                      >
+                        <FolderGit2 size={16} aria-hidden="true" />
+                        <span>{repository.fullName}</span>
+                      </Link>
+                      {repository.lifecycle === "archived" ? (
+                        <Badge variant="outline">Archived</Badge>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No repositories are linked to this project.</p>
+              )}
+            </section>
             <section className="detail-card">
               <div className="detail-card-heading">
                 <h2>Priorities and visibility</h2>

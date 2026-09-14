@@ -245,6 +245,18 @@ test("links an existing repository explicitly, preserves historical project acti
     resourceId: repository.id,
     goalId: null,
   });
+  const overview = await page.context().newPage();
+  await overview.goto(projectURL(destination));
+  const linked = overview.getByRole("region", {
+    name: "Repositories",
+    exact: true,
+  });
+  await expect(linked).toContainText(
+    "No repositories are linked to this project.",
+  );
+  await expect(overview.locator(".connection-state")).toContainText(
+    "Live updates",
+  );
   await page.goto(projectURL(destination, "repositories"));
   await page.getByRole("button", { name: "Link existing repository" }).click();
   const dialog = page.getByRole("dialog");
@@ -262,6 +274,9 @@ test("links an existing repository explicitly, preserves historical project acti
     .click();
   await expect(
     page.getByRole("heading", { name: repository.fullName, exact: true }),
+  ).toBeVisible();
+  await expect(
+    linked.getByRole("link", { name: repository.fullName, exact: true }),
   ).toBeVisible();
   await page.goto(projectURL(original, "activity"));
   await expect(
@@ -283,6 +298,13 @@ test("links an existing repository explicitly, preserves historical project acti
   await expect(
     page.getByRole("heading", { name: repository.fullName, exact: true }),
   ).toHaveCount(0);
+  await expect(
+    linked.getByRole("link", { name: repository.fullName, exact: true }),
+  ).toHaveCount(0);
+  await expect(linked).toContainText(
+    "No repositories are linked to this project.",
+  );
+  await overview.close();
   await page.goto(projectURL(original, "repositories"));
   await expect(
     page.getByRole("heading", { name: repository.fullName, exact: true }),
@@ -304,7 +326,16 @@ test("preserves independent project and nested repository filters on detail retu
   });
   await page.goto(URL + "&q=" + encodeURIComponent(name));
   await page.getByRole("link", { name, exact: true }).click();
-  await section(page, "Repositories").click();
+  await page
+    .getByRole("region", { name: "Repositories", exact: true })
+    .getByRole("link", { name: "example/" })
+    .click();
+  await page
+    .getByRole("link", { name: "Project repositories", exact: true })
+    .click();
+  expect(new globalThis.URL(page.url()).searchParams.get("projectList")).toBe(
+    new URLSearchParams({ q: name }).toString(),
+  );
   await page
     .getByRole("textbox", { name: "Search repositories" })
     .fill("example/");
@@ -392,11 +423,33 @@ test("project inventory is dense, bounded, keyboard-accessible and readable in b
   }
 });
 
-test("read-only project views disclose the edit boundary", async ({
+test("read-only project overviews list active and archived repositories with accessible navigation", async ({
   page,
   request,
 }) => {
   const project = await createProject(request, "Read only");
+  const other = await createProject(request, "Separate project");
+  const active = await command<Repository>(request, "repository_create", {
+    repository: repositoryFields(
+      "example/active-" + crypto.randomUUID(),
+      project.id,
+    ),
+  });
+  const archived = await command<Repository>(request, "repository_create", {
+    repository: {
+      ...repositoryFields(
+        "example/archived-repository-with-a-long-name-" + crypto.randomUUID(),
+        project.id,
+      ),
+      lifecycle: "archived",
+    },
+  });
+  const unrelated = await command<Repository>(request, "repository_create", {
+    repository: repositoryFields(
+      "example/unrelated-" + crypto.randomUUID(),
+      other.id,
+    ),
+  });
   await mockWorkspaceView(page, (snapshot) => ({
     ...snapshot,
     workspace: { ...snapshot.workspace, role: "viewer" },
@@ -410,7 +463,61 @@ test("read-only project views disclose the edit boundary", async ({
   await expect(
     page.getByRole("button", { name: "Edit project", exact: true }),
   ).toBeDisabled();
-  await section(page, "Repositories").click();
+  const repositories = page.getByRole("region", {
+    name: "Repositories",
+    exact: true,
+  });
+  await expect(repositories.locator("li")).toHaveCount(2);
+  await expect(repositories.locator("li").first()).toContainText(
+    active.fullName,
+  );
+  await expect(repositories.locator("li").last()).toContainText("Archived");
+  await expect(
+    repositories.getByRole("link", { name: unrelated.fullName, exact: true }),
+  ).toHaveCount(0);
+  for (const dark of [true, false]) {
+    await page.evaluate(
+      (value) => document.documentElement.classList.toggle("dark", value),
+      dark,
+    );
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(async () => {
+        await Promise.all(
+          document
+            .getAnimations()
+            .map((animation) => animation.finished.catch(() => {})),
+        );
+      });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      const accessibility = await new AxeBuilder({ page })
+        .include(".project-overview-repositories")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze();
+      expect(accessibility.violations).toEqual([]);
+    }
+  }
+  await repositories
+    .getByRole("link", { name: active.fullName, exact: true })
+    .focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    repositories.getByRole("link", { name: archived.fullName, exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: archived.fullName, exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Project repositories", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: archived.fullName, exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Link existing repository" }),
   ).toBeDisabled();
