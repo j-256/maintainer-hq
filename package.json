@@ -66,7 +66,7 @@
     "@cloudflare/workers-types": "5.20260907.1",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
-    "@types/node": "26.5.0",
+    "@types/node": "26.5.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@types/semver": "7.8.0",
