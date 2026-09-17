@@ -1353,7 +1353,7 @@ describe("Durable Secrets execution", () => {
     await first;
     await as().secretsRun({ ...secondInput, destinationIndex: 0 });
     expect(writes()).toHaveLength(2);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("leaves a recoverable submitted marker when receipt persistence fails after the provider write", async () => {
     const input = await prepared();
     await as().secretsApply(input);
