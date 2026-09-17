@@ -41,7 +41,7 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@tanstack/react-query": "5.102.8",
     "class-variance-authority": "^0.7.1",
-    "cn": "^0.2.6",
+    "cn": "^0.3.0",
     "commander": "15.0.0",
     "hono": "4.13.7",
     "jose": "6.2.12",
