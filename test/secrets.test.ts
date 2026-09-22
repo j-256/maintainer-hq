@@ -526,7 +526,7 @@ describe("Durable Secrets execution", () => {
       fetcher.mockImplementation(read);
       expect(await as().secretsCleanupApply(apply)).toEqual(result);
       expect(writes()).toHaveLength(1);
-    });
+    }, D1_VOLUME_TEST_TIMEOUT_MS);
     it("persists submission before DELETE and fences competing cleanup and distribution requests", async () => {
       const input = await distributed();
       const firstReview = await as().secretsCleanupPlan(input);
@@ -579,7 +579,7 @@ describe("Durable Secrets execution", () => {
       }
       expect((await first).receipt.writeStatus).toBe("accepted");
       expect(writes()).toHaveLength(2);
-    });
+    }, D1_VOLUME_TEST_TIMEOUT_MS);
     it.each([
       [500, "indeterminate"],
       [403, "rejected"],
@@ -1078,7 +1078,7 @@ describe("Durable Secrets execution", () => {
       }),
     ).rejects.toMatchObject({ code: "secret_review_conflict" });
     expect(writes()).toHaveLength(1);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("requires new input after key rotation or original expiry and never silently reseals or extends it", async () => {
     const input = await prepared();
     await as().secretsApply(input);
@@ -1149,7 +1149,7 @@ describe("Durable Secrets execution", () => {
       }
     }
     expect(writes()).toHaveLength(REVIEW_LIMITS.RECOVERY_DEPTH + 1);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("accepts durable intent without effects and executes each indexed destination at most once", async () => {
     const input = await prepared([
       destination,

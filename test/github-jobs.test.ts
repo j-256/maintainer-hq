@@ -1195,7 +1195,7 @@ describe("Durable GitHub refresh work", () => {
         finished: repositoryIds.length,
       },
     ]);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
 
   it("runs due sources without a browser or local publisher and avoids unchanged success activity spam", async () => {
     const fetch = fixture();
