@@ -58,6 +58,9 @@ it("requires complete, fresh evidence for every linked hook before presenting co
   const value = coverage();
   const now = Date.parse(observedAt);
   expect(hookExpectationResolution(value, now).tone).toBe("success");
+  value.evidence[0]!.observation.observedAt = expiresAt;
+  expect(hookExpectationResolution(value, now).tone).toBe("warning");
+  value.evidence[0]!.observation.observedAt = observedAt;
   expect(hookExpectationResolution(value, Date.parse(expiresAt)).tone).toBe(
     "warning",
   );

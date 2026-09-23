@@ -24,6 +24,7 @@ import {
   cfSettings,
   cloudflareSecretsFixture,
 } from "./fixtures/cloudflare-secrets";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -265,7 +266,7 @@ describe("reviewed transient Cloudflare execution", () => {
         .results,
     ).toEqual([]);
     expect(await artifacts()).not.toContain(CF_VALUE);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("prepares metadata-only intent without pretending a supplied value was stored", async () => {
     const review = await draft();
     expect(review.stage).toBe("reviewed");
@@ -434,7 +435,7 @@ describe("reviewed transient Cloudflare execution", () => {
       });
     }
     expect(writes()).toEqual([]);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("rechecks authority after consuming input and never persists a value when authority changes", async () => {
     const review = await accept();
     const base = privateRequest(review);
@@ -616,7 +617,7 @@ describe("reviewed transient Cloudflare execution", () => {
     expect(
       writes().filter((call) => call[1]?.method === "DELETE"),
     ).toHaveLength(1);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("enforces same-origin and safe error logging at the HTTP private-input boundary", async () => {
     const review = await accept();
     const app = createApplication(async () => ({

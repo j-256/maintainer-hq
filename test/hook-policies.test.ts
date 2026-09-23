@@ -16,6 +16,7 @@ import {
 import { WorkspaceService } from "../worker/service";
 import { credentialHash } from "../worker/credential-hash";
 import type { Env } from "../worker/types";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -476,7 +477,7 @@ it("admits only one concurrent local submission and bounds pending reviews", asy
   for (let index = 0; index < HOOK_LIMITS.PENDING_REVIEWS; index += 1)
     await review();
   await expect(review()).rejects.toThrow();
-});
+}, D1_VOLUME_TEST_TIMEOUT_MS);
 
 it("requires bounded operator automation scopes and live original credentials", async () => {
   const id = "reader";

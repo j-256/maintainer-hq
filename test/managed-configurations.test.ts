@@ -23,6 +23,7 @@ import {
 } from "../shared/secrets";
 import { createApplication } from "../worker/app";
 import { WorkspaceService } from "../worker/service";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 import type { Env } from "../worker/types";
 
 const bindings = env as unknown as Env & {
@@ -406,7 +407,7 @@ describe("Managed configuration without secret custody", () => {
     );
     expect(activity).not.toContain(PRIVATE);
     expect(activity).not.toContain("eu-west-1");
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
 
   it("uses collection creation and named deletion endpoints from exact reviews", async () => {
     variables.clear();

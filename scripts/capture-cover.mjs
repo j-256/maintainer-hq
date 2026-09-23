@@ -40,7 +40,7 @@ try {
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch();
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1,
+    viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 4,
     colorScheme: "dark", reducedMotion: "reduce",
   });
   for (const [name, description] of projects) {

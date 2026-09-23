@@ -1,5 +1,5 @@
 export function pendingReview(
-  kind: "organization" | "expectations" | "fleet",
+  kind: "organization" | "expectations" | "fleet" | "repository-review",
   workspaceId: string,
   planId: string,
   value?: boolean,

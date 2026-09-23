@@ -22,6 +22,7 @@ import {
 import { createApplication } from "../worker/app";
 import { ProviderCredentials } from "../worker/provider-credentials";
 import { managedProviderCredential } from "../worker/provider-credential-store";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 import {
   githubCredential,
   githubCredentialReferences,
@@ -826,7 +827,7 @@ describe("reviewed provider credential lifecycle", () => {
     await expect(
       as().providerCredentialsList({ ...workspace, before: "invalid" }),
     ).rejects.toMatchObject({ code: "validation" });
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
 
   it("has bounded strict HTTP and MCP parity without private-value command fields", async () => {
     await upload(await plan());

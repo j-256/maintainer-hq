@@ -1,6 +1,12 @@
 import { useFlowBlocker as useBlocker } from "./lib/flow-blocker";
-import { sameExpectationFlow } from "../shared/expectation-resolution";
-import { HookExpectationAction, HookResolution } from "./hook-resolution";
+import {
+  sameExpectationFlow,
+  clearExpectationResolution,
+  expectationResolutionKind,
+  type ExpectationResolutionKind,
+} from "../shared/expectation-resolution";
+import { ExpectationAction } from "./expectation-flow";
+import { ExpectationResolution } from "./expectation-resolution";
 import {
   useCallback,
   useEffect,
@@ -188,23 +194,14 @@ export function RepositoryEditor({
   suggestedProjectId?: string;
 }) {
   const [params, setParams] = useSearchParams();
-  const resolving = Boolean(initial && params.get("resolve") === "hooks");
-  function resolveHooks(open: boolean) {
+  const resolving = initial
+    ? expectationResolutionKind(params.get("resolve"))
+    : null;
+  function resolveExpectation(kind: ExpectationResolutionKind | null) {
     const next = new URLSearchParams(params);
+    clearExpectationResolution(next);
     next.set("dialog", "expectations");
-    if (open) next.set("resolve", "hooks");
-    else
-      for (const key of [
-        "resolve",
-        "connection",
-        "policy",
-        "policyReview",
-        "setup",
-        "setupReview",
-        "resume",
-        "verify",
-      ])
-        next.delete(key);
+    if (kind) next.set("resolve", kind);
     setParams(next);
   }
   const initialProjectId =
@@ -518,11 +515,15 @@ export function RepositoryEditor({
                             options={REQUIREMENT_LABELS}
                             onChange={(value) => expectation(key, value)}
                           />
-                          {key === "hooks" && initial ? (
-                            <HookExpectationAction
-                              repository={initial}
+                          {initial ? (
+                            <ExpectationAction
+                              kind={key}
+                              repository={{
+                                ...initial,
+                                expectations: draft.expectations,
+                              }}
                               snapshot={snapshot}
-                              onOpen={() => resolveHooks(true)}
+                              onOpen={() => resolveExpectation(key)}
                             />
                           ) : null}
                         </div>
@@ -545,6 +546,17 @@ export function RepositoryEditor({
                       onChange={(value) => expectation("visibility", value)}
                     />
                   </FormField>
+                  {initial ? (
+                    <ExpectationAction
+                      kind="visibility"
+                      repository={{
+                        ...initial,
+                        expectations: draft.expectations,
+                      }}
+                      snapshot={snapshot}
+                      onOpen={() => resolveExpectation("visibility")}
+                    />
+                  ) : null}
                   <Disclosure
                     title="About expectations"
                     icon={CircleHelp}
@@ -601,6 +613,14 @@ export function RepositoryEditor({
                         )}
                       />
                     </FormField>
+                    {initial ? (
+                      <ExpectationAction
+                        kind="review"
+                        repository={initial}
+                        snapshot={snapshot}
+                        onOpen={() => resolveExpectation("review")}
+                      />
+                    ) : null}
                     <FormField
                       id="repository-note"
                       label="Maintainer context"
@@ -691,10 +711,34 @@ export function RepositoryEditor({
         </DialogContent>
       </Dialog>
       {resolving && initial ? (
-        <HookResolution
+        <ExpectationResolution
+          kind={resolving}
           repository={initial}
+          expectations={draft.expectations}
           snapshot={snapshot}
-          onBack={() => resolveHooks(false)}
+          onBack={() => resolveExpectation(null)}
+          onCompleted={(receipt) => {
+            if (revision !== receipt.previousRevision) return;
+            setRevision(receipt.revision);
+            setBase((previous) => ({
+              ...previous,
+              expectations: {
+                ...previous.expectations,
+                reviewDate: receipt.nextReviewDate,
+              },
+            }));
+            setDraft((previous) => ({
+              ...previous,
+              expectations: {
+                ...previous.expectations,
+                reviewDate:
+                  previous.expectations.reviewDate ===
+                  base.expectations.reviewDate
+                    ? receipt.nextReviewDate
+                    : previous.expectations.reviewDate,
+              },
+            }));
+          }}
         />
       ) : null}
       <AlertDialog

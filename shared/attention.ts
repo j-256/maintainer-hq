@@ -166,11 +166,8 @@ export function workspaceAttention(
           action:
             key === "hooks"
               ? "Resolve hook coverage"
-              : "Inspect operational checks",
-          href:
-            key === "hooks"
-              ? expectationHref(workspaceId, repository.id, "hooks")
-              : href + "#repository-operational-title",
+              : "Resolve monitoring coverage",
+          href: expectationHref(workspaceId, repository.id, key),
         });
     }
     if (reviewIsDue(repository, now))
@@ -184,8 +181,8 @@ export function workspaceAttention(
           "Review date: " +
           repository.expectations.reviewDate +
           ". Confirm the requirements still fit this repository.",
-        action: "Review expectations",
-        href,
+        action: "Complete repository review",
+        href: expectationHref(workspaceId, repository.id, "review"),
       });
     const row = coverageByRepository.get(repository.id)!;
     const required =
@@ -273,8 +270,8 @@ export function workspaceAttention(
           title: "Required CI is not verified",
           reason:
             "Readable check endpoints do not establish a passing CI result. Inspect the default-branch checks and configured expectation.",
-          action: "Inspect CI evidence",
-          href,
+          action: "Resolve CI expectation",
+          href: expectationHref(workspaceId, repository.id, "ci"),
         });
       if (evidence.ci === "failing")
         items.push({
@@ -319,8 +316,8 @@ export function workspaceAttention(
           title: "Required security result is not verified",
           reason:
             "Readable endpoints without a finding count do not establish a security result. Inspect the collected evidence and configured expectation.",
-          action: "Inspect security evidence",
-          href,
+          action: "Resolve security expectation",
+          href: expectationHref(workspaceId, repository.id, "security"),
         });
       if (
         repository.expectations.visibility !== "any" &&
@@ -335,8 +332,8 @@ export function workspaceAttention(
           title: "Required visibility is not verified",
           reason:
             "The observation does not report repository visibility. Inspect its evidence before comparing it with the configured expectation.",
-          action: "Inspect repository evidence",
-          href,
+          action: "Review visibility expectation",
+          href: expectationHref(workspaceId, repository.id, "visibility"),
         });
       if (
         repository.expectations.visibility !== "any" &&
@@ -355,8 +352,8 @@ export function workspaceAttention(
             "; GitHub reported " +
             evidence.visibility +
             ".",
-          action: "Review repository",
-          href,
+          action: "Review visibility expectation",
+          href: expectationHref(workspaceId, repository.id, "visibility"),
         });
     }
   }

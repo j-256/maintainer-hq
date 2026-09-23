@@ -5,6 +5,7 @@ import { createApplication } from "../worker/app";
 import { CAPABILITY, type Principal } from "../shared/domain";
 import { ACTIVITY_LIMITS } from "../shared/activity";
 import type { Env } from "../worker/types";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -258,7 +259,7 @@ describe("Activity pagination", () => {
       kind: "event",
       event: { id: "arrived-later" },
     });
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
 
   it("paginates whole goal groups and lazy entries against the same snapshot", async () => {
     for (let index = 0; index < 4; index++) {
