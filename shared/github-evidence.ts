@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-const SCALAR_REQUESTS = 2;
-const PAGINATED_ENDPOINTS = 5;
+const SCALAR_REQUESTS = 3;
+const PAGINATED_ENDPOINTS = 3;
 const MAX_PAGES = 5;
 
 export const GITHUB_LIMITS = Object.freeze({
