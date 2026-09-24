@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { collectGitHub, githubNextPage } from "../worker/github-client";
+import {
+  CI_ROLLUP_QUERY,
+  collectGitHub,
+  githubNextPage,
+} from "../worker/github-client";
 import {
   GITHUB_LIMITS,
   githubEvidenceSchema,
@@ -20,27 +24,68 @@ const PREFIX = "/repos/" + REPOSITORY;
 const PATH = Object.freeze({
   repository: PREFIX,
   head: PREFIX + "/branches/main",
-  checks: PREFIX + "/commits/" + SHA + "/check-runs",
-  statuses: PREFIX + "/commits/" + SHA + "/status",
+  ci: "/graphql",
   dependabot: PREFIX + "/dependabot/alerts",
   codeScanning: PREFIX + "/code-scanning/alerts",
   secretScanning: PREFIX + "/secret-scanning/alerts",
 });
 const RAW_VALUE = "synthetic-sensitive-provider-field";
-const check = (id = 1, conclusion = "success") => ({
-  id,
-  head_sha: SHA,
-  status: "completed",
-  conclusion,
-});
-const status = (id = 1, state = "success", context = "legacy-ci") => ({
-  id,
-  state,
-  context,
-});
 const alert = (number = 1) => ({ number, state: "open", secret: RAW_VALUE });
 const json = (body: unknown, headers?: HeadersInit) =>
   Response.json(body, { headers });
+type StateCount = { state: string; count: number };
+type CiOptions = {
+  state?: string;
+  checks?: StateCount[];
+  statuses?: StateCount[];
+  total?: number;
+  checkTotal?: number;
+  statusTotal?: number;
+  rollup?: boolean;
+  repository?: string;
+  oid?: string;
+  errors?: unknown[];
+};
+const ci = ({
+  state = "SUCCESS",
+  checks = [{ state: "SUCCESS", count: 1 }],
+  statuses = [],
+  total,
+  checkTotal,
+  statusTotal,
+  rollup = true,
+  repository = REPOSITORY,
+  oid = SHA,
+  errors,
+}: CiOptions = {}) => {
+  const checkRunCount =
+    checkTotal ?? checks.reduce((sum, item) => sum + item.count, 0);
+  const statusContextCount =
+    statusTotal ?? statuses.reduce((sum, item) => sum + item.count, 0);
+  return json({
+    data: {
+      repository: {
+        nameWithOwner: repository,
+        object: {
+          oid,
+          statusCheckRollup: rollup
+            ? {
+                state,
+                contexts: {
+                  totalCount: total ?? checkRunCount + statusContextCount,
+                  checkRunCount,
+                  checkRunCountsByState: checks,
+                  statusContextCount,
+                  statusContextCountsByState: statuses,
+                },
+              }
+            : null,
+        },
+      },
+    },
+    ...(errors ? { errors } : {}),
+  });
+};
 type Override = (url: URL) => Response | Promise<Response>;
 
 function fixture(overrides: Partial<Record<keyof typeof PATH, Override>> = {}) {
@@ -54,9 +99,7 @@ function fixture(overrides: Partial<Record<keyof typeof PATH, Override>> = {}) {
       }),
     head: () =>
       json({ name: "main", commit: { sha: SHA, message: RAW_VALUE } }),
-    checks: () => json({ total_count: 1, check_runs: [check()] }),
-    statuses: () =>
-      json({ sha: SHA, state: "pending", total_count: 0, statuses: [] }),
+    ci: () => ci(),
     dependabot: () => json([]),
     codeScanning: () => json([]),
     secretScanning: () => json([]),
@@ -67,7 +110,6 @@ function fixture(overrides: Partial<Record<keyof typeof PATH, Override>> = {}) {
       const url = new URL(String(input));
       urls.push(url);
       expect(url.origin).toBe(GITHUB_LIMITS.API_ORIGIN);
-      expect(init?.method).toBe("GET");
       expect(init?.redirect).toBe("manual");
       const headers = new Headers(init?.headers);
       expect(headers.get("Authorization")).toBe("Bearer " + TOKEN);
@@ -78,6 +120,18 @@ function fixture(overrides: Partial<Record<keyof typeof PATH, Override>> = {}) {
         (candidate) => PATH[candidate] === url.pathname,
       );
       if (!key) throw new Error("Unexpected fixture path");
+      if (key === "ci") {
+        expect(init?.method).toBe("POST");
+        expect(headers.get("Content-Type")).toBe("application/json");
+        expect(JSON.parse(String(init?.body))).toEqual({
+          query: CI_ROLLUP_QUERY,
+          variables: {
+            owner: "example",
+            name: "fixture",
+            expression: SHA,
+          },
+        });
+      } else expect(init?.method).toBe("GET");
       return (overrides[key] ?? defaults[key])(url);
     },
   ) as unknown as typeof fetch;
@@ -99,8 +153,8 @@ describe("Read-only GitHub collection", () => {
   it("counts started requests and parsed list pages without polluting evidence equality", async () => {
     const result = await fixture().collect();
     expect(result.diagnostics).toMatchObject({
-      requests: 7,
-      pages: 5,
+      requests: 6,
+      pages: 3,
       elapsedMs: expect.any(Number),
     });
     expect(
@@ -187,7 +241,7 @@ describe("Read-only GitHub collection", () => {
       pages: GITHUB_LIMITS.MAX_PAGES,
       reason: "page_limit",
     });
-    expect(result.diagnostics.requests).toBe(6 + GITHUB_LIMITS.MAX_PAGES);
+    expect(result.diagnostics.requests).toBe(5 + GITHUB_LIMITS.MAX_PAGES);
   });
   it("preserves the global receiver required by native Workers fetch", async () => {
     const source = fixture();
@@ -202,7 +256,7 @@ describe("Read-only GitHub collection", () => {
     try {
       const result = await collectGitHub(REPOSITORY, TOKEN, { now: () => NOW });
       expect(result.status).toBe("succeeded");
-      expect(source.urls).toHaveLength(7);
+      expect(source.urls).toHaveLength(6);
     } finally {
       request.mockRestore();
     }
@@ -226,7 +280,27 @@ describe("Read-only GitHub collection", () => {
       true,
     );
     expect(result.details.github?.defaultBranch).toBe("main");
-    expect(source.urls).toHaveLength(7);
+    expect(result.details.github?.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "checks",
+          state: "observed",
+          count: 1,
+        }),
+        expect.objectContaining({
+          key: "statuses",
+          state: "observed",
+          count: 0,
+        }),
+      ]),
+    );
+    expect(
+      result.diagnostics.endpoints.find((item) => item.key === "checks"),
+    ).toMatchObject({ requests: 1, reason: "complete" });
+    expect(
+      result.diagnostics.endpoints.find((item) => item.key === "statuses"),
+    ).toMatchObject({ requests: 0, reason: "complete" });
+    expect(source.urls).toHaveLength(6);
     expect(
       source.urls
         .find((url) => url.pathname === PATH.codeScanning)
@@ -242,26 +316,25 @@ describe("Read-only GitHub collection", () => {
   });
 
   it("does not equate absent, skipped, or pending CI results with passing CI", async () => {
-    for (const runs of [
-      [],
-      [check(1, "skipped")],
-      [{ ...check(), status: "in_progress", conclusion: null }],
+    for (const response of [
+      () => ci({ rollup: false }),
+      () => ci({ checks: [{ state: "SKIPPED", count: 1 }] }),
+      () =>
+        ci({
+          state: "PENDING",
+          checks: [{ state: "IN_PROGRESS", count: 1 }],
+        }),
     ]) {
-      const result = await fixture({
-        checks: () => json({ total_count: runs.length, check_runs: runs }),
-      }).collect();
+      const result = await fixture({ ci: response }).collect();
       expect(result.status).toBe("succeeded");
       expect(result.details.ci).toBe("unknown");
       expect(result.health).toBe("unknown");
     }
     const result = await fixture({
-      checks: () => json({ total_count: 0, check_runs: [] }),
-      statuses: () =>
-        json({
-          sha: SHA,
-          state: "success",
-          total_count: 1,
-          statuses: [status()],
+      ci: () =>
+        ci({
+          checks: [],
+          statuses: [{ state: "SUCCESS", count: 1 }],
         }),
     }).collect();
     expect(result.details.ci).toBe("passing");
@@ -269,20 +342,45 @@ describe("Read-only GitHub collection", () => {
 
   it("keeps an aggregate pending status unverified even if the returned context passed", async () => {
     const result = await fixture({
-      statuses: () =>
-        json({
-          sha: SHA,
-          state: "pending",
-          total_count: 1,
-          statuses: [status()],
+      ci: () =>
+        ci({
+          state: "PENDING",
+          checks: [],
+          statuses: [{ state: "SUCCESS", count: 1 }],
         }),
     }).collect();
     expect(result.details.ci).toBe("unknown");
   });
 
+  it("maps GraphQL access, rate-limit, and provider errors without exposing provider text", async () => {
+    for (const [type, state, reason] of [
+      ["FORBIDDEN", "unavailable", "permission"],
+      ["RATE_LIMITED", "rate_limited", "rate_limit"],
+      ["INTERNAL", "error", "provider_error"],
+    ] as const) {
+      const result = await fixture({
+        ci: () => ci({ errors: [{ type, message: RAW_VALUE }] }),
+      }).collect();
+      for (const key of ["checks", "statuses"] as const) {
+        expect(
+          result.details.github?.checks.find((item) => item.key === key),
+        ).toMatchObject({ state });
+        expect(
+          result.diagnostics.endpoints.find((item) => item.key === key),
+        ).toMatchObject({ reason });
+      }
+      expect(JSON.stringify(result)).not.toContain(RAW_VALUE);
+      if (type === "RATE_LIMITED") expect(result.retryAt).not.toBeNull();
+    }
+  });
+
   it("surfaces known problems without converting missing security permissions to zero", async () => {
     const result = await fixture({
-      checks: () => json({ total_count: 1, check_runs: [check(1, "failure")] }),
+      ci: () =>
+        ci({
+          state: "FAILURE",
+          checks: [{ state: "FAILURE", count: 1 }],
+        }),
       dependabot: () => json([alert()]),
       secretScanning: () => new Response(RAW_VALUE, { status: 403 }),
     }).collect();
@@ -324,22 +422,9 @@ describe("Read-only GitHub collection", () => {
       expect(invalid.urls).toHaveLength(1);
     }
     for (const overrides of [
-      {
-        checks: () =>
-          json({
-            total_count: 1,
-            check_runs: [{ ...check(), head_sha: "b".repeat(40) }],
-          }),
-      },
-      {
-        statuses: () =>
-          json({
-            sha: "b".repeat(40),
-            state: "success",
-            total_count: 1,
-            statuses: [status()],
-          }),
-      },
+      { ci: () => ci({ repository: "other/project" }) },
+      { ci: () => ci({ oid: "b".repeat(40) }) },
+      { ci: () => ci({ state: "UNEXPECTED" }) },
       { dependabot: () => json({ message: RAW_VALUE }) },
       { secretScanning: () => json([{ ...alert(), state: "resolved" }]) },
     ]) {
@@ -372,7 +457,7 @@ describe("Read-only GitHub collection", () => {
     expect(pages[1].searchParams.get("after")).toBe("next-cursor");
   });
 
-  it("marks capped pages, duplicate results, and incorrect totals as incomplete", async () => {
+  it("marks capped pages and inconsistent rollup counts as incomplete", async () => {
     const pages = fixture({
       dependabot: (url) => {
         const page = Number(url.searchParams.get("after") ?? "1");
@@ -401,23 +486,23 @@ describe("Read-only GitHub collection", () => {
       pages.urls.filter((url) => url.pathname === PATH.dependabot),
     ).toHaveLength(GITHUB_LIMITS.MAX_PAGES);
     const duplicate = await fixture({
-      checks: () => json({ total_count: 2, check_runs: [check(), check()] }),
+      ci: () =>
+        ci({
+          checks: [
+            { state: "SUCCESS", count: 1 },
+            { state: "SUCCESS", count: 1 },
+          ],
+        }),
     }).collect();
     expect(duplicate.details.ci).toBe("unknown");
     const wrongTotal = await fixture({
-      checks: () => json({ total_count: 3, check_runs: [check()] }),
+      ci: () => ci({ checkTotal: 2 }),
     }).collect();
     expect(wrongTotal.details.ci).toBe("unknown");
-    const duplicateContext = await fixture({
-      statuses: () =>
-        json({
-          sha: SHA,
-          state: "success",
-          total_count: 2,
-          statuses: [status(1), status(2)],
-        }),
+    const wrongCombinedTotal = await fixture({
+      ci: () => ci({ total: 2 }),
     }).collect();
-    expect(duplicateContext.details.ci).toBe("unknown");
+    expect(wrongCombinedTotal.details.ci).toBe("unknown");
   });
 
   it("does not follow pagination across hosts, paths, filters, or secret visibility", async () => {

@@ -80,15 +80,48 @@ const refresh = (refreshId = "refresh") => ({
 });
 const read = (refreshId = "refresh") =>
   service.githubRefreshGet({ ...sourceInput, refreshId });
-type Intercept = (url: URL) => Promise<Response | void> | Response | void;
+function ciResponse(
+  init: RequestInit | undefined,
+  state: "SUCCESS" | "FAILURE" = "SUCCESS",
+) {
+  const request = JSON.parse(String(init?.body)) as {
+    variables: { owner: string; name: string; expression: string };
+  };
+  const variables = request.variables;
+  return Response.json({
+    data: {
+      repository: {
+        nameWithOwner: variables.owner + "/" + variables.name,
+        object: {
+          oid: variables.expression,
+          statusCheckRollup: {
+            state,
+            contexts: {
+              totalCount: 1,
+              checkRunCount: 1,
+              checkRunCountsByState: [{ state, count: 1 }],
+              statusContextCount: 0,
+              statusContextCountsByState: [],
+            },
+          },
+        },
+      },
+    },
+  });
+}
+type Intercept = (
+  url: URL,
+  init?: RequestInit,
+) => Promise<Response | void> | Response | void;
 function fixture(intercept?: Intercept) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     expect(url.origin).toBe("https://api.github.com");
-    expect(init?.method).toBe("GET");
+    expect(init?.method).toBe(url.pathname === "/graphql" ? "POST" : "GET");
     expect(init?.redirect).toBe("manual");
-    const override = await intercept?.(url);
+    const override = await intercept?.(url, init);
     if (override) return override;
+    if (url.pathname === "/graphql") return ciResponse(init);
     const fullName = url.pathname.split("/").slice(2, 4).join("/");
     if (url.pathname === "/repos/" + fullName)
       return Response.json({
@@ -99,20 +132,6 @@ function fixture(intercept?: Intercept) {
       });
     if (url.pathname.endsWith("/branches/main"))
       return Response.json({ name: "main", commit: { sha: SHA } });
-    if (url.pathname.endsWith("/check-runs"))
-      return Response.json({
-        total_count: 1,
-        check_runs: [
-          { id: 1, head_sha: SHA, status: "completed", conclusion: "success" },
-        ],
-      });
-    if (url.pathname.endsWith("/status"))
-      return Response.json({
-        sha: SHA,
-        state: "pending",
-        total_count: 0,
-        statuses: [],
-      });
     if (url.pathname.endsWith("/alerts")) return Response.json([]);
     throw new Error("Unrecognized fixture path");
   }) as unknown as typeof fetch;
@@ -492,7 +511,7 @@ describe("Durable GitHub refresh work", () => {
     );
     expect(result.processed).toBe(LIMITS.CRON_ITEMS);
     expect(sql.count()).toBeLessThan(1000);
-    expect(fetch).toHaveBeenCalledTimes(LIMITS.CRON_ITEMS * 7);
+    expect(fetch).toHaveBeenCalledTimes(LIMITS.CRON_ITEMS * 6);
     expect(
       await runtime.HQ_DB.prepare(
         "SELECT count(*) FROM github_refreshes",
@@ -540,7 +559,7 @@ describe("Durable GitHub refresh work", () => {
         { status: "queued", attempts: 0 },
       ]),
     );
-    expect(fetch).toHaveBeenCalledTimes(7);
+    expect(fetch).toHaveBeenCalledTimes(6);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
         event: "hq.github.batch.completed",
@@ -638,7 +657,7 @@ describe("Durable GitHub refresh work", () => {
     }
     const [job] = await service.githubRefreshes(sourceInput);
     expect(job).toMatchObject({ status: "succeeded", total: 50, finished: 50 });
-    expect(fetch).toHaveBeenCalledTimes(50 * 7);
+    expect(fetch).toHaveBeenCalledTimes(50 * 6);
     expect(
       (await service.githubRefreshGet({ ...sourceInput, refreshId: job.id }))
         .items,
@@ -653,7 +672,7 @@ describe("Durable GitHub refresh work", () => {
     now += 2 * LIMITS.MINUTE_MS;
     await runGitHubScheduled(measured, { now: () => now, fetch });
     expect(await service.githubRefreshes(sourceInput)).toHaveLength(2);
-    expect(fetch).toHaveBeenCalledTimes(20 * 7);
+    expect(fetch).toHaveBeenCalledTimes(20 * 6);
   }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("keeps workspace evidence bounded and reports storage capacity as a failed refresh", async () => {
     await bindings.HQ_DB.prepare(
@@ -743,7 +762,7 @@ describe("Durable GitHub refresh work", () => {
       finished: 2,
       actor: "Operator",
     });
-    expect(fetch).toHaveBeenCalledTimes(14);
+    expect(fetch).toHaveBeenCalledTimes(12);
     const observations = await service.observations({ workspaceId: WORKSPACE });
     expect(observations).toHaveLength(2);
     expect(observations[0]).toMatchObject({
@@ -1079,7 +1098,7 @@ describe("Durable GitHub refresh work", () => {
     expect(await run(fetch)).toEqual({ processed: 0 });
     release();
     await worker;
-    expect(fetch).toHaveBeenCalledTimes(7);
+    expect(fetch).toHaveBeenCalledTimes(6);
     expect(await read()).toMatchObject({ status: "succeeded" });
   });
 
@@ -1108,27 +1127,15 @@ describe("Durable GitHub refresh work", () => {
       source: { ...fields(), repositoryIds },
     });
     const fetch = fixture((url) => {
-      const checks = url.pathname.endsWith("/check-runs");
-      const statuses = url.pathname.endsWith("/status");
-      if (!checks && !statuses && !url.pathname.endsWith("/alerts")) return;
+      if (!url.pathname.endsWith("/alerts")) return;
       const page = Number(
         url.searchParams.get("after") ?? url.searchParams.get("page") ?? "1",
       );
       const offset = (page - 1) * GITHUB_LIMITS.PAGE_SIZE;
-      const items = Array.from({ length: GITHUB_LIMITS.PAGE_SIZE }, (_, i) => {
-        const id = offset + i + 1;
-        return checks
-          ? { id, head_sha: SHA, status: "completed", conclusion: "success" }
-          : statuses
-            ? { id, state: "success", context: "fixture-" + id }
-            : { number: id, state: "open" };
-      });
-      const total = GITHUB_LIMITS.PAGE_SIZE * GITHUB_LIMITS.MAX_PAGES;
-      const body = checks
-        ? { total_count: total, check_runs: items }
-        : statuses
-          ? { sha: SHA, state: "success", total_count: total, statuses: items }
-          : items;
+      const items = Array.from(
+        { length: GITHUB_LIMITS.PAGE_SIZE },
+        (_, index) => ({ number: offset + index + 1, state: "open" }),
+      );
       const headers: Record<string, string> = {};
       if (page < GITHUB_LIMITS.MAX_PAGES) {
         const next = new URL(url);
@@ -1137,7 +1144,7 @@ describe("Durable GitHub refresh work", () => {
         else next.searchParams.set("page", String(page + 1));
         headers.Link = "<" + next.href + '>; rel="next"';
       }
-      return Response.json(body, { headers });
+      return Response.json(items, { headers });
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(fetch);
     await production.scheduled({} as ScheduledController, runtime);
@@ -1166,7 +1173,7 @@ describe("Durable GitHub refresh work", () => {
         refreshId: receipt.id,
         diagnostics: expect.objectContaining({
           requests: GITHUB_LIMITS.MAX_REQUESTS,
-          pages: 5 * GITHUB_LIMITS.MAX_PAGES,
+          pages: 3 * GITHUB_LIMITS.MAX_PAGES,
         }),
       }),
     );
@@ -1364,21 +1371,10 @@ describe("Source-linked GitHub refresh Activity", () => {
     now += LIMITS.DEFAULT_INTERVAL_MINUTES * LIMITS.MINUTE_MS;
     await runGitHubScheduled(runtime, {
       now: () => now,
-      fetch: fixture((url) => {
+      fetch: fixture((url, init) => {
         if (url.pathname.endsWith("/secret-scanning/alerts"))
           return new Response("synthetic-private-denial", { status: 403 });
-        if (url.pathname.endsWith("/check-runs"))
-          return Response.json({
-            total_count: 1,
-            check_runs: [
-              {
-                id: 1,
-                head_sha: SHA,
-                status: "completed",
-                conclusion: "failure",
-              },
-            ],
-          });
+        if (url.pathname === "/graphql") return ciResponse(init, "FAILURE");
       }),
     });
     const changed = (await service.githubRefreshes(sourceInput))[0];
@@ -1887,7 +1883,7 @@ describe("Shared GitHub application contract", () => {
       actor: "Operator",
     });
     expect(await read()).toMatchObject({ status: "succeeded" });
-    expect(fetch).toHaveBeenCalledTimes(7);
+    expect(fetch).toHaveBeenCalledTimes(6);
     await bindings.HQ_DB.prepare(
       "UPDATE credentials SET revoked_at = ? WHERE id = 'http-operator'",
     )

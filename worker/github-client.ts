@@ -38,8 +38,6 @@ type CollectorOptions = {
 type Page<T> = {
   items: T[];
   total?: number;
-  failure?: boolean;
-  pending?: boolean;
 };
 type Collection<T> = Page<T> & { complete: boolean; problem?: ProviderFailure };
 
@@ -53,45 +51,69 @@ const headSchema = z.object({
   name: githubBranchSchema,
   commit: z.object({ sha: shaSchema }),
 });
-const runSchema = z.object({
-  id: z.number().int().positive(),
-  head_sha: shaSchema,
-  status: z.enum([
-    "queued",
-    "in_progress",
-    "completed",
-    "waiting",
-    "requested",
-    "pending",
-  ]),
-  conclusion: z
-    .enum([
-      "success",
-      "failure",
-      "neutral",
-      "cancelled",
-      "skipped",
-      "timed_out",
-      "action_required",
-      "stale",
-      "startup_failure",
-    ])
+const countSchema = z.number().int().nonnegative().max(100000);
+const checkRunStateSchema = z.enum([
+  "ACTION_REQUIRED",
+  "CANCELLED",
+  "COMPLETED",
+  "FAILURE",
+  "IN_PROGRESS",
+  "NEUTRAL",
+  "PENDING",
+  "QUEUED",
+  "SKIPPED",
+  "STALE",
+  "STARTUP_FAILURE",
+  "SUCCESS",
+  "TIMED_OUT",
+  "WAITING",
+]);
+const statusStateSchema = z.enum([
+  "ERROR",
+  "EXPECTED",
+  "FAILURE",
+  "PENDING",
+  "SUCCESS",
+]);
+const stateCount = <T extends z.ZodType>(state: T) =>
+  z.object({ state, count: countSchema });
+const rollupSchema = z.object({
+  state: statusStateSchema,
+  contexts: z.object({
+    totalCount: countSchema,
+    checkRunCount: countSchema,
+    checkRunCountsByState: z.array(stateCount(checkRunStateSchema)).max(20),
+    statusContextCount: countSchema,
+    statusContextCountsByState: z.array(stateCount(statusStateSchema)).max(10),
+  }),
+});
+const ciDataSchema = z.object({
+  repository: z
+    .object({
+      nameWithOwner: repositoryFields.shape.fullName,
+      object: z
+        .object({
+          oid: shaSchema,
+          statusCheckRollup: rollupSchema.nullable(),
+        })
+        .nullable(),
+    })
     .nullable(),
 });
-const runsSchema = z.object({
-  total_count: z.number().int().min(0),
-  check_runs: z.array(runSchema).max(GITHUB_LIMITS.PAGE_SIZE),
-});
-const statusSchema = z.object({
-  id: z.number().int().positive(),
-  state: z.enum(["error", "failure", "pending", "success"]),
-  context: z.string().min(1).max(255),
-});
-const statusesSchema = z.object({
-  sha: shaSchema,
-  state: z.enum(["failure", "pending", "success"]),
-  total_count: z.number().int().min(0),
-  statuses: z.array(statusSchema).max(GITHUB_LIMITS.PAGE_SIZE),
+const graphQLEnvelopeSchema = z.object({
+  data: z.unknown().optional(),
+  errors: z
+    .array(
+      z.object({
+        type: z.string().max(100).optional(),
+        path: z
+          .array(z.union([z.string().max(255), z.number().int().nonnegative()]))
+          .max(12)
+          .optional(),
+      }),
+    )
+    .max(60)
+    .optional(),
 });
 const alertsSchema = z
   .array(
@@ -101,16 +123,38 @@ const alertsSchema = z
     }),
   )
   .max(GITHUB_LIMITS.PAGE_SIZE);
-const FAILING_CONCLUSIONS = new Set([
-  "failure",
-  "cancelled",
-  "timed_out",
-  "action_required",
-  "stale",
-  "startup_failure",
+const FAILING_CHECK_STATES = new Set([
+  "ACTION_REQUIRED",
+  "CANCELLED",
+  "FAILURE",
+  "STALE",
+  "STARTUP_FAILURE",
+  "TIMED_OUT",
 ]);
-const SAFE_CONCLUSIONS = new Set(["success", "neutral", "skipped"]);
+const SAFE_CHECK_STATES = new Set(["NEUTRAL", "SKIPPED", "SUCCESS"]);
+const FAILING_STATUS_STATES = new Set(["ERROR", "FAILURE"]);
 const PAGINATION_KEYS = new Set(["page", "after", "before"]);
+
+export const CI_ROLLUP_QUERY = `query RepositoryCiRollup($owner: String!, $name: String!, $expression: String!) {
+  repository(owner: $owner, name: $name) {
+    nameWithOwner
+    object(expression: $expression) {
+      ... on Commit {
+        oid
+        statusCheckRollup {
+          state
+          contexts(first: 1) {
+            totalCount
+            checkRunCount
+            checkRunCountsByState { state count }
+            statusContextCount
+            statusContextCountsByState { state count }
+          }
+        }
+      }
+    }
+  }
+}`;
 
 export class ProviderFailure extends Error {
   constructor(
@@ -139,6 +183,103 @@ function providerFailure(error: unknown) {
         null,
         "unexpected",
       );
+}
+
+function graphQLProblem(
+  errors: z.infer<typeof graphQLEnvelopeSchema>["errors"],
+  resetAt: number,
+) {
+  if (errors?.some((error) => error.type === "RATE_LIMITED"))
+    return new ProviderFailure(
+      "rate_limited",
+      "GitHub asked HQ to wait before collecting more evidence.",
+      resetAt,
+      "rate_limit",
+    );
+  if (
+    errors?.length &&
+    errors.every(
+      (error) => error.type === "FORBIDDEN" || error.type === "NOT_FOUND",
+    )
+  )
+    return new ProviderFailure(
+      "unavailable",
+      "GitHub did not grant access to this evidence. Check permissions, repository access, and feature availability.",
+      null,
+      "permission",
+    );
+  return new ProviderFailure(
+    "error",
+    "GitHub could not provide this evidence. Retry after the provider recovers.",
+    null,
+    "provider_error",
+  );
+}
+
+function validatedCounts<T extends string>(
+  entries: { state: T; count: number }[],
+  expected: number,
+) {
+  const counts = new Map<T, number>();
+  let total = 0;
+  for (const entry of entries) {
+    if (counts.has(entry.state)) throw malformed();
+    counts.set(entry.state, entry.count);
+    total += entry.count;
+  }
+  if (total !== expected) throw malformed();
+  return counts;
+}
+
+function summarizeRollup(rollup: z.infer<typeof rollupSchema> | null) {
+  if (!rollup)
+    return {
+      checks: 0,
+      statuses: 0,
+      failed: false,
+      passed: false,
+      pending: false,
+    };
+  const contexts = rollup.contexts;
+  if (
+    contexts.totalCount !==
+    contexts.checkRunCount + contexts.statusContextCount
+  )
+    throw malformed();
+  const checks = validatedCounts(
+    contexts.checkRunCountsByState,
+    contexts.checkRunCount,
+  );
+  const statuses = validatedCounts(
+    contexts.statusContextCountsByState,
+    contexts.statusContextCount,
+  );
+  const failed =
+    FAILING_STATUS_STATES.has(rollup.state) ||
+    [...checks].some(
+      ([state, count]) => count > 0 && FAILING_CHECK_STATES.has(state),
+    ) ||
+    [...statuses].some(
+      ([state, count]) => count > 0 && FAILING_STATUS_STATES.has(state),
+    );
+  const passed =
+    (checks.get("SUCCESS") ?? 0) > 0 ||
+    (statuses.get("SUCCESS") ?? 0) > 0;
+  const pending =
+    rollup.state !== "SUCCESS" ||
+    [...checks].some(
+      ([state, count]) => count > 0 && !SAFE_CHECK_STATES.has(state),
+    ) ||
+    [...statuses].some(
+      ([state, count]) => count > 0 && state !== "SUCCESS",
+    );
+  return {
+    checks: contexts.checkRunCount,
+    statuses: contexts.statusContextCount,
+    failed,
+    passed,
+    pending,
+  };
 }
 function abortable<T>(
   promise: Promise<T>,
@@ -554,8 +695,6 @@ export class GitHubReader {
             "GitHub results changed during pagination. Refresh to collect a consistent view.",
           );
         result.total = parsed.total;
-        result.failure ||= parsed.failure;
-        result.pending ||= parsed.pending;
         for (const item of parsed.items) {
           const id = identity(item);
           if (ids.has(id))
@@ -654,8 +793,9 @@ export async function collectGitHub(
       diagnostics: reader.diagnostics(),
     };
   }
+  const [owner, name] = fullName.split("/");
   const path =
-    "/repos/" + fullName.split("/").map(encodeURIComponent).join("/");
+    "/repos/" + [owner, name].map(encodeURIComponent).join("/");
   let branch: string;
   try {
     const response = await reader.request(
@@ -717,80 +857,64 @@ export async function collectGitHub(
     put({ key: "head", state: problem.state, summary: problem.message });
   }
   if (headSha) {
-    const [runs, statuses] = await Promise.all([
-      reader.list(
+    try {
+      const response = await reader.request(
         "checks",
-        path + "/commits/" + headSha + "/check-runs",
-        { filter: "latest" },
-        (data) => {
-          const parsed = runsSchema.parse(data);
-          if (parsed.check_runs.some((run) => run.head_sha !== headSha))
-            throw malformed();
-          return { items: parsed.check_runs, total: parsed.total_count };
+        new URL("/graphql", GITHUB_LIMITS.API_ORIGIN),
+        {
+          query: CI_ROLLUP_QUERY,
+          variables: { owner, name, expression: headSha },
         },
-      ),
-      reader.list(
-        "statuses",
-        path + "/commits/" + headSha + "/status",
-        {},
-        (data) => {
-          const parsed = statusesSchema.parse(data);
-          if (parsed.sha !== headSha) throw malformed();
-          return {
-            items: parsed.statuses,
-            total: parsed.total_count,
-            failure: parsed.state === "failure",
-            pending: parsed.total_count > 0 && parsed.state === "pending",
-          };
-        },
-        false,
-        (item) => item.context,
-      ),
-    ]);
-    put(
-      checkFor(
-        "checks",
-        runs,
-        runs.items.length
-          ? "Check runs were read for the observed commit."
-          : "No check runs exist for the observed commit.",
-      ),
-    );
-    put(
-      checkFor(
-        "statuses",
-        statuses,
-        statuses.items.length
-          ? "Commit statuses were read for the observed commit."
-          : "No commit statuses exist for the observed commit.",
-      ),
-    );
-    const failed =
-      runs.items.some(
-        (run) =>
-          run.conclusion !== null && FAILING_CONCLUSIONS.has(run.conclusion),
-      ) ||
-      statuses.failure ||
-      statuses.items.some(
-        (status) => status.state === "failure" || status.state === "error",
       );
-    const passed =
-      runs.items.some(
-        (run) => run.status === "completed" && run.conclusion === "success",
-      ) || statuses.items.some((status) => status.state === "success");
-    const pending =
-      runs.items.some(
-        (run) =>
-          run.status !== "completed" ||
-          !SAFE_CONCLUSIONS.has(run.conclusion ?? ""),
-      ) ||
-      statuses.pending ||
-      statuses.items.some((status) => status.state !== "success");
-    details.ci = failed
-      ? "failing"
-      : passed && !pending && runs.complete && statuses.complete
-        ? "passing"
-        : "unknown";
+      const envelope = graphQLEnvelopeSchema.safeParse(response.data);
+      if (!envelope.success) throw malformed();
+      if (envelope.data.errors?.length)
+        throw graphQLProblem(envelope.data.errors, response.resetAt);
+      const parsed = ciDataSchema.safeParse(envelope.data.data);
+      if (
+        !parsed.success ||
+        !parsed.data.repository ||
+        parsed.data.repository.nameWithOwner.toLowerCase() !==
+          fullName.toLowerCase() ||
+        !parsed.data.repository.object ||
+        parsed.data.repository.object.oid !== headSha
+      )
+        throw malformed();
+      const summary = summarizeRollup(
+        parsed.data.repository.object.statusCheckRollup,
+      );
+      reader.completed("checks");
+      reader.completed("statuses");
+      put({
+        key: "checks",
+        state: "observed",
+        summary: summary.checks
+          ? "Check Run state counts were read for the observed commit."
+          : "No Check Runs exist for the observed commit.",
+        count: summary.checks,
+      });
+      put({
+        key: "statuses",
+        state: "observed",
+        summary: summary.statuses
+          ? "Commit-status state counts were read for the observed commit."
+          : "No commit statuses exist for the observed commit.",
+        count: summary.statuses,
+      });
+      details.ci = summary.failed
+        ? "failing"
+        : summary.passed && !summary.pending
+          ? "passing"
+          : "unknown";
+    } catch (error) {
+      const problem = providerFailure(error);
+      if (problem.retryAt !== null)
+        reader.retryAt = Math.max(reader.retryAt ?? 0, problem.retryAt);
+      reader.completed("checks", problem);
+      reader.completed("statuses", problem);
+      put({ key: "checks", state: problem.state, summary: problem.message });
+      put({ key: "statuses", state: problem.state, summary: problem.message });
+    }
   }
   const security = await Promise.all([
     reader.list(
