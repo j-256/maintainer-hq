@@ -21,7 +21,7 @@ async function fixture(t, html, status = 200) {
       return response.end("private-response-canary");
     }
     response.writeHead(status, { "Content-Type": "text/html" });
-    response.end(typeof html === "function" ? html(origin) : html);
+    response.end(html);
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -44,7 +44,9 @@ async function failure(page, options) {
 }
 
 test("captures only after delayed project content is visible and removes diagnostic listeners", { timeout: TEST_TIMEOUT_MS }, async t => {
-  const { page, origin } = await fixture(t, `<script>setTimeout(() => { document.body.innerHTML = ${JSON.stringify(content)}; }, 50);</script>`);
+  const { page, origin } = await fixture(t, `<main hidden>${content}</main><script>
+    setTimeout(() => { document.querySelector("main").hidden = false; }, 50);
+  </script>`);
   const png = await captureCoverPage(page, { origin, projects });
   assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
   assert.equal(await page.getByRole("link", { name: "Workshop Planner", exact: true }).isVisible(), true);
@@ -70,9 +72,9 @@ test("reports an unsuccessful document response at navigation", { timeout: TEST_
 });
 
 test("keeps API and console evidence on a readiness timeout without URL credentials or response bodies", { timeout: TEST_TIMEOUT_MS }, async t => {
-  const { page, origin } = await fixture(t, origin => `<script>
+  const { page, origin } = await fixture(t, `<script>
     fetch("/api/commands/projects_list?token=query-canary");
-    console.error(${JSON.stringify(origin.replace("http://", "http://username-canary:password-canary@") + "/api/commands/projects_list?token=query-canary#fragment-canary")});
+    console.error("http://username-canary:password-canary@" + location.host + "/api/commands/projects_list?token=query-canary#fragment-canary");
   </script>`);
   const diagnostic = await failure(page, { origin, timeoutMs: MISSING_CONTENT_TIMEOUT_MS });
   assert.equal(diagnostic.stage, "project link: Workshop Planner");
