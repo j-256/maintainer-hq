@@ -35,6 +35,8 @@ jobs:
         run: npm run check
       - name: Install the cover browser
         run: npx playwright install --with-deps chromium
+      - name: Verify cover capture diagnostics
+        run: npm run test:cover
       - name: Build and capture the project cover
         run: npm run capture:cover
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
