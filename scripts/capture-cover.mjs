@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { captureCoverPage } from "./capture-cover-page.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = join(root, "docs/screenshots/cover.png");
@@ -48,21 +49,13 @@ try {
       headers: { "X-HQ-Client": "cli" },
       data: { workspaceId: "development", name, description },
     });
-    assert.ok(response.ok(), `Cannot seed ${name}: ${await response.text()}`);
+    assert.ok(response.ok(), `Cannot seed ${name}: HTTP ${response.status()}`);
   }
   const page = await context.newPage();
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.route(/^https?:/, (route) => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
-  await page.goto(`${origin}/projects?workspace=development`);
-  for (const [name] of projects) await page.getByRole("link", { name, exact: true }).waitFor();
-  await page.getByText("Live updates", { exact: true }).waitFor();
-  await page.evaluate(() => document.fonts.ready);
-  assert.deepEqual(errors, []);
-  await page.mouse.move(1439, 999);
+  const screenshot = await captureCoverPage(page, { origin, projects });
   await mkdir(join(root, "docs/screenshots"), { recursive: true });
   const staged = join(root, "docs/screenshots/cover.tmp.png");
-  await writeFile(staged, await page.screenshot({ animations: "disabled" }));
+  await writeFile(staged, screenshot);
   await rename(staged, output);
   console.log(`Captured synthetic Projects workspace: ${output}`);
 } catch (error) {

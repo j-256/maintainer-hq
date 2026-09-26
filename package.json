@@ -20,6 +20,7 @@
     "release": "tsx cli/release.ts",
     "test:release": "tsx --test test/release/*.node.ts",
     "test:e2e": "npm run db:e2e:prepare && playwright test",
+    "test:cover": "node --test scripts/capture-cover-page.test.mjs",
     "db:e2e:prepare": "wrangler d1 migrations apply HQ_DB --local --config wrangler.e2e.jsonc --persist-to \"${HQ_E2E_STATE:-.wrangler/state}\" && wrangler d1 execute HQ_DB --local --config wrangler.e2e.jsonc --persist-to \"${HQ_E2E_STATE:-.wrangler/state}\" --file fixtures/e2e-reset.sql && wrangler d1 execute HQ_DB --local --config wrangler.e2e.jsonc --persist-to \"${HQ_E2E_STATE:-.wrangler/state}\" --file fixtures/development.sql && wrangler d1 execute HQ_DB --local --config wrangler.e2e.jsonc --persist-to \"${HQ_E2E_STATE:-.wrangler/state}\" --file fixtures/e2e-members.sql",
     "typecheck": "tsc --noEmit",
     "db:migrate": "wrangler d1 migrations apply HQ_DB --local --config wrangler.dev.jsonc",

@@ -10,6 +10,10 @@ npm run capture:cover
 
 The command owns a temporary database and local server, which it removes when finished. It replaces `HQ_E2E_STATE` internally so it cannot reset an existing development or test workspace.
 
+Capture failures report the stage, elapsed time, browser exceptions, console errors, failed HTTP responses, and network failures. Browser exceptions and page crashes stop readiness checks immediately. Diagnostics are bounded and exclude response bodies. Request URLs omit credentials, query strings, and fragments. A missing project link identifies the readiness check that failed; inspect the accompanying diagnostics for the cause before changing its timeout.
+
+Run `npm run test:cover` after installing Chromium to verify successful capture and failure reporting against synthetic browser fixtures. CI runs these checks before generating the cover.
+
 CI regenerates this image from source during verification and uploads it for review. On `main`, a changed cover opens a pull request with automatic merging after the repository's required checks pass. The publisher validates the bot author, source revision, branch, and image-only diff before authorizing the normal pull request workflows to run. These checks satisfy branch protection; manually dispatched workflows do not. Pull request builds never publish another cover update, and superseded builds leave publication to the newer source commit.
 
 In repository settings, enable **Allow auto-merge** and **Allow GitHub Actions to create and approve pull requests**. The workflow only creates pull requests; it does not approve reviews or bypass branch protection. Its write permissions are confined to the publication job. Scheduled and manual workflow runs can refresh the image without an application change.
