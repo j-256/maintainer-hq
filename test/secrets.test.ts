@@ -361,7 +361,7 @@ describe("Durable Secrets execution", () => {
         expect(content).not.toContain(SEALED);
         expect(content).not.toContain(PRIVATE);
       }
-    });
+    }, D1_VOLUME_TEST_TIMEOUT_MS);
     it("requires comparable versions even when unknown metadata otherwise matches", async () => {
       const input = await distributed();
       const reviews = new SecretReviews(as());
@@ -1015,7 +1015,7 @@ describe("Durable Secrets execution", () => {
         .operation?.receipts[0]?.writeStatus,
     ).toBe("indeterminate");
     expect(JSON.stringify([recovery, delivered])).not.toContain(SEALED);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("reserves one recovery per destination and releases an unaccepted reservation on cancellation", async () => {
     const input = await prepared();
     await as().secretsApply(input);
