@@ -62,9 +62,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@cloudflare/vite-plugin": "1.54.9",
+    "@cloudflare/vite-plugin": "1.58.0",
     "@cloudflare/vitest-pool-workers": "0.22.0",
-    "@cloudflare/workers-types": "5.20260914.1",
+    "@cloudflare/workers-types": "5.20260923.1",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.5.1",
@@ -78,7 +78,7 @@
     "typescript": "7.0.2",
     "vite": "8.3.0",
     "vitest": "4.1.11",
-    "wrangler": "4.131.2"
+    "wrangler": "4.137.0"
   },
   "overrides": {
     "miniflare": {
