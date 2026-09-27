@@ -108,3 +108,9 @@ The Cloudflare asset router applies `_headers` to static responses, not response
 ## Approval boundary
 
 The portable config deliberately has no routes, `workers_dev: false`, and `preview_urls: false`. Direct deployment, D1 creation or remote migrations, credential grants, Access policy changes, and hostname handoff still require explicit approval under the [hosting gates](hosting.md). Use the artifact's config from its own directory if deployment is approved; never assume a Wrangler flag changes an already-built Vite target. Reverify the separately recorded digest immediately before an approved deployment and inspect the target account, Worker, D1, Access coverage, and retained rollback target again.
+
+## Permanent Reader recovery
+
+Apply `0039_permanent_readers.sql` before issuing automation Readers without expiry. It rebuilds the credential table while preserving identities, hashes, revocation state, indexes, and credential/member notification triggers. The null-expiry constraint admits only the Reader profile with exactly the read scope and no publisher or reporter identity. Export production data and rehearse the populated migration before deployment. Existing finite credentials retain their deadlines.
+
+Keep compatible authentication and read guards after permanent Readers are issued. Older code rejects their null expiry; use a forward recovery or deliberately revoke them and issue finite replacements before an older code rollback. Restore the independent Access ingress credential through its existing protected recovery workflow; a permanent HQ Reader does not extend that credential. Do not restore an older database to undo this feature or recover a one-time token value.

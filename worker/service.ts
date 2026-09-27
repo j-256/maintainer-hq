@@ -1,3 +1,4 @@
+import { credentialIsCurrentSql } from "./credential-expiry";
 import { HookSetup } from "./hook-setup";
 import { ExpectationReviews } from "./expectation-review";
 import {
@@ -537,7 +538,7 @@ export class WorkspaceService {
       .prepare(
         `SELECT 1 FROM credentials c JOIN members m ON m.workspace_id=c.workspace_id AND m.subject=c.owner_subject
         WHERE c.id=? AND c.workspace_id=? AND c.owner_subject=? AND c.revoked_at IS NULL
-          AND julianday(c.expires_at)>julianday(?) AND julianday(c.expires_at)>julianday('now')
+          AND ${credentialIsCurrentSql("?", true)}
           AND c.source_id IS ? AND c.reporter_id IS ?
           AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) WHERE value=?)`,
       )

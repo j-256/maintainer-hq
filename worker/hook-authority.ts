@@ -1,3 +1,4 @@
+import { credentialIsCurrentSql } from "./credential-expiry";
 import { CAPABILITY, type Capability } from "../shared/domain";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
@@ -22,7 +23,7 @@ export function hookActorGuard(
       AND ? = 0 AND (? IS NULL OR EXISTS (
         SELECT 1 FROM credentials c WHERE c.id = ? AND c.workspace_id = m.workspace_id
           AND c.owner_subject = m.subject AND c.revoked_at IS NULL
-          AND c.expires_at > ? AND julianday(c.expires_at) > julianday('now')
+          AND ${credentialIsCurrentSql("?", true)}
           AND c.source_id IS NULL AND c.reporter_id IS NULL
           AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) WHERE value = ?)
           AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) WHERE value = ?))))`,

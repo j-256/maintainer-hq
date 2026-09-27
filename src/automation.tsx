@@ -4,6 +4,7 @@ import { Check, Copy, KeyRound, RefreshCw } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
   AUTOMATION_DURATIONS,
+  AUTOMATION_DEFAULT_DURATION,
   AUTOMATION_LIMITS,
   AUTOMATION_PROFILE,
   automationPlanInput,
@@ -36,6 +37,7 @@ import "./membership.css";
 import "./automation.css";
 
 const PROFILE_LABEL = { reporter: "Reporter", reader: "Reader" } as const;
+const NO_EXPIRY_VALUE = "none";
 const PROFILE_DESCRIPTION = {
   reporter:
     "Publish progress and verbatim goals for one reporter. No workspace reads, expectation edits, provider operations, or access management.",
@@ -146,7 +148,9 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
             </div>
           ) : null}
           {query.data?.map((credential) => {
-            const expired = Date.parse(credential.expiresAt) <= Date.now();
+            const expired =
+              credential.expiresAt !== null &&
+              Date.parse(credential.expiresAt) <= Date.now();
             const disabled = Boolean(credential.revokedAt) || expired;
             return (
               <div className="access-row" key={credential.id}>
@@ -159,8 +163,10 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
                   <p>
                     {credential.revokedAt
                       ? "Revoked " + time(credential.revokedAt)
-                      : (expired ? "Expired " : "Expires ") +
-                        time(credential.expiresAt)}
+                      : credential.expiresAt === null
+                        ? "No expiry"
+                        : (expired ? "Expired " : "Expires ") +
+                          time(credential.expiresAt)}
                   </p>
                   <details>
                     <summary>Credential details</summary>
@@ -278,7 +284,9 @@ function CreateAutomation({
     AUTOMATION_PROFILE.REPORTER,
   );
   const [reporterId, setReporterId] = useState("");
-  const [days, setDays] = useState<7 | 30 | 90>(30);
+  const [days, setDays] = useState<7 | 30 | 90 | null>(
+    AUTOMATION_DEFAULT_DURATION,
+  );
   const [plan, setPlan] = useState<AutomationPlan | null>(null);
   const [issued, setIssued] = useState<IssuedAutomationCredential | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -478,7 +486,11 @@ function CreateAutomation({
                   </>
                 ) : null}
                 <dt>Credential lifetime</dt>
-                <dd>{plan.expiresInDays} days from creation</dd>
+                <dd>
+                  {plan.expiresInDays === null
+                    ? "No expiry"
+                    : plan.expiresInDays + " days from creation"}
+                </dd>
                 <dt>Review valid until</dt>
                 <dd>{time(plan.expiresAt)}</dd>
               </dl>
@@ -532,9 +544,11 @@ function CreateAutomation({
                 <label htmlFor="automation-profile">Permission profile</label>
                 <Select
                   value={profile}
-                  onValueChange={(value) =>
-                    setProfile(value as AutomationProfile)
-                  }
+                  onValueChange={(value) => {
+                    setProfile(value as AutomationProfile);
+                    if (value === AUTOMATION_PROFILE.REPORTER && days === null)
+                      setDays(AUTOMATION_DEFAULT_DURATION);
+                  }}
                   disabled={busy}
                 >
                   <SelectTrigger
@@ -579,9 +593,13 @@ function CreateAutomation({
               <div className="form-field">
                 <label htmlFor="automation-duration">Expires after</label>
                 <Select
-                  value={String(days)}
+                  value={days === null ? NO_EXPIRY_VALUE : String(days)}
                   onValueChange={(value) =>
-                    setDays(Number(value) as 7 | 30 | 90)
+                    setDays(
+                      value === NO_EXPIRY_VALUE
+                        ? null
+                        : Number(value) as 7 | 30 | 90,
+                    )
                   }
                   disabled={busy}
                 >
@@ -594,8 +612,18 @@ function CreateAutomation({
                         {duration} days
                       </SelectItem>
                     ))}
+                    {profile === AUTOMATION_PROFILE.READER ? (
+                      <SelectItem value={NO_EXPIRY_VALUE}>No expiry</SelectItem>
+                    ) : null}
                   </SelectContent>
                 </Select>
+                {days === null ? (
+                  <p className="field-help">
+                    Read-only access lasts until revoked or the owning member
+                    is removed. The separate Access sign-in credential can
+                    still expire.
+                  </p>
+                ) : null}
               </div>
               <div className="access-actions">
                 <Button

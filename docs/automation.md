@@ -5,7 +5,7 @@ description: Connect a scoped agent or script without granting owner authority.
 
 # Automation access
 
-Settings > Automation access creates owner-managed credentials for agents and scripts. A credential belongs to one workspace and its issuing member. It expires, can be revoked immediately, and never exceeds the issuing member's live role. Removing that member revokes their credentials; rejoining does not reactivate them. Credential values use the `hqa_` [machine credential prefix](access.md#machine-credential-prefixes), are shown once, and are stored only as digests.
+Settings > Automation access creates owner-managed credentials for agents and scripts. A credential belongs to one workspace and its issuing member, can be revoked immediately, and never exceeds the issuing member's live role. Readers can use a finite lifetime or **No expiry**. Reporters must expire. Removing the issuing member revokes their credentials; rejoining does not reactivate them. Credential values use the `hqa_` [machine credential prefix](access.md#machine-credential-prefixes), are shown once, and are stored only as digests.
 
 | Profile | Permissions | Excluded |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Source-scoped local publisher credentials are separate and grant only observatio
 
 ## Review, create, and recover
 
-Choose a recognizable name, profile, and lifetime in the creation form. A Reporter also needs a stable reporter ID. Review the exact workspace, owner, permissions, reporter identity, and lifetime. The server stores a short-lived plan bound to the initiating actor, actor credential, live membership revision, and exact inputs. A changed member revision or expired review requires a fresh review. Concurrent application cannot issue the same credential twice.
+Choose a recognizable name, profile, and lifetime in the creation form. A Reporter also needs a stable reporter ID. Review the exact workspace, owner, permissions, reporter identity, and lifetime. **No expiry** is available only for a Reader with the exact `read` scope and no publisher or reporter identity; changing the draft to Reporter restores a finite lifetime. A permanent Reader still counts toward the active credential limit. The server stores a short-lived plan bound to the initiating actor, actor credential, live membership revision, and exact inputs. A changed member revision or expired review requires a fresh review even when the credential itself will have no expiry. Concurrent application cannot issue the same credential twice.
 
 The creation response is the only opportunity to save the value. It is masked by default, with explicit Reveal and Copy controls and a close warning. The application keeps the value only in the open component, not the query cache, browser storage, ordinary journal, or credential list. Save it in protected client configuration as `HQ_TOKEN`. Never paste it into Activity, chat, command arguments, URLs, screenshots, or tracked files. Avoid screen recording during issuance. Copying deliberately places the value on the system clipboard; manage clipboard history as sensitive storage.
 
@@ -38,7 +38,9 @@ Do not combine these machine credentials with `HQ_ACCESS_TOKEN`, which represent
 
 ## CLI and MCP parity
 
-The shared operations are `automation_credentials_list`, `automation_credential_plan`, `automation_credential_issue`, and `automation_credential_revoke`. Use `npm run cli -- schema <command>` for exact bounded inputs. Preparing a plan takes workspace ID, caller-chosen credential ID, name, profile, reporter ID or null, and expiry duration. Applying takes the returned plan ID and fingerprint in the same workspace and authenticated session. Revocation takes the exact workspace and credential ID.
+The shared operations are `automation_credentials_list`, `automation_credential_plan`, `automation_credential_issue`, and `automation_credential_revoke`. Use `npm run cli -- schema <command>` for exact bounded inputs. Preparing a plan takes workspace ID, caller-chosen credential ID, name, profile, reporter ID or null, and expiry duration. Set `expiresInDays` to `null` for a Reader with no expiry; its issued and listed metadata reports `expiresAt: null`. This does not remove the review's expiry or extend the independent Access service credential. Applying takes the returned plan ID and fingerprint in the same workspace and authenticated session. Revocation takes the exact workspace and credential ID.
+
+Deploy `0039_permanent_readers.sql` before issuing permanent Readers. The forward migration preserves credential identities, digests, revocation state, indexes, and notification triggers while allowing null expiry only for the exact Reader profile. Export and restore-test populated data before deployment. Older application versions reject null-expiry credentials, so retain compatible readers during a rollback or revoke affected Readers and issue finite replacements. Do not restore an older database to undo this feature.
 
 Issuance returns a privileged one-time value on CLI stdout or in the MCP tool result. Use an owner session only in a trusted client that protects those outputs. Prefer the browser flow for human issuance. A Reporter or Reader cannot list credentials, prepare grants, issue credentials, or manage members. All surfaces call the same application service.
 

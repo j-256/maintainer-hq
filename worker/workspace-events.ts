@@ -1,3 +1,4 @@
+import { credentialIsCurrentSql } from "./credential-expiry";
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import { CAPABILITY, idSchema } from "../shared/domain";
@@ -55,7 +56,7 @@ async function allowed(db: D1Database, identities: SocketIdentity[]) {
     WHERE m.role IN ('owner','operator','viewer') AND m.revision=json_extract(i.value,'$.memberRevision')
       AND (json_extract(i.value,'$.tokenId') IS NULL OR EXISTS
         (SELECT 1 FROM credentials c WHERE c.id=json_extract(i.value,'$.tokenId') AND c.workspace_id=m.workspace_id AND c.owner_subject=m.subject
-          AND c.revoked_at IS NULL AND c.expires_at>? AND c.source_id IS NULL AND c.reporter_id IS NULL
+          AND c.revoked_at IS NULL AND ${credentialIsCurrentSql("?")} AND c.source_id IS NULL AND c.reporter_id IS NULL
           AND EXISTS (SELECT 1 FROM json_each(c.scopes_json) WHERE value=?)))`,
     )
     .bind(JSON.stringify(identities), now, CAPABILITY.READ)
