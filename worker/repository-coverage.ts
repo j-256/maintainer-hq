@@ -19,7 +19,11 @@ import {
   monitorExecutionState,
 } from "../shared/monitoring-freshness";
 import { RESOURCE_LINK_LIMITS } from "../shared/resource-links";
-import type { HookSubscription } from "../shared/hooks";
+import {
+  readHookInventory,
+  hookCoverageResource,
+  type HookInventory,
+} from "./hook-coverage";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import { DomainError } from "./errors";
 import { HooksService } from "./hooks";
@@ -192,14 +196,7 @@ export class RepositoryCoverageService {
     };
     const selected = links.slice(0, COVERAGE_LIMITS.RESOURCES);
     const results = new Map<Link, CoverageResource>();
-    const subscriptions = new Map<
-      string,
-      Promise<{
-        items: HookSubscription[];
-        complete: boolean;
-        observedAt: string;
-      }>
-    >();
+    const subscriptions = new Map<string, Promise<HookInventory>>();
     const monitors = new Map<
       string,
       ReturnType<MonitoringService["snapshot"]>
@@ -218,28 +215,16 @@ export class RepositoryCoverageService {
     const readSubscriptions = (connectionId: string) => {
       let pending = subscriptions.get(connectionId);
       if (!pending) {
-        pending = (async () => {
-          const items: HookSubscription[] = [];
-          let cursor: string | null = null;
-          let observedAt = iso(now);
-          for (
-            let page = 0;
-            page < COVERAGE_LIMITS.SUBSCRIPTION_PAGES;
-            page++
-          ) {
-            if (!reserve()) return { items, complete: false, observedAt };
+        pending = readHookInventory(
+          async (cursor) => {
             const response = await new HooksService(this.context).subscriptions(
               { workspaceId, connectionId, cursor },
             );
-            items.push(...response.result.items);
-            observedAt = response.result.observedAt;
-            if (response.result.disappeared)
-              return { items, complete: false, observedAt };
-            cursor = response.result.nextCursor;
-            if (!cursor) return { items, complete: true, observedAt };
-          }
-          return { items, complete: false, observedAt };
-        })();
+            return response.result;
+          },
+          reserve,
+          this.context.now,
+        );
         subscriptions.set(connectionId, pending);
       }
       return pending;
@@ -255,26 +240,7 @@ export class RepositoryCoverageService {
       try {
         if (link.kind === "hook") {
           const response = await readSubscriptions(link.connectionId);
-          const matches = response.items.filter(
-            (item) => item.name === link.resourceKey,
-          );
-          const found = matches[0];
-          result.state = !response.complete
-            ? "limited"
-            : matches.length > 1
-              ? "ambiguous"
-              : found
-                ? found.enabled && found.sinks.length
-                  ? "configured"
-                  : "disabled"
-                : "missing";
-          result.observedAt = response.observedAt;
-          result.freshUntil = iso(
-            Math.min(
-              now + COVERAGE_LIMITS.REFRESH_MS,
-              Date.parse(response.observedAt) + COVERAGE_LIMITS.REFRESH_MS,
-            ),
-          );
+          return hookCoverageResource(link.resourceKey, response, now);
         } else {
           const snapshot = await readMonitor(link.connectionId);
           if (!snapshot || !reserve()) return { ...result, state: "limited" };
@@ -375,7 +341,6 @@ export class RepositoryCoverageService {
       }),
     );
     const completed = this.context.now();
-    const freshUntil = iso(now + COVERAGE_LIMITS.REFRESH_MS);
     const nextReadAt = iso(completed + COVERAGE_LIMITS.REFRESH_MS);
     const groups = new Map<string, Link[]>();
     for (const link of links) {
@@ -387,6 +352,15 @@ export class RepositoryCoverageService {
       const link = group[0]!;
       const resources = group.flatMap((item) =>
         results.has(item) ? [results.get(item)!] : [],
+      );
+      const freshUntil = iso(
+        now +
+          (link.kind === "hook" &&
+          resources.every(
+            (item) => item.state !== "limited" && item.state !== "unavailable",
+          )
+            ? COVERAGE_LIMITS.HOOK_FRESH_MS
+            : COVERAGE_LIMITS.REFRESH_MS),
       );
       const coverage = coverageEvidenceSchema.parse({
         version: 1,
@@ -486,7 +460,8 @@ export class RepositoryCoverageService {
         SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${accepted}
         ON CONFLICT(workspace_id,source_id,resource_type,resource_id) DO UPDATE SET name=excluded.name,health=excluded.health,
           summary=excluded.summary,details_json=excluded.details_json,observed_at=excluded.observed_at,
-          received_at=excluded.received_at,expires_at=excluded.expires_at`,
+          received_at=excluded.received_at,expires_at=excluded.expires_at
+        WHERE observations.observed_at<=excluded.observed_at`,
           )
           .bind(
             workspaceId,
