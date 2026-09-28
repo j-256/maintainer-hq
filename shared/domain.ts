@@ -5,10 +5,12 @@ import {
   coverageAssessment,
   coverageEvidenceSchema,
 } from "./coverage-evidence";
+import { githubEvidenceSchema } from "./github-evidence";
 import {
-  githubEvidenceSchema,
-  githubSecurityComplete,
-} from "./github-evidence";
+  githubSecurityRequirementsSchema,
+  requiredGitHubSecurityRead,
+  requiredGitHubFindings,
+} from "./github-requirements";
 
 export const ROLE = Object.freeze({
   OWNER: "owner",
@@ -71,6 +73,7 @@ export const expectationSchema = z
   .object({
     ci: requirementSchema,
     security: requirementSchema,
+    githubSecurity: githubSecurityRequirementsSchema.optional(),
     monitoring: requirementSchema,
     hooks: requirementSchema,
     visibility: z.enum(["public", "private", "any"]),
@@ -421,6 +424,13 @@ export function assessRepository(
   const issues: string[] = [];
   const unverified: string[] = [];
   const github = fresh.find((item) => item.provider === "github");
+  const securityFindings =
+    github?.details.github && repository.expectations.githubSecurity
+      ? requiredGitHubFindings(
+          github.details.github,
+          repository.expectations.githubSecurity,
+        )
+      : github?.details.openFindings;
   if (
     repository.expectations.ci === "required" &&
     github?.details.ci !== "passing"
@@ -430,15 +440,19 @@ export function assessRepository(
   }
   if (
     repository.expectations.security === "required" &&
-    github?.details.openFindings !== 0
+    (securityFindings !== 0 || (github?.details.openFindings ?? 0) > 0)
   ) {
-    if (github?.details.openFindings) issues.push("Open security findings");
+    if (securityFindings || (github?.details.openFindings ?? 0) > 0)
+      issues.push("Open security findings");
     else unverified.push("Security has not been verified");
   }
   if (
     repository.expectations.security === "required" &&
     github?.details.github &&
-    !githubSecurityComplete(github.details.github)
+    !requiredGitHubSecurityRead(
+      github.details.github.checks,
+      repository.expectations.githubSecurity,
+    )
   )
     unverified.push("Security coverage is incomplete");
   const coverage = [

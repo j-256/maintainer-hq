@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EXPECTATIONS,
   DEFAULT_PORTFOLIO,
+  assessRepository,
   type Observation,
   type Project,
   type Repository,
@@ -14,6 +15,7 @@ import {
   type AttentionContext,
 } from "../shared/attention";
 import { GITHUB_CHECK_KEYS } from "../shared/github-evidence";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 import type { GitHubSource } from "../shared/github";
 import { commands, commandAnnotations } from "../shared/commands";
 
@@ -164,6 +166,49 @@ describe("Actionable workspace attention", () => {
     context.connections = [];
     context.observations = [];
     expect(build(context)).toEqual([]);
+  });
+  it("resolves only the explicitly unrequired gap and retains observed findings and missing required counts", () => {
+    const context = fixture();
+    context.repositories[0].expectations.githubSecurity = {
+      ...DEFAULT_GITHUB_SECURITY,
+      codeScanning: "not_required",
+    };
+    context.observations[0].details.ci = "passing";
+    context.observations[0].details.github!.checks.forEach((check) => {
+      check.count = 0;
+    });
+    expect(build(context)).toEqual([
+      expect.objectContaining({
+        category: "problem",
+        title: "2 open security findings",
+      }),
+    ]);
+    context.observations[0].health = "healthy";
+    expect(
+      assessRepository(context.repositories[0], context.observations, NOW),
+    ).toMatchObject({
+      health: "warning",
+      reasons: expect.arrayContaining(["Open security findings"]),
+    });
+    delete context.observations[0].details.openFindings;
+    expect(build(context)).toEqual([]);
+    delete context.observations[0].details.github!.checks.find(
+      (check) => check.key === "dependabot",
+    )!.count;
+    expect(build(context)).toEqual([
+      expect.objectContaining({
+        title: "Required security result is not verified",
+      }),
+    ]);
+    context.repositories[0].expectations.githubSecurity = {
+      ...DEFAULT_GITHUB_SECURITY,
+    };
+    expect(build(context)).toEqual([
+      expect.objectContaining({
+        title: "Access or feature gaps",
+        reason: expect.stringContaining("Code scanning"),
+      }),
+    ]);
   });
   it("does not equate readable endpoints with passing required CI", () => {
     const context = fixture();

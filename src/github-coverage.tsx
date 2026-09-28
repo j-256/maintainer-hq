@@ -31,11 +31,14 @@ import { command, RequestError } from "./lib/api";
 import { COORDINATED_QUERY_OPTIONS } from "./lib/workspace-query-refresh";
 import { useDateTime } from "./date-time";
 import { GitHubGapActions } from "./github-gap-actions";
+import { GitHubCoverageRefresh } from "./github-coverage-refresh";
+import { expectationHref } from "../shared/expectation-resolution";
 import "./github-coverage.css";
 
 const CLOCK_MS = 60 * 1000;
 const COVERAGE_TONES: Record<GitHubCoverageState, StatusTone> = {
   current: "info",
+  requirements_met: "info",
   unavailable: "warning",
   incomplete: "warning",
   error: "danger",
@@ -61,6 +64,7 @@ const CHECK_LABELS: Record<GitHubCheck["state"], string> = {
 };
 const NEXT_STEP: Record<GitHubCoverageState, string> = {
   current: "Review CI and findings",
+  requirements_met: "Other scanners are explicitly not required",
   unavailable: "Review access and features",
   incomplete: "Inspect unread checks",
   error: "Inspect the failed read",
@@ -135,6 +139,8 @@ function CoverageDetails({
   workspaceId,
   row,
   canAdmin,
+  canEdit,
+  canOperate,
   loading,
   failed,
   edit,
@@ -143,6 +149,8 @@ function CoverageDetails({
   workspaceId: string;
   row: GitHubCoverageRepository;
   canAdmin: boolean;
+  canEdit: boolean;
+  canOperate: boolean;
   loading: boolean;
   failed: boolean;
   edit: (id: string) => void;
@@ -171,7 +179,26 @@ function CoverageDetails({
     );
   return (
     <div className="coverage-detail-body">
-      <GitHubGapActions links={row.managementLinks} />
+      <GitHubGapActions
+        links={row.managementLinks}
+        remediation={row.remediation}
+      />
+      <p>
+        For a scanner this repository intentionally does not use, choose Not
+        required in repository expectations.
+      </p>
+      {canEdit ? (
+        <Link
+          className="quiet-link"
+          to={expectationHref(workspaceId, row.repository.id)}
+        >
+          Choose required scanners
+        </Link>
+      ) : (
+        <p className="coverage-muted">
+          A workspace owner or operator can change scanner requirements.
+        </p>
+      )}
       {row.sources.map((source) => (
         <section
           className="coverage-source-detail"
@@ -185,6 +212,14 @@ function CoverageDetails({
             </StatusBadge>
           </div>
           <p>{COVERAGE_GUIDANCE[source.state]}</p>
+          <GitHubCoverageRefresh
+            workspaceId={workspaceId}
+            source={source}
+            canOperate={canOperate}
+            onQueued={(refreshId, returnFocus) =>
+              inspect(source.id, refreshId, returnFocus)
+            }
+          />
           <dl className="coverage-timing">
             <div>
               <dt>Latest refresh result</dt>
@@ -272,6 +307,7 @@ function CoverageDetails({
                 <li key={check.key}>
                   <span>{GITHUB_CHECK_LABELS[check.key]}</span>
                   <span data-state={check.state}>
+                    {!check.required ? "Not required - " : ""}
                     {CHECK_LABELS[check.state]}
                     {check.count !== undefined
                       ? " (" + check.count + " returned)"
@@ -683,7 +719,11 @@ export function GitHubCoverageView({
                         {COVERAGE_LABELS[row.state]}
                       </StatusBadge>
                       <span className="coverage-next-step">
-                        {NEXT_STEP[row.state]}
+                        {row.state === "unavailable" && row.remediation.length
+                          ? row.remediation
+                              .map((item) => item.label)
+                              .join(", ") + " unavailable"
+                          : NEXT_STEP[row.state]}
                       </span>
                     </td>
                     <td data-label="Accepted evidence">
@@ -744,6 +784,12 @@ export function GitHubCoverageView({
                           row={row}
                           canAdmin={snapshot.capabilities.includes(
                             CAPABILITY.ADMIN,
+                          )}
+                          canEdit={snapshot.capabilities.includes(
+                            CAPABILITY.EDIT,
+                          )}
+                          canOperate={snapshot.capabilities.includes(
+                            CAPABILITY.OPERATE,
                           )}
                           loading={result.isPending}
                           failed={result.isError}

@@ -26,7 +26,7 @@ export const EXPECTATION_KEYS = [
   "note",
 ] as const;
 export type ExpectationKey = (typeof EXPECTATION_KEYS)[number];
-export type ExpectationPatch = Partial<Expectations>;
+export type ExpectationPatch = Partial<Omit<Expectations, "githubSecurity">>;
 export const EXPECTATION_PRESETS = [
   {
     id: "ci-security",
@@ -62,6 +62,7 @@ export const EXPECTATION_PRESETS = [
 }[];
 
 export const expectationPatchSchema = expectationSchema
+  .omit({ githubSecurity: true })
   .partial()
   .refine(
     (patch) => EXPECTATION_KEYS.some((key) => patch[key] !== undefined),

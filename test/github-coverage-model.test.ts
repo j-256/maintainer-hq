@@ -3,6 +3,7 @@ import type { Observation, Repository } from "../shared/domain";
 import type { GitHubSource } from "../shared/github";
 import { GITHUB_CHECK_KEYS, type GitHubCheck } from "../shared/github-evidence";
 import { githubManagementLinks } from "../shared/github-settings";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 import {
   GITHUB_COVERAGE_LIMITS,
   githubCoverageInput,
@@ -266,6 +267,93 @@ describe("GitHub evidence coverage", () => {
       ),
     ).toBe(true);
     expect(JSON.stringify(result.managementLinks)).not.toContain(PRIVATE);
+    expect(result.remediation).toEqual([
+      expect.objectContaining({
+        key: "secretScanning",
+        label: "Secret scanning",
+        guidance: expect.stringContaining(
+          "Secret scanning alerts read permission",
+        ),
+      }),
+    ]);
+  });
+
+  it("requires every scanner by default and preserves unread evidence when one is explicitly not required", () => {
+    const evidence = observation();
+    evidence.details.github!.checks.find(
+      (check) => check.key === "codeScanning",
+    )!.state = "unavailable";
+    const before = structuredClone(evidence);
+    expect(coverage([source], [evidence])).toMatchObject({
+      state: "unavailable",
+      securityRequirements: DEFAULT_GITHUB_SECURITY,
+    });
+    const configured = {
+      ...repository,
+      expectations: {
+        githubSecurity: {
+          ...DEFAULT_GITHUB_SECURITY,
+          codeScanning: "not_required" as const,
+        },
+      },
+    };
+    const [result] = githubCoverageRepositories(
+      [configured],
+      [source],
+      [evidence],
+      NOW,
+    );
+    expect(result).toMatchObject({
+      state: "requirements_met",
+      remediation: [],
+      managementLinks: [],
+    });
+    expect(result.sources[0].evidence).toMatchObject({
+      observedAt: OBSERVED,
+      expiresAt: EXPIRES,
+      checks: expect.arrayContaining([
+        { key: "codeScanning", state: "unavailable", required: false },
+      ]),
+    });
+    expect(evidence).toEqual(before);
+    expect(coverage([source], [evidence]).state).toBe("unavailable");
+    evidence.details.github!.checks[0].state = "unavailable";
+    expect(
+      githubCoverageRepositories([configured], [source], [evidence], NOW)[0],
+    ).toMatchObject({
+      state: "unavailable",
+      remediation: [expect.objectContaining({ key: "repository" })],
+    });
+  });
+
+  it("keeps freshness, repository identity and every selected source authoritative after a requirement changes", () => {
+    const configured = {
+      ...repository,
+      expectations: {
+        githubSecurity: {
+          dependabot: "not_required",
+          codeScanning: "not_required",
+          secretScanning: "not_required",
+        } as const,
+      },
+    };
+    const evidence = observation();
+    const other = { ...source, id: "other" };
+    const read = (
+      sources: GitHubSource[] = [source],
+      observations = [evidence],
+    ) =>
+      githubCoverageRepositories([configured], sources, observations, NOW)[0];
+    expect(read([source, other]).state).toBe("awaiting");
+    expect(read([{ ...source, enabled: false }]).state).toBe("disabled");
+    expect(read([{ ...source, credentialConfigured: false }]).state).toBe(
+      "not_configured",
+    );
+    evidence.expiresAt = new Date(NOW).toISOString();
+    expect(read().state).toBe("stale");
+    evidence.expiresAt = EXPIRES;
+    evidence.name = "example/previous-name";
+    expect(read()).toMatchObject({ state: "awaiting", remediation: [] });
   });
 
   it("keeps invalid repository names out of GitHub settings destinations", () => {

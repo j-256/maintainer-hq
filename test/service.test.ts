@@ -10,6 +10,7 @@ import {
   type Principal,
 } from "../shared/domain";
 import type { Env } from "../worker/types";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -314,6 +315,74 @@ describe("Goal mirrors", () => {
 });
 
 describe("Repository saves", () => {
+  it("authorizes scanner requirements, rejects stale edits, and preserves choices omitted by older clients", async () => {
+    const created = await service.createRepository({
+      ...workspace,
+      repository,
+    });
+    const requirements = {
+      ...DEFAULT_GITHUB_SECURITY,
+      codeScanning: "not_required" as const,
+    };
+    const input = {
+      ...workspace,
+      repositoryId: created.id,
+      revision: created.revision,
+      repository: {
+        ...repository,
+        expectations: {
+          ...repository.expectations,
+          githubSecurity: requirements,
+        },
+      },
+    };
+    const viewer = new WorkspaceService(bindings, {
+      subject: "viewer",
+      displayName: "Viewer",
+    });
+    const operator = new WorkspaceService(bindings, {
+      subject: "operator",
+      displayName: "Operator",
+    });
+    await expect(viewer.updateRepository(input)).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(
+      service.updateRepository({ ...input, workspaceId: "beta" }),
+    ).rejects.toMatchObject({ status: 404 });
+    const saved = await operator.updateRepository(input);
+    expect(saved.expectations.githubSecurity).toEqual(requirements);
+    await expect(operator.updateRepository(input)).rejects.toMatchObject({
+      status: 409,
+    });
+    const legacy = await service.updateRepository({
+      ...input,
+      revision: saved.revision,
+      repository: { ...repository, description: "A metadata-only edit" },
+    });
+    expect(legacy.expectations.githubSecurity).toEqual(requirements);
+    const restored = await service.updateRepository({
+      ...input,
+      revision: legacy.revision,
+      repository: {
+        ...input.repository,
+        expectations: {
+          ...repository.expectations,
+          githubSecurity: DEFAULT_GITHUB_SECURITY,
+        },
+      },
+    });
+    expect(restored.expectations.githubSecurity).toEqual(
+      DEFAULT_GITHUB_SECURITY,
+    );
+    const updates = (await service.activity(workspace)).filter(
+      (entry) => entry.type === "repository.updated",
+    );
+    expect(updates).toHaveLength(3);
+    expect(
+      updates.find((entry) => entry.actor === "Operator")?.summary,
+    ).toContain("expectations");
+  });
   it("handles concurrent renames as a normal conflict without false audit entries", async () => {
     const first = await service.createRepository({ ...workspace, repository });
     const second = await service.createRepository({

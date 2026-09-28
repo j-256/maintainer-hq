@@ -14,6 +14,7 @@ import {
 import type { GitHubSource, GitHubRefresh } from "../shared/github";
 import { GITHUB_CHECK_KEYS } from "../shared/github-evidence";
 import { mockWorkspaceView } from "./workspace-fixture";
+import { expectationHref } from "../shared/expectation-resolution";
 
 const workspaceId = "development";
 async function api<T>(
@@ -517,6 +518,82 @@ test("repository scope hides unchecked archives and preserves selected archives 
     .click();
   await expect(selected).toHaveCount(0);
 });
+
+for (const theme of ["light", "dark"])
+  for (const width of [390, 1280])
+    test(`scanner requirements support keyboard, save and cancel in ${theme} at ${width}`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("hq.theme.v1", value),
+        theme,
+      );
+      const repo = await repository(request);
+      await page.goto(expectationHref(workspaceId, repo.id));
+      const dialog = page.getByRole("dialog");
+      const choice = dialog.getByRole("combobox", {
+        name: "Code scanning",
+        exact: true,
+      });
+      await expect(choice).toHaveText("Required");
+      await choice.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("listbox")).toBeVisible();
+      await page.keyboard.press("End");
+      await expect(
+        page.getByRole("option", { name: "Not required", exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(choice).toHaveText("Not required");
+      await choice.scrollIntoViewIfNeeded();
+      expect(
+        (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+          .violations,
+      ).toEqual([]);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: test
+          .info()
+          .outputPath("scanner-requirements-" + theme + "-" + width + ".png"),
+      });
+      await dialog
+        .getByRole("button", { name: "Save changes", exact: true })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      const saved = await api<Repository>(request, "repository_get", {
+        workspaceId,
+        repositoryId: repo.id,
+      });
+      expect(saved.expectations.githubSecurity).toEqual({
+        dependabot: "required",
+        codeScanning: "not_required",
+        secretScanning: "required",
+      });
+      await page.goto(expectationHref(workspaceId, repo.id));
+      await expect(choice).toHaveText("Not required");
+      await choice.click();
+      await page.getByRole("option", { name: "Required", exact: true }).click();
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "Discard changes", exact: true })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      expect(
+        (
+          await api<Repository>(request, "repository_get", {
+            workspaceId,
+            repositoryId: repo.id,
+          })
+        ).expectations.githubSecurity,
+      ).toEqual(saved.expectations.githubSecurity);
+    });
 
 test("GitHub settings remain accessible on mobile in both themes and explain viewer limits", async ({
   page,

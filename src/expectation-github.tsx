@@ -349,6 +349,7 @@ export function GitHubExpectationResolution({
             {observation.details.github ? (
               <GitHubEvidenceList
                 fullName={observation.name}
+                requirements={repository.expectations.githubSecurity}
                 evidence={{
                   ...observation.details.github,
                   checks: observation.details.github.checks.filter((check) =>

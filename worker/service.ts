@@ -1401,6 +1401,12 @@ export class WorkspaceService {
       memberRevision,
     );
     const before = await this.repository({ workspaceId, repositoryId });
+    if (
+      !repository.expectations.githubSecurity &&
+      before.expectations.githubSecurity
+    )
+      repository.expectations.githubSecurity =
+        before.expectations.githubSecurity;
     if (before.revision !== revision)
       throw new DomainError(
         "revision_conflict",

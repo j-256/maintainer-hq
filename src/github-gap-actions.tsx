@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import type { GitHubManagementLink } from "../shared/github-settings";
+import type { GitHubRemediation } from "../shared/github-remediation";
 import "./github-gap-actions.css";
 
 function SettingsLink({ link }: { link: GitHubManagementLink }) {
@@ -17,10 +18,36 @@ function SettingsLink({ link }: { link: GitHubManagementLink }) {
   );
 }
 
-export function GitHubGapActions({ links }: { links: GitHubManagementLink[] }) {
-  if (!links.length) return null;
+export function GitHubGapActions({
+  links,
+  remediation = [],
+}: {
+  links: GitHubManagementLink[];
+  remediation?: GitHubRemediation[];
+}) {
+  if (!links.length && !remediation.length) return null;
   return (
     <div className="github-gap-actions">
+      {remediation.length ? (
+        <section aria-label="Resolve unavailable GitHub checks">
+          <strong className="github-gap-heading">
+            Resolve unavailable checks
+          </strong>
+          <ul className="github-remediation-list">
+            {remediation.map((item) => (
+              <li key={item.key}>
+                <strong>{item.label} unavailable</strong>
+                <p>{item.guidance}</p>
+              </li>
+            ))}
+          </ul>
+          <p>
+            GitHub's denial does not distinguish missing permissions from an
+            unavailable feature. Check the named feature first, then the
+            credential used by this connection.
+          </p>
+        </section>
+      ) : null}
       <div className="github-gap-links">
         {links
           .filter((link) => link.scope === "repository")
@@ -32,7 +59,9 @@ export function GitHubGapActions({ links }: { links: GitHubManagementLink[] }) {
         <summary>Review collector access on GitHub</summary>
         <p>
           Use the settings for the credential used by this connection. Sign in
-          as its owner or installation administrator.
+          as its owner or installation administrator. Check the selected
+          repositories and read permissions. Classic tokens use different scopes
+          from fine-grained tokens and GitHub Apps.
         </p>
         <div className="github-gap-links">
           {links

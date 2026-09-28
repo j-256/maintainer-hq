@@ -635,6 +635,7 @@ export function RepositoryOverview({
               </p>
               {item.details.github ? (
                 <GitHubEvidenceList
+                  requirements={repository.expectations.githubSecurity}
                   evidence={item.details.github}
                   fullName={item.name}
                 />
