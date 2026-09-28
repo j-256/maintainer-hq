@@ -17,6 +17,7 @@ export const HOOK_LIMITS = Object.freeze({
 });
 export const HOOK_RETRY_KIND = "hookrelay.delivery.retry";
 export const HOOK_POLICY_KIND = "hookrelay.subscription.policy";
+export const HOOK_RESOLUTION_KIND = "hookrelay.operations.resolve";
 export const HOOK_DELIVERY_STATES = [
   "pending",
   "queued",
@@ -93,6 +94,84 @@ export const hookRetryInput = workspaceInput
 export const hookRetryApplyInput = hookRetryInput
   .extend({
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+export const hookResolutionReason = z.enum([
+  "recovered",
+  "obsolete",
+  "accepted-loss",
+]);
+export const hookResolutionTarget = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("signal"),
+      fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      lastSeenAt: timestamp,
+      occurrences: z.number().int().positive(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("delivery"),
+      eventId: hookIdentity,
+      sinkName: hookName,
+      generation: z.number().int().nonnegative(),
+      updatedAt: timestamp,
+    })
+    .strict(),
+]);
+const hookResolutionFields = z.object({
+  targets: z
+    .array(hookResolutionTarget)
+    .min(1)
+    .max(HOOK_LIMITS.PAGE_SIZE)
+    .refine(
+      (targets) =>
+        new Set(
+          targets.map((target) =>
+            target.kind === "signal"
+              ? target.fingerprint
+              : JSON.stringify([target.eventId, target.sinkName]),
+          ),
+        ).size === targets.length,
+    ),
+  reason: hookResolutionReason,
+  note: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .regex(/^[\x20-\x7e]+$/),
+});
+export const hookResolutionPlanInput = hookConnectionInput
+  .extend(hookResolutionFields.shape)
+  .extend({
+    reviewId: z.uuid(),
+    connectionRevision: z.number().int().positive(),
+  })
+  .strict();
+export const hookResolutionReceiptSchema = hookResolutionFields
+  .extend({
+    planId: z.uuid(),
+    createdAt: timestamp,
+    expiresAt: timestamp,
+    acceptedAt: timestamp.nullable(),
+    state: z.enum(["review", "accepted", "expired"]),
+  })
+  .strict()
+  .refine(
+    (value) => (value.state === "accepted") === (value.acceptedAt !== null),
+  );
+const hookSignalCursor = z
+  .object({
+    lastSeenAt: timestamp,
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+export const hookSignalsInput = hookConnectionInput
+  .extend({
+    cursor: hookSignalCursor.nullable().default(null),
+    resolved: z.boolean().nullable().default(false),
   })
   .strict();
 export const hookAssociationGetInput = hookConnectionInput
@@ -276,6 +355,8 @@ export const hookDeliverySchema = z
     receivedAt: timestamp,
     subscription: hookName,
     source: hookName,
+    resolvedAt: timestamp.nullable().optional(),
+    resolutionReason: hookResolutionReason.nullable().optional(),
   })
   .strict();
 export const hookSubscriptionSchema = z
@@ -340,17 +421,42 @@ export const hookSnapshotSchema = z
         sampled: z.number().int().nonnegative().max(HOOK_LIMITS.HEALTH_SAMPLE),
         limit: z.literal(HOOK_LIMITS.HEALTH_SAMPLE),
         truncated: z.boolean(),
+        acknowledgedExhausted: z
+          .number()
+          .int()
+          .nonnegative()
+          .max(HOOK_LIMITS.HEALTH_SAMPLE)
+          .optional(),
       })
       .strict()
       .refine(
         (value) =>
           Object.values(value.totals).reduce((sum, n) => sum + n, 0) ===
-          value.sampled,
+            value.sampled &&
+          (value.acknowledgedExhausted ?? 0) <= value.totals.exhausted,
       ),
     signals: z
       .object({
         items: z.array(hookSignalSchema).max(HOOK_LIMITS.PAGE_SIZE),
         truncated: z.boolean(),
+        unresolved: z
+          .array(
+            z
+              .object({
+                code: hookSignalSchema.shape.code,
+                records: z.number().int().positive(),
+                occurrences: z.number().int().positive(),
+                critical: z.boolean(),
+                lastSeenAt: timestamp,
+              })
+              .strict(),
+          )
+          .max(hookSignalSchema.shape.code.options.length)
+          .refine(
+            (groups) =>
+              new Set(groups.map((group) => group.code)).size === groups.length,
+          )
+          .optional(),
       })
       .strict(),
     lastRetentionAt: timestamp.nullable(),
@@ -376,6 +482,29 @@ export const hookDeliveriesSchema = z
 export const hookResultSchemas = {
   ...hookSetupResults,
   snapshot: hookSnapshotSchema,
+  signals: z
+    .object({
+      items: z
+        .array(
+          hookSignalSchema
+            .extend({
+              fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+              source: hookName.nullable(),
+              subscription: hookName.nullable(),
+              eventId: hookIdentity.nullable(),
+              sinkName: hookName.nullable(),
+              resolutionReason: hookResolutionReason.nullable(),
+            })
+            .strict(),
+        )
+        .max(HOOK_LIMITS.PAGE_SIZE),
+      nextCursor: hookSignalCursor.nullable(),
+      observedAt: timestamp,
+    })
+    .strict(),
+  resolution_plan: hookResolutionReceiptSchema,
+  resolution_apply: hookResolutionReceiptSchema,
+  resolution_get: hookResolutionReceiptSchema,
   subscriptions: hookSubscriptionsSchema,
   deliveries: hookDeliveriesSchema,
   delivery: hookDeliverySchema,
@@ -409,6 +538,16 @@ export type HookResult<K extends HookCommand> = z.infer<
 export type HookDelivery = z.infer<typeof hookDeliverySchema>;
 export type HookSubscription = z.infer<typeof hookSubscriptionSchema>;
 export type HookReceipt = z.infer<typeof hookReceiptSchema>;
+export type HookResolutionReceipt = z.infer<typeof hookResolutionReceiptSchema>;
+export type HookResolutionReview = Omit<
+  HookReview,
+  "eventId" | "sinkName" | "generation" | "updatedAt" | "provider"
+> & {
+  targets: HookResolutionReceipt["targets"];
+  reason: HookResolutionReceipt["reason"];
+  note: string;
+  provider: HookResolutionReceipt | null;
+};
 export type HookSnapshot = z.infer<typeof hookSnapshotSchema>;
 export type HookPolicy = z.infer<typeof hookPolicySchema>;
 export type HookPolicyFilter = z.infer<typeof hookPolicyFilterSchema>;

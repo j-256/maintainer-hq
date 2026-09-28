@@ -18,6 +18,7 @@ import {
   HOOK_DELIVERY_STATES,
   HOOK_LIMITS,
   HOOK_POLICY_KIND,
+  HOOK_RESOLUTION_KIND,
   type HookConfigurationAvailability,
   type HookAssociation,
   type HookConnection,
@@ -40,6 +41,7 @@ import { HookAssociationEditor, HookConnectionEditor } from "./hook-editors";
 import { HookDeliveryDetail, HookRetryReview } from "./hook-retry";
 import { HookPolicyEditor } from "./hook-policy-editor";
 import { HookPolicyReviewDialog } from "./hook-policy-review";
+import { HookDispositionReceipt } from "./hook-disposition-receipt";
 import {
   HookError,
   HookStatus,
@@ -102,6 +104,9 @@ function HookSummary({
   onAttention: () => void;
 }) {
   const totals = data.deliveries.totals;
+  const exhausted =
+    totals.exhausted - (data.deliveries.acknowledgedExhausted ?? 0);
+  const unresolved = data.signals.unresolved;
   const active =
     totals.pending + totals.queued + totals.processing + totals.retrying;
   return (
@@ -117,12 +122,12 @@ function HookSummary({
               onClick={onAttention}
               aria-label={
                 "Inspect all exhausted deliveries, " +
-                totals.exhausted +
+                exhausted +
                 (data.deliveries.truncated ? " in sample" : " retained")
               }
               title="Inspect all exhausted deliveries"
             >
-              {totals.exhausted}
+              {exhausted}
               <ArrowRight size={16} aria-hidden="true" />
             </Button>
           </dd>
@@ -149,12 +154,48 @@ function HookSummary({
             data.deliveries.sampled +
             " retained deliveries at the time of this read."}{" "}
         Read <HookTime value={data.observedAt} />.
+        {data.deliveries.acknowledgedExhausted
+          ? " Acknowledged failures remain in delivery history and are excluded from the attention count."
+          : null}
       </p>
-      {data.signals.items.some((value) => !value.resolvedAt) ? (
+      {(
+        unresolved
+          ? unresolved.length > 0
+          : data.signals.items.some((value) => !value.resolvedAt)
+      ) ? (
         <p className="hook-notice">
-          Hookrelay has unresolved operational signals in its recent sample.
+          {unresolved
+            ? "Hookrelay has unresolved operational signals in retained history."
+            : "Hookrelay has unresolved operational signals in its recent sample."}{" "}
           Delivery status alone does not cover ingress or retention health.
         </p>
+      ) : null}
+      {unresolved ? (
+        <details className="hook-signals">
+          <summary>
+            Unresolved operational signals (
+            {unresolved.reduce((sum, group) => sum + group.records, 0)})
+          </summary>
+          <p className="hook-muted">
+            Includes all retained warning, error, and critical signal records,
+            including records outside the recent history sample.
+          </p>
+          {unresolved.length ? (
+            <ul>
+              {unresolved.map((group) => (
+                <li key={group.code}>
+                  <strong>{group.code.replaceAll("-", " ")}</strong>
+                  <p>
+                    {group.records} records, {group.occurrences} occurrences.
+                    Last seen <HookTime value={group.lastSeenAt} />.
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No unresolved warning signals were retained at this read.</p>
+          )}
+        </details>
       ) : null}
       <details className="hook-signals">
         <summary>
@@ -191,9 +232,10 @@ function HookSummary({
           <p>No operational signals in this sample.</p>
         )}
         {data.signals.truncated ? (
-          <p className="hook-notice">
-            Older operational signals are not included. This sample does not
-            establish their absence.
+          <p className={unresolved ? "hook-muted" : "hook-notice"}>
+            {unresolved
+              ? "Recent history is limited. The unresolved summary includes older retained warning signals."
+              : "Older operational signals are not included. This sample does not establish their absence."}
           </p>
         ) : null}
       </details>
@@ -366,7 +408,10 @@ function Deliveries({
                     </td>
                     <td>{item.sinkName}</td>
                     <td>
-                      <HookStatus status={item.status} />
+                      <HookStatus
+                        status={item.status}
+                        resolvedAt={item.resolvedAt}
+                      />
                     </td>
                     <td>
                       <HookTime value={item.updatedAt} />
@@ -916,6 +961,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
   const policyId = params.get("policy");
   const policyReviewId = params.get("policyReview");
   const setupReviewId = params.get("setupReview");
+  const dispositionId = params.get("disposition");
   function navigate(fields: Record<string, string | null>) {
     const next = new URLSearchParams(params);
     next.set("workspace", workspaceId);
@@ -1148,10 +1194,13 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
                 rememberFocus();
                 navigate({
                   review:
-                    kind === HOOK_POLICY_KIND || kind === HOOK_SETUP_KIND
+                    kind === HOOK_POLICY_KIND ||
+                    kind === HOOK_SETUP_KIND ||
+                    kind === HOOK_RESOLUTION_KIND
                       ? null
                       : id,
                   setupReview: kind === HOOK_SETUP_KIND ? id : null,
+                  disposition: kind === HOOK_RESOLUTION_KIND ? id : null,
                   policyReview: kind === HOOK_POLICY_KIND ? id : null,
                   policy: null,
                   event: null,
@@ -1181,6 +1230,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
       eventId &&
       sinkName &&
       !planId &&
+      !dispositionId &&
       !policyReviewId &&
       !policyId ? (
         <HookDeliveryDetail
@@ -1199,13 +1249,21 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
           onReview={(id) => navigate({ review: id })}
         />
       ) : null}
-      {planId && !policyReviewId && !policyId ? (
+      {planId && !policyReviewId && !policyId && !dispositionId ? (
         <HookRetryReview
           key={planId}
           snapshot={snapshot}
           planId={planId}
           returnFocus={focus.current}
           onClose={() => navigate({ review: null, event: null, sink: null })}
+        />
+      ) : null}
+      {dispositionId ? (
+        <HookDispositionReceipt
+          snapshot={snapshot}
+          planId={dispositionId}
+          returnFocus={focus.current}
+          onClose={() => navigate({ disposition: null })}
         />
       ) : null}
       {selected && policyId ? (

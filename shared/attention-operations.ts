@@ -49,42 +49,45 @@ export function hookAttention(
 ) {
   const base = (item: ItemDraft) =>
     operationalItem(workspaceId, connection, "hook", now, item);
-  const items = deliveries.items.map((delivery) =>
-    base({
-      id:
-        "delivery:" +
-        encodeURIComponent(delivery.eventId) +
-        ":" +
-        encodeURIComponent(delivery.sinkName),
-      category: "problem",
-      title: "Hook delivery exhausted retries",
-      resourceKey: delivery.subscription,
-      reason:
-        delivery.sinkName +
-        ": " +
-        delivery.attempts +
-        " attempts. Inspect the delivery before reviewing a retry.",
-      observedAt: delivery.updatedAt,
-      expiresAt: new Date(
-        Math.min(now, Date.parse(deliveries.observedAt)) +
-          ATTENTION_LIMITS.READ_FRESH_MS,
-      ).toISOString(),
-      action: "Inspect delivery",
-      href: attentionHref("/hooks", workspaceId, {
-        connection: connection.id,
-        view: "deliveries",
-        subscription: delivery.subscription,
-        event: delivery.eventId,
-        sink: delivery.sinkName,
-        status: "exhausted",
+  const items = deliveries.items
+    .filter((delivery) => !delivery.resolvedAt)
+    .map((delivery) =>
+      base({
+        id:
+          "delivery:" +
+          encodeURIComponent(delivery.eventId) +
+          ":" +
+          encodeURIComponent(delivery.sinkName),
+        category: "problem",
+        title: "Hook delivery exhausted retries",
+        resourceKey: delivery.subscription,
+        reason:
+          delivery.sinkName +
+          ": " +
+          delivery.attempts +
+          " attempts. Inspect the delivery before reviewing a retry.",
+        observedAt: delivery.updatedAt,
+        expiresAt: new Date(
+          Math.min(now, Date.parse(deliveries.observedAt)) +
+            ATTENTION_LIMITS.READ_FRESH_MS,
+        ).toISOString(),
+        action: "Inspect delivery",
+        href: attentionHref("/hooks", workspaceId, {
+          connection: connection.id,
+          view: "deliveries",
+          subscription: delivery.subscription,
+          event: delivery.eventId,
+          sink: delivery.sinkName,
+          status: "exhausted",
+        }),
       }),
-    }),
-  );
+    );
   const signals = new Map<
     string,
     { records: number; critical: boolean; lastSeenAt: string }
   >();
   for (const signal of snapshot.signals.items) {
+    if (snapshot.signals.unresolved) break;
     if (
       signal.resolvedAt ||
       !["warning", "error", "critical"].includes(signal.severity)
@@ -101,6 +104,8 @@ export function hookAttention(
           : signal.lastSeenAt,
     });
   }
+  for (const group of snapshot.signals.unresolved ?? [])
+    signals.set(group.code, group);
   for (const [code, signal] of signals) {
     items.push(
       base({
@@ -110,7 +115,9 @@ export function hookAttention(
         title: "Hookrelay: " + code.replaceAll("-", " "),
         reason:
           signal.records +
-          " unresolved retained signal records in this sample. Connection-wide; no individual repository is identified.",
+          " unresolved retained signal records" +
+          (snapshot.signals.unresolved ? ". " : " in this sample. ") +
+          "Connection-wide; no individual repository is identified.",
         observedAt: signal.lastSeenAt,
         expiresAt: new Date(
           Math.min(now, Date.parse(snapshot.observedAt)) +
@@ -121,17 +128,17 @@ export function hookAttention(
   }
   const limited = Boolean(
     deliveries.nextCursor ||
-    snapshot.deliveries.truncated ||
-    snapshot.signals.truncated,
+      (!snapshot.signals.unresolved &&
+        (snapshot.deliveries.truncated || snapshot.signals.truncated)),
   );
   if (limited)
     items.push(
       base({
         id: "preview",
         category: "coverage",
-        title: "Hook preview is limited",
+        title: "Hook failure coverage is incomplete",
         reason:
-          "Older deliveries or signals are outside this bounded preview. Inspect the provider's paginated views; an empty preview is not an all-clear.",
+          "Unresolved failures may be outside this bounded read. Inspect paginated failures or update the provider to include its complete unresolved-signal summary.",
       }),
     );
   return { items, limited };
@@ -270,9 +277,9 @@ export function monitorAttention(
   }
   const limited = Boolean(
     targets.nextCursor ||
-    incidents.nextCursor ||
-    snapshot.openIncidents.truncated ||
-    snapshot.pendingDeliveries.truncated,
+      incidents.nextCursor ||
+      snapshot.openIncidents.truncated ||
+      snapshot.pendingDeliveries.truncated,
   );
   if (limited)
     items.push(

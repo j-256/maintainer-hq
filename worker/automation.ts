@@ -1,3 +1,4 @@
+import { credentialIsCurrentSql } from "./credential-expiry";
 import {
   CAPABILITY,
   LIMITS,
@@ -101,7 +102,7 @@ export class AutomationService {
     return (
       await this.db
         .prepare(
-          `SELECT ${CREDENTIAL_FIELDS} FROM credentials c WHERE c.workspace_id=? AND c.automation_profile IS NOT NULL AND ${guard.sql} ORDER BY (c.revoked_at IS NULL AND c.expires_at > ?) DESC, c.created_at DESC, c.id DESC LIMIT ?`,
+          `SELECT ${CREDENTIAL_FIELDS} FROM credentials c WHERE c.workspace_id=? AND c.automation_profile IS NOT NULL AND ${guard.sql} ORDER BY (c.revoked_at IS NULL AND ${credentialIsCurrentSql("?")}) DESC, c.created_at DESC, c.id DESC LIMIT ?`,
         )
         .bind(
           workspaceId,
@@ -194,7 +195,7 @@ export class AutomationService {
     await this.admin(workspaceId);
     const active = await this.db
       .prepare(
-        "SELECT count(*) AS total FROM credentials WHERE workspace_id=? AND automation_profile IS NOT NULL AND revoked_at IS NULL AND expires_at>?",
+        `SELECT count(*) AS total FROM credentials c WHERE c.workspace_id=? AND c.automation_profile IS NOT NULL AND c.revoked_at IS NULL AND ${credentialIsCurrentSql("?")}`,
       )
       .bind(workspaceId, this.timestamp())
       .first<number>("total");
@@ -220,9 +221,12 @@ export class AutomationService {
     )
       this.conflict();
     const createdAt = this.timestamp();
-    const expiresAt = new Date(
-      this.context.now() + fields.expiresInDays * AUTOMATION_LIMITS.DAY_MS,
-    ).toISOString();
+    const expiresAt =
+      fields.expiresInDays === null
+        ? null
+        : new Date(
+            this.context.now() + fields.expiresInDays * AUTOMATION_LIMITS.DAY_MS,
+          ).toISOString();
     const token =
       HQ_CREDENTIAL_PREFIX.AUTOMATION +
       Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
@@ -237,7 +241,7 @@ export class AutomationService {
          SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${guard.sql}
          AND EXISTS (SELECT 1 FROM members WHERE workspace_id=? AND subject=? AND revision=?)
          AND EXISTS (SELECT 1 FROM action_plans WHERE id=? AND workspace_id=? AND actor_subject=? AND kind=? AND fingerprint=? AND input_json=? AND applied_at IS NULL AND expires_at>? AND julianday(expires_at)>julianday('now'))
-         AND (SELECT count(*) FROM credentials WHERE workspace_id=? AND automation_profile IS NOT NULL AND revoked_at IS NULL AND expires_at>?) < ?
+         AND (SELECT count(*) FROM credentials c WHERE c.workspace_id=? AND c.automation_profile IS NOT NULL AND c.revoked_at IS NULL AND ${credentialIsCurrentSql("?")}) < ?
          ON CONFLICT (id) DO NOTHING`,
         )
         .bind(
@@ -276,7 +280,10 @@ export class AutomationService {
         workspaceId,
         "automation.credential.issued",
         "Automation credential created",
-        fields.name + "; " + fields.profile + "; expires " + expiresAt,
+        fields.name +
+          "; " +
+          fields.profile +
+          (expiresAt === null ? "; no expiry" : "; expires " + expiresAt),
         writeId,
       ),
     ]);

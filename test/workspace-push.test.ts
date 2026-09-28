@@ -7,6 +7,8 @@ import {
 } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApplication } from "../worker/app";
+import { createProductionPrincipalResolver } from "../worker/auth";
+import { credentialHash } from "../worker/credential-hash";
 import { flushWorkspacePush } from "../worker/workspace-push";
 import { PUSH_CLOSE, PUSH_LIMITS } from "../shared/workspace-push";
 import type { Env } from "../worker/types";
@@ -196,6 +198,39 @@ it("revokes a connected observer before sending another change", async () => {
   await flushWorkspacePush(bindings, "alpha");
   expect(await closed).toBe(PUSH_CLOSE.REVOKED);
   expect(received).toEqual([]);
+});
+it("bounds a permanent Reader socket and closes it when the credential is revoked", async () => {
+  const token = "hqa_" + "a".repeat(64);
+  await bindings.HQ_DB.prepare(
+    "INSERT INTO credentials (id,workspace_id,owner_subject,name,token_hash,scopes_json,created_at,expires_at,automation_profile) VALUES ('reader','alpha','owner','Permanent Reader',?,'[\"read\"]',?,NULL,'reader')",
+  ).bind(await credentialHash(token), new Date().toISOString()).run();
+  const reader = createApplication(createProductionPrincipalResolver());
+  const request = upgrade();
+  request.headers.set("Authorization", "Bearer " + token);
+  const response = await reader.fetch(request, bindings);
+  expect(response.status).toBe(101);
+  const socket = response.webSocket!;
+  clients.push(socket);
+  const ready = nextMessage(socket);
+  socket.accept();
+  const frame = JSON.parse(await ready);
+  expect(frame).toMatchObject({ type: "ready", workspaceId: "alpha" });
+  expect(frame.expiresAt).toBeGreaterThan(Date.now());
+  expect(frame.expiresAt).toBeLessThanOrEqual(Date.now() + PUSH_LIMITS.CONNECTION_MS);
+  const received: string[] = [];
+  socket.addEventListener("message", (event) => {
+    received.push(String(event.data));
+  });
+  const closed = new Promise<number>((resolve) =>
+    socket.addEventListener("close", (event) => resolve(event.code), { once: true }),
+  );
+  await bindings.HQ_DB.prepare(
+    "UPDATE credentials SET revoked_at=? WHERE id='reader'",
+  ).bind(new Date().toISOString()).run();
+  await flushWorkspacePush(bindings, "alpha");
+  expect(await closed).toBe(PUSH_CLOSE.REVOKED);
+  expect(received).toEqual([]);
+  expect((await reader.fetch(request, bindings)).status).toBe(401);
 });
 it("resumes hibernated sockets from attachments and expires idle sessions through alarms", async () => {
   const socket = await connect();

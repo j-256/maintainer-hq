@@ -18,6 +18,7 @@ export const AUTOMATION_LIMITS = Object.freeze({
   REQUEST_TIMEOUT_MS: 15000,
 });
 export const AUTOMATION_DURATIONS = [7, 30, 90] as const;
+export const AUTOMATION_DEFAULT_DURATION = 30;
 export type AutomationProfile =
   (typeof AUTOMATION_PROFILE)[keyof typeof AUTOMATION_PROFILE];
 export const AUTOMATION_SCOPES: Record<
@@ -33,7 +34,9 @@ export const automationPlanInput = workspaceInput
     name: z.string().trim().min(1).max(80),
     profile: z.enum([AUTOMATION_PROFILE.REPORTER, AUTOMATION_PROFILE.READER]),
     reporterId: idSchema.nullable(),
-    expiresInDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+    expiresInDays: z
+      .union([z.literal(7), z.literal(30), z.literal(90)])
+      .nullable(),
   })
   .strict()
   .refine(
@@ -45,6 +48,15 @@ export const automationPlanInput = workspaceInput
       message:
         "A Reporter needs a stable reporter ID; a Reader must not have one",
       path: ["reporterId"],
+    },
+  )
+  .refine(
+    (value) =>
+      value.expiresInDays !== null ||
+      value.profile === AUTOMATION_PROFILE.READER,
+    {
+      message: "Only a Reader credential can have no expiry",
+      path: ["expiresInDays"],
     },
   );
 export const automationIssueInput = workspaceInput
@@ -72,7 +84,7 @@ export type AutomationCredential = {
   reporterId: string | null;
   owner: string;
   createdAt: string;
-  expiresAt: string;
+  expiresAt: string | null;
   revokedAt: string | null;
 };
 export type IssuedAutomationCredential = {

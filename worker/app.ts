@@ -13,6 +13,7 @@ import { DomainError, errorResponse } from "./errors";
 import { WorkspaceService } from "./service";
 import type { Env, PrincipalResolver } from "./types";
 import { runGitHubJobs, runGitHubScheduled } from "./github-runner";
+import { runHookCoverageScheduled } from "./hook-coverage-runner";
 import { secureResponse } from "../shared/security";
 import { workspaceInput } from "../shared/domain";
 import {
@@ -110,16 +111,21 @@ export function createApplication(
 ) {
   return {
     async scheduled(_controller: ScheduledController, env: Env) {
-      const [cleanup, collection] = await Promise.allSettled([
+      const [cleanup, collection, hooks] = await Promise.allSettled([
         reapSecretInputs(env),
         runGitHubScheduled(env),
+        runHookCoverageScheduled(env),
       ]);
       if (cleanup.status === "rejected")
         emitDiagnostic({
           event: "hq.secrets.cleanup.interrupted",
           expiredInputMayRemain: true,
         });
-      if (cleanup.status === "rejected" || collection.status === "rejected") {
+      if (
+        cleanup.status === "rejected" ||
+        collection.status === "rejected" ||
+        hooks.status === "rejected"
+      ) {
         throw new Error(
           "Scheduled maintenance interrupted; inspect structured cleanup and collection diagnostics and durable receipts",
         );

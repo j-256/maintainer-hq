@@ -25,6 +25,7 @@ import { WorkspaceService } from "../worker/service";
 import { createProductionPrincipalResolver } from "../worker/auth";
 import { createApplication } from "../worker/app";
 import { credentialHash } from "../worker/credential-hash";
+import { authorizeHooks } from "../worker/hook-authority";
 import type { Env } from "../worker/types";
 
 const bindings = env as unknown as Env & {
@@ -165,7 +166,8 @@ describe("Reviewed automation credentials", () => {
       owner: "owner",
       revokedAt: null,
     });
-    expect(Date.parse(result.credential.expiresAt) - now).toBe(
+    expect(result.credential.expiresAt).not.toBeNull();
+    expect(Date.parse(result.credential.expiresAt!) - now).toBe(
       7 * AUTOMATION_LIMITS.DAY_MS,
     );
     const row = await bindings.HQ_DB.prepare(
@@ -212,6 +214,7 @@ describe("Reviewed automation credentials", () => {
       { profile: "reader" },
       { reporterId: null },
       { expiresInDays: 365 },
+      { expiresInDays: null },
       { actor: "forged" },
     ])
       await expect(
@@ -329,7 +332,7 @@ describe("Reviewed automation credentials", () => {
       ).first("revoked_at"),
     ).toBeNull();
   });
-  it("bounds pending reviews and active credentials while keeping revoked history visible", async () => {
+  it.each([false, true])("bounds pending reviews and active credentials while keeping revoked history visible (permanent: %s)", async (permanent) => {
     for (let index = 0; index < AUTOMATION_LIMITS.PENDING_PLANS; index++)
       await service.automationCredentialPlan(fields("pending-" + index));
     await expect(
@@ -345,7 +348,7 @@ describe("Reviewed automation credentials", () => {
           "capacity-" + index,
           "synthetic-hash-" + index,
           new Date(now).toISOString(),
-          new Date(now + AUTOMATION_LIMITS.DAY_MS).toISOString(),
+          permanent ? null : new Date(now + AUTOMATION_LIMITS.DAY_MS).toISOString(),
         ),
       ),
     );
@@ -371,6 +374,65 @@ describe("Reviewed automation credentials", () => {
 });
 
 describe("Reporter identity and live permissions", () => {
+  it("keeps a permanent Reader read-only across time, HTTP, MCP, and immediate revocation", async () => {
+    const issued = await issue({
+      ...fields("permanent-reader"),
+      name: "Permanent Reader",
+      profile: "reader",
+      reporterId: null,
+      expiresInDays: null,
+    });
+    expect(issued.credential.expiresAt).toBeNull();
+    expect((await service.automationCredentials(workspace))[0]).toMatchObject({
+      id: "permanent-reader", expiresAt: null, revokedAt: null,
+    });
+    expect((await service.activity(workspace))[0].summary).toContain("no expiry");
+    now += 365 * AUTOMATION_LIMITS.DAY_MS;
+    const actor = await principal(issued.token);
+    expect(actor.expiresAt).toBeUndefined();
+    const reader = as(actor);
+    expect((await reader.snapshot(workspace)).capabilities).toEqual([CAPABILITY.READ]);
+    expect((await reader.workspaceAttention(workspace)).total).toBe(0);
+    expect(await authorizeHooks(reader, workspace.workspaceId)).toBe(1);
+    await expect(reader.snapshot({ workspaceId: "beta" })).rejects.toMatchObject({ status: 404 });
+    for (const capability of Object.values(CAPABILITY).filter((value) => value !== CAPABILITY.READ))
+      await expect(reader.authorize(workspace.workspaceId, capability)).rejects.toMatchObject({ status: 403 });
+    await expect(authorizeHooks(reader, workspace.workspaceId, CAPABILITY.OPERATE)).rejects.toMatchObject({ status: 403 });
+    await expect(reader.automationCredentialPlan(fields("escalate"))).rejects.toMatchObject({ status: 403 });
+
+    const app = createApplication(createProductionPrincipalResolver(fetch, () => now));
+    const headers = { "Content-Type": "application/json", Authorization: "Bearer " + issued.token };
+    const api = await app.fetch(new Request("https://hq.example/api/commands/workspace_attention", {
+      method: "POST", headers, body: JSON.stringify(workspace),
+    }), bindings);
+    expect(api.status).toBe(200);
+    const mcp = await app.fetch(new Request("https://hq.example/mcp", {
+      method: "POST",
+      headers: { ...headers, Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "workspace_attention", arguments: workspace } }),
+    }), bindings);
+    const reply = await mcp.json() as { result: { isError?: boolean; content: { text: string }[] } };
+    expect(reply.result.isError).not.toBe(true);
+    expect(JSON.parse(reply.result.content[0].text).total).toBe(0);
+    for (const [column, value] of [["automation_profile", "reporter"], ["scopes_json", '["read","workspace:admin"]'], ["reporter_id", "reporter"], ["automation_profile", null]])
+      await expect(bindings.HQ_DB.prepare(`UPDATE credentials SET ${column}=? WHERE id='permanent-reader'`).bind(value).run()).rejects.toThrow();
+    await service.automationCredentialRevoke({ ...workspace, credentialId: issued.credential.id });
+    await expect(principal(issued.token)).rejects.toMatchObject({ status: 401 });
+    await expect(reader.workspaceAttention(workspace)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("revokes a permanent Reader when its owner leaves and does not revive it after rejoining", async () => {
+    const issued = await issue({ ...fields("permanent-reader"), profile: "reader", reporterId: null, expiresInDays: null });
+    const reader = as(await principal(issued.token));
+    await service.memberUpdate({ ...workspace, subject: "operator", revision: 1, role: "owner" });
+    await as({ subject: "operator", displayName: "Operator" }).memberRemove({ ...workspace, subject: "owner", revision: 1 });
+    await expect(principal(issued.token)).rejects.toMatchObject({ status: 401 });
+    await expect(reader.snapshot(workspace)).rejects.toMatchObject({ status: 404 });
+    await bindings.HQ_DB.prepare("INSERT INTO members (workspace_id,subject,display_name,role) VALUES ('alpha','owner','Rejoined','owner')").run();
+    await expect(principal(issued.token)).rejects.toMatchObject({ status: 401 });
+    await expect(reader.snapshot(workspace)).rejects.toMatchObject({ status: 403 });
+  });
+
   it("keeps paused and cleared reports bound to their original workspace, owner and reporter", async () => {
     const issued = await issue();
     const reporter = as(await principal(issued.token));

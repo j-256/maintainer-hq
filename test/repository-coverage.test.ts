@@ -22,7 +22,11 @@ const db = runtime.HQ_DB;
 const input = { workspaceId: "alpha", repositoryId: "repo" };
 let now: number;
 let checkState:
-  "passed" | "failed" | "unobserved" | "configuration_changed" | "stale";
+  | "passed"
+  | "failed"
+  | "unobserved"
+  | "configuration_changed"
+  | "stale";
 const time = (offset = 0) => new Date(now + offset).toISOString();
 const metadata = () => ({
   configFingerprint: "sha256:" + "a".repeat(64),
@@ -270,7 +274,7 @@ it("keeps retained evidence deadlines and read budgets unchanged after the check
   const budget = await db
     .prepare("SELECT * FROM operational_coverage_budgets")
     .all();
-  now += COVERAGE_LIMITS.LEASE_MS + COVERAGE_LIMITS.REFRESH_MS;
+  now += COVERAGE_LIMITS.HOOK_FRESH_MS + COVERAGE_LIMITS.LEASE_MS;
   const retained = await service("viewer").repositoryCoverageGet(input);
   expect(retained.evidence).toEqual(checked.evidence);
   expect(retained.generatedAt).toBe(time());
@@ -863,17 +867,21 @@ it("retains the total provider budget across multiple paginated connections", as
     )
     .run();
   await link("hook", "events", "hook-other");
-  vi.mocked(HooksService.prototype.subscriptions).mockResolvedValue({
-    capabilities: ["read"],
-    associations: [],
-    repositoryLinks: [],
-    result: {
-      items: [],
-      nextCursor: "more",
-      disappeared: 0,
-      observedAt: time(),
-    },
-  });
+  vi.mocked(HooksService.prototype.subscriptions).mockImplementation(
+    async (input) => ({
+      capabilities: ["read"],
+      associations: [],
+      repositoryLinks: [],
+      result: {
+        items: [],
+        nextCursor: String(
+          Number((input as { cursor: string | null }).cursor ?? 0) + 1,
+        ),
+        disappeared: 0,
+        observedAt: time(),
+      },
+    }),
+  );
   const result = await service().repositoryCoverage(input);
   const providerCalls =
     vi.mocked(HooksService.prototype.subscriptions).mock.calls.length +
@@ -937,9 +945,7 @@ it("keeps provider errors and disappeared or bounded-out subscriptions unverifie
       .sort(),
   ).toEqual(["limited", "unavailable"]);
   expect((await assessment()).health).toBe("unknown");
-  expect(HooksService.prototype.subscriptions).toHaveBeenCalledTimes(
-    COVERAGE_LIMITS.SUBSCRIPTION_PAGES,
-  );
+  expect(HooksService.prototype.subscriptions).toHaveBeenCalledTimes(2);
 });
 
 it.each([

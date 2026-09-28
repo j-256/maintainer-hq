@@ -1,17 +1,14 @@
-import { HOOK_SETUP_KIND } from "../shared/hook-setup";
 import { z } from "zod";
-import { CAPABILITY, LIMITS, workspaceInput } from "../shared/domain";
+import { CAPABILITY, LIMITS } from "../shared/domain";
 import {
   HOOK_LIMITS,
-  HOOK_RETRY_KIND,
-  HOOK_POLICY_KIND,
   HOOK_RESOLUTION_KIND,
-  hookReceiptSchema,
+  hookResolutionReceiptSchema,
   hookRetryApplyInput,
   hookRetryInput,
-  hookRetryPlanInput,
-  type HookReceipt,
-  type HookReview,
+  hookResolutionPlanInput,
+  type HookResolutionReceipt,
+  type HookResolutionReview,
 } from "../shared/hooks";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import {
@@ -27,7 +24,7 @@ import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
 import { captureResourceActivity, copyActivityContext } from "./resource-links";
 
-const reviewedSchema = hookRetryPlanInput
+const reviewedSchema = hookResolutionPlanInput
   .extend({
     memberRevision: z.number().int().positive(),
     tokenId: z.string().nullable(),
@@ -49,11 +46,11 @@ type PlanRow = {
   applied_at: string | null;
   provider_review_json: string | null;
 };
-type OperationRow = NonNullable<HookReview["operation"]> & {
+type OperationRow = NonNullable<HookResolutionReview["operation"]> & {
   result_json: string;
 };
 
-export class HookRetries {
+export class HookResolutions {
   readonly hooks: HooksService;
   constructor(readonly context: WorkspaceService) {
     this.hooks = new HooksService(context);
@@ -67,7 +64,7 @@ export class HookRetries {
   conflict(): never {
     throw new DomainError(
       "revision_conflict",
-      "This review expired, changed, or lost its original authority. Refresh the delivery and create a new review. Reconcile any existing operation before retrying.",
+      "This review expired, changed, or lost its original authority. Refresh the operational state and create a new review. Reconcile any existing operation before retrying.",
       409,
     );
   }
@@ -78,12 +75,12 @@ export class HookRetries {
         `SELECT p.id,p.workspace_id,p.actor_subject,p.input_json,p.fingerprint,p.created_at,p.expires_at,p.applied_at,h.provider_review_json
        FROM action_plans p JOIN hook_reviews h ON h.plan_id=p.id WHERE p.workspace_id=? AND p.id=? AND p.kind=? AND ${guard.sql}`,
       )
-      .bind(workspaceId, planId, HOOK_RETRY_KIND, ...guard.values)
+      .bind(workspaceId, planId, HOOK_RESOLUTION_KIND, ...guard.values)
       .first<PlanRow>();
     if (!row)
       throw new DomainError(
         "not_found",
-        "Hooks retry review not found or access changed.",
+        "Hooks operational review not found or access changed.",
         404,
       );
     return row;
@@ -96,10 +93,10 @@ export class HookRetries {
       .prepare(
         "SELECT id,status,summary,updated_at AS updatedAt,result_json FROM operations WHERE workspace_id=? AND plan_id=? AND kind=?",
       )
-      .bind(workspaceId, planId, HOOK_RETRY_KIND)
+      .bind(workspaceId, planId, HOOK_RESOLUTION_KIND)
       .first<OperationRow>();
   }
-  async get(input: unknown): Promise<HookReview> {
+  async get(input: unknown): Promise<HookResolutionReview> {
     const { workspaceId, planId } = hookRetryInput.parse(input);
     await authorizeHooks(this.context, workspaceId);
     const row = await this.row(workspaceId, planId);
@@ -107,7 +104,7 @@ export class HookRetries {
     const operation = await this.operation(workspaceId, planId);
     const result = operation
       ? z
-          .object({ receipt: hookReceiptSchema.nullable().optional() })
+          .object({ receipt: hookResolutionReceiptSchema.nullable().optional() })
           .parse(JSON.parse(operation.result_json))
       : null;
     return {
@@ -118,16 +115,15 @@ export class HookRetries {
       actorMatches:
         row.actor_subject === this.context.principal.subject &&
         reviewed.tokenId === (this.context.principal.tokenId ?? null),
-      eventId: reviewed.eventId,
-      sinkName: reviewed.sinkName,
-      generation: reviewed.generation,
-      updatedAt: reviewed.updatedAt,
+      targets: reviewed.targets,
+      reason: reviewed.reason,
+      note: reviewed.note,
       createdAt: row.created_at,
       expiresAt: row.expires_at,
       provider:
         result?.receipt ??
         (row.provider_review_json
-          ? hookReceiptSchema.parse(JSON.parse(row.provider_review_json))
+          ? hookResolutionReceiptSchema.parse(JSON.parse(row.provider_review_json))
           : null),
       operation: operation
         ? {
@@ -138,37 +134,6 @@ export class HookRetries {
           }
         : null,
     };
-  }
-  async history(input: unknown) {
-    const { workspaceId } = workspaceInput.parse(input);
-    await authorizeHooks(this.context, workspaceId);
-    const guard = hookActorGuard(this.context, workspaceId);
-    return (
-      await this.db
-        .prepare(
-          `SELECT o.id,o.kind,o.plan_id AS planId,o.status,o.summary,o.created_at AS createdAt,o.updated_at AS updatedAt
-       FROM operations o WHERE o.workspace_id=? AND o.kind IN (?,?,?,?) AND ${guard.sql}
-       ORDER BY o.created_at DESC,o.id DESC LIMIT ?`,
-        )
-        .bind(
-          workspaceId,
-          HOOK_RETRY_KIND,
-          HOOK_POLICY_KIND,
-          HOOK_SETUP_KIND,
-          HOOK_RESOLUTION_KIND,
-          ...guard.values,
-          HOOK_LIMITS.HISTORY,
-        )
-        .all<{
-          id: string;
-          kind: string;
-          planId: string;
-          status: string;
-          summary: string;
-          createdAt: string;
-          updatedAt: string;
-        }>()
-    ).results;
   }
   private async provider(reviewed: Reviewed): Promise<HookProvider> {
     const provider = await hookProvider(
@@ -185,18 +150,17 @@ export class HookRetries {
     }
     return provider;
   }
-  private checkReceipt(receipt: HookReceipt, reviewed: Reviewed) {
+  private checkReceipt(receipt: HookResolutionReceipt, reviewed: Reviewed) {
     if (
       receipt.planId !== reviewed.reviewId ||
-      receipt.eventId !== reviewed.eventId ||
-      receipt.sinkName !== reviewed.sinkName ||
-      receipt.generation !== reviewed.generation ||
-      receipt.updatedAt !== reviewed.updatedAt
+      JSON.stringify(receipt.targets) !== JSON.stringify(reviewed.targets) ||
+      receipt.reason !== reviewed.reason ||
+      receipt.note !== reviewed.note
     )
       throw new HookProviderError("metadata_invalid");
   }
-  async plan(input: unknown): Promise<HookReview> {
-    const fields = hookRetryPlanInput.parse(input);
+  async plan(input: unknown): Promise<HookResolutionReview> {
+    const fields = hookResolutionPlanInput.parse(input);
     const { workspaceId, connectionId, reviewId } = fields;
     const memberRevision = await authorizeHooks(
       this.context,
@@ -238,7 +202,7 @@ export class HookRetries {
           reviewId,
           workspaceId,
           this.context.principal.subject,
-          HOOK_RETRY_KIND,
+          HOOK_RESOLUTION_KIND,
           serialized,
           fingerprint,
           this.timestamp(),
@@ -249,7 +213,7 @@ export class HookRetries {
           connection.revision,
           workspaceId,
           this.context.principal.subject,
-          HOOK_RETRY_KIND,
+          HOOK_RESOLUTION_KIND,
           this.timestamp(),
           HOOK_LIMITS.PENDING_REVIEWS,
           HOOK_LIMITS.PENDING_REVIEWS,
@@ -263,7 +227,7 @@ export class HookRetries {
           workspaceId,
           this.context.principal.subject,
           fingerprint,
-          HOOK_RETRY_KIND,
+          HOOK_RESOLUTION_KIND,
         ),
     ]);
     const row = await this.row(workspaceId, reviewId).catch(
@@ -283,20 +247,19 @@ export class HookRetries {
     if (Date.parse(row.expires_at) <= this.context.now()) this.conflict();
     const response = await callHookProvider(
       provider,
-      "retry_plan",
+      "resolution_plan",
       workspaceId,
       reviewed.providerActor,
       {
         planId: reviewId,
-        eventId: fields.eventId,
-        sinkName: fields.sinkName,
-        generation: fields.generation,
-        updatedAt: fields.updatedAt,
+        targets: fields.targets,
+        reason: fields.reason,
+        note: fields.note,
       },
     );
     this.checkReceipt(response.result, reviewed);
     if (
-      !response.capabilities.includes("retry") ||
+      !response.capabilities.includes("resolve") ||
       response.result.state !== "review"
     )
       this.conflict();
@@ -353,7 +316,7 @@ export class HookRetries {
     operationId: string,
     status: "succeeded" | "failed" | "indeterminate",
     summary: string,
-    receipt: HookReceipt | null,
+    receipt: HookResolutionReceipt | null,
   ) {
     await this.db.batch([
       this.db
@@ -367,7 +330,7 @@ export class HookRetries {
           this.timestamp(),
           workspaceId,
           operationId,
-          HOOK_RETRY_KIND,
+          HOOK_RESOLUTION_KIND,
         ),
       this.db
         .prepare(
@@ -379,12 +342,12 @@ export class HookRetries {
           workspaceId,
           this.context.principal.subject,
           this.context.principal.displayName,
-          "hook.retry." + status,
+          "hook.resolution." + status,
           status === "succeeded"
-            ? "Hook retry accepted"
+            ? "Hook disposition accepted"
             : status === "failed"
-              ? "Hook retry not accepted"
-              : "Hook retry needs reconciliation",
+              ? "Hook disposition not accepted"
+              : "Hook disposition needs reconciliation",
           summary,
           this.timestamp(),
           workspaceId,
@@ -399,7 +362,7 @@ export class HookRetries {
       ),
     ]);
   }
-  async apply(input: unknown): Promise<HookReview> {
+  async apply(input: unknown): Promise<HookResolutionReview> {
     const { workspaceId, planId, fingerprint } =
       hookRetryApplyInput.parse(input);
     await authorizeHooks(this.context, workspaceId, CAPABILITY.OPERATE);
@@ -413,37 +376,19 @@ export class HookRetries {
       this.conflict();
     const existing = await this.operation(workspaceId, planId);
     if (existing) return this.get({ workspaceId, planId });
-    const reviewedProvider = await this.ready(row, reviewed);
+    await this.ready(row, reviewed);
     if (
       !row.provider_review_json ||
       Date.parse(row.expires_at) <= this.context.now()
     )
       this.conflict();
-    const providerReview = hookReceiptSchema.parse(
+    const providerReview = hookResolutionReceiptSchema.parse(
       JSON.parse(row.provider_review_json),
     );
     this.checkReceipt(providerReview, reviewed);
     if (
       providerReview.state !== "review" ||
       Date.parse(providerReview.expiresAt) <= this.context.now()
-    )
-      this.conflict();
-    const delivery = await callHookProvider(
-      reviewedProvider,
-      "delivery",
-      workspaceId,
-      reviewed.providerActor,
-      {
-        eventId: reviewed.eventId,
-        sinkName: reviewed.sinkName,
-      },
-    );
-    if (
-      delivery.result.eventId !== reviewed.eventId ||
-      delivery.result.sinkName !== reviewed.sinkName ||
-      delivery.result.generation !== reviewed.generation ||
-      delivery.result.updatedAt !== reviewed.updatedAt ||
-      delivery.result.status !== "exhausted"
     )
       this.conflict();
     const guard = hookActorGuard(
@@ -454,9 +399,7 @@ export class HookRetries {
     );
     const operationId = crypto.randomUUID();
     const summary =
-      "Retry requested for " +
-      reviewed.sinkName +
-      ". Provider acceptance has not been confirmed.";
+      "Operational disposition requested. Provider acceptance has not been confirmed.";
     const saved = await this.db.batch([
       this.db
         .prepare(
@@ -471,7 +414,7 @@ export class HookRetries {
           workspaceId,
           planId,
           this.context.principal.subject,
-          HOOK_RETRY_KIND,
+          HOOK_RESOLUTION_KIND,
           summary,
           this.timestamp(),
           this.timestamp(),
@@ -500,8 +443,8 @@ export class HookRetries {
           workspaceId,
           this.context.principal.subject,
           this.context.principal.displayName,
-          "hook.retry.requested",
-          "Hook retry requested",
+          "hook.resolution.requested",
+          "Hook disposition requested",
           summary,
           this.timestamp(),
           operationId,
@@ -512,7 +455,7 @@ export class HookRetries {
         operationId,
         reviewed.connectionId,
         "hook",
-        delivery.result.subscription,
+        null,
       ),
     ]);
     if (!saved[0]!.meta.changes) {
@@ -542,7 +485,7 @@ export class HookRetries {
       submitted = true;
       const response = await callHookProvider(
         provider,
-        "retry_apply",
+        "resolution_apply",
         workspaceId,
         reviewed.providerActor,
         { planId },
@@ -554,9 +497,7 @@ export class HookRetries {
         workspaceId,
         operationId,
         "succeeded",
-        "Hookrelay accepted the retry for " +
-          reviewed.sinkName +
-          ". Queue delivery is a separate outcome.",
+        "Hookrelay recorded the reviewed dispositions. No message was sent and no event was deleted.",
         response.result,
       );
     } catch {
@@ -565,14 +506,14 @@ export class HookRetries {
         operationId,
         submitted ? "indeterminate" : "failed",
         submitted
-          ? "Hookrelay acceptance is uncertain. Reconcile this operation before any new retry."
-          : "Access or connection state changed before submission. No provider retry was sent.",
+          ? "Hookrelay acceptance is uncertain. Reconcile this operation before any new disposition."
+          : "Access or connection state changed before submission. No provider disposition was sent.",
         null,
       );
     }
     return this.get({ workspaceId, planId });
   }
-  async reconcile(input: unknown): Promise<HookReview> {
+  async reconcile(input: unknown): Promise<HookResolutionReview> {
     const { workspaceId, planId } = hookRetryInput.parse(input);
     await authorizeHooks(this.context, workspaceId, CAPABILITY.OPERATE);
     const row = await this.row(workspaceId, planId);
@@ -583,7 +524,7 @@ export class HookRetries {
     const provider = await this.provider(reviewed);
     const response = await callHookProvider(
       provider,
-      "retry_get",
+      "resolution_get",
       workspaceId,
       reviewed.providerActor,
       { planId },
@@ -595,9 +536,7 @@ export class HookRetries {
         workspaceId,
         operation.id,
         "succeeded",
-        "Hookrelay's durable receipt confirms acceptance for " +
-          reviewed.sinkName +
-          ". Queue delivery is a separate outcome.",
+        "Hookrelay's durable receipt confirms the reviewed dispositions.",
         response.result,
       );
     } else if (response.result.state === "expired") {
@@ -605,7 +544,7 @@ export class HookRetries {
         workspaceId,
         operation.id,
         "failed",
-        "Hookrelay confirms this review expired without acceptance. Inspect the delivery before preparing another retry.",
+        "Hookrelay confirms this review expired without acceptance. Inspect the operational state before preparing another disposition.",
         response.result,
       );
     } else {

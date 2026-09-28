@@ -14,6 +14,8 @@ import {
   HOOK_DELIVERY_STATES,
   HOOK_LIMITS,
   type HookReceipt,
+  type HookResolutionReceipt,
+  hookResolutionReceiptSchema,
 } from "../shared/hooks";
 import { WorkspaceService } from "../worker/service";
 import { createApplication } from "../worker/app";
@@ -972,5 +974,90 @@ describe("Hooks browser, CLI, and MCP contract", () => {
     expect(snapshotRpc.result.isError).not.toBe(true);
     expect(JSON.parse(snapshotRpc.result.content[0]!.text)).toEqual(expected);
     expect(applyCalls).toBe(0);
+  });
+});
+
+describe("Hook operational dispositions", () => {
+  const target = { kind: "signal" as const, fingerprint: "f".repeat(64), lastSeenAt: timestamp, occurrences: 3 };
+  const input = () => ({ ...connection, connectionRevision: 1, reviewId: crypto.randomUUID(), targets: [target], reason: "accepted-loss" as const, note: "Historical delivery was not verified" });
+  let resolutions: Map<string, HookResolutionReceipt>;
+  let canResolve: boolean;
+
+  beforeEach(async () => {
+    await save();
+    resolutions = new Map();
+    canResolve = true;
+    const previous = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url, init) => {
+      const body = JSON.parse(String(init.body));
+      if (!body.command.startsWith("resolution_") && body.command !== "signals") return previous(url, init);
+      let result: unknown;
+      if (body.command === "signals") {
+        result = { items: [{ ...rateLimitSignal, ...target, kind: undefined, source: "github", subscription: "synthetic", eventId: null, sinkName: null, resolutionReason: null }], nextCursor: null, observedAt: timestamp };
+      } else {
+        if (!canResolve && body.command !== "resolution_get") return Response.json({ error: { code: "forbidden" } }, { status: 403 });
+        const id = body.input.planId;
+        if (body.command === "resolution_plan") {
+          const { targets, reason, note } = body.input;
+          if (!resolutions.has(id)) resolutions.set(id, { planId: id, targets, reason, note, createdAt: timestamp, expiresAt: new Date(Date.now() + 300000).toISOString(), state: "review", acceptedAt: null });
+        } else if (body.command === "resolution_apply") {
+          const operation = await bindings.HQ_DB.prepare("SELECT status FROM operations WHERE plan_id=?").bind(id).first<{ status: string }>();
+          expect(operation?.status).toBe("running");
+          applyCalls += 1;
+          if (applyMode === "before") throw new Error(PRIVATE);
+          const receipt = resolutions.get(id)!;
+          receipt.state = "accepted";
+          receipt.acceptedAt = new Date().toISOString();
+          if (applyMode === "after") throw new Error(PRIVATE);
+        }
+        result = resolutions.get(id);
+      }
+      return Response.json({ version: 1, capabilities: canResolve ? ["read", "resolve"] : ["read"], result });
+    });
+  });
+
+  it("reads bounded signals for readers and binds reviewed dispositions to actor and connection authority", async () => {
+    expect((await as("viewer").hooksSignals(connection)).result.items[0]?.fingerprint).toBe(target.fingerprint);
+    for (const service of [as("viewer"), as("other"), as("owner", { reporterId: "reporter" })]) {
+      await expect(service.hooksResolutionPlan(input())).rejects.toBeDefined();
+    }
+    const plan = await as().hooksResolutionPlan(input());
+    const apply = { ...workspace, planId: plan.id, fingerprint: plan.fingerprint };
+    await expect(as("operator").hooksResolutionApply(apply)).rejects.toMatchObject({ status: 409 });
+    const done = await as().hooksResolutionApply(apply);
+    expect(done.operation?.status).toBe("succeeded");
+    expect(done.provider?.reason).toBe("accepted-loss");
+    expect((await as().hooksResolutionApply(apply)).provider).toEqual(done.provider);
+    expect(applyCalls).toBe(1);
+    expect(JSON.stringify(done)).not.toContain(PRIVATE);
+    expect(await as().hooksHistory(workspace)).toMatchObject([{ kind: "hookrelay.operations.resolve" }]);
+  });
+
+  it("accepts acknowledged delivery metadata while preserving exhausted state", async () => {
+    fetcher.mockResolvedValueOnce(Response.json({ version: 1, capabilities: ["read"], result: { ...delivery, resolvedAt: timestamp, resolutionReason: "obsolete" } }));
+    expect((await as("viewer").hooksDelivery({ ...connection, ...identity })).result).toMatchObject({ status: "exhausted", resolvedAt: timestamp, resolutionReason: "obsolete" });
+  });
+
+  it("preserves indeterminate outcomes and reconciles accepted provider receipts without applying again", async () => {
+    const plan = await as().hooksResolutionPlan(input());
+    applyMode = "after";
+    const result = await as().hooksResolutionApply({ ...workspace, planId: plan.id, fingerprint: plan.fingerprint });
+    expect(result.operation?.status).toBe("indeterminate");
+    const reconciled = await as().hooksResolutionReconcile({ ...workspace, planId: plan.id });
+    expect(reconciled.operation?.status).toBe("succeeded");
+    expect(applyCalls).toBe(1);
+  });
+
+  it("rejects missing provider grants, stale authority, changed review inputs, and malformed receipts", async () => {
+    canResolve = false;
+    await expect(as().hooksResolutionPlan(input())).rejects.toMatchObject({ code: "hooks_provider_forbidden" });
+    canResolve = true;
+    const fields = input();
+    const plan = await as().hooksResolutionPlan(fields);
+    await expect(as().hooksResolutionPlan({ ...fields, note: "different disposition" })).rejects.toMatchObject({ status: 409 });
+    providerRevision += 1;
+    await expect(as().hooksResolutionApply({ ...workspace, planId: plan.id, fingerprint: plan.fingerprint })).rejects.toMatchObject({ status: 409 });
+    expect(applyCalls).toBe(0);
+    expect(hookResolutionReceiptSchema.safeParse({ ...plan.provider, state: "accepted", acceptedAt: null }).success).toBe(false);
   });
 });

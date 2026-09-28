@@ -16,6 +16,28 @@ const context = z.object({
 const diagnosticSchema = z.discriminatedUnion("event", [
   z
     .object({
+      event: z.literal("hq.hooks.coverage.source"),
+      runId: z.uuid(),
+      workspaceId: identity,
+      sourceId: identity,
+      state: z.enum(["complete", "limited", "unavailable", "changed"]),
+      stored: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      event: z.literal("hq.hooks.coverage.completed"),
+      runId: z.uuid(),
+      processed: z.number().int().nonnegative(),
+      stored: z.number().int().nonnegative(),
+      requests: z.number().int().nonnegative(),
+      limited: z.boolean(),
+      failed: z.boolean(),
+      elapsedMs: elapsed,
+    })
+    .strict(),
+  z
+    .object({
       event: z.literal("hq.hooks.setup"),
       action: z.enum(["apply", "reconcile"]),
       reference: z.uuid(),
@@ -133,7 +155,8 @@ export function emitDiagnostic(event: Diagnostic) {
     const value = { schemaVersion: 1, ...parsed.data };
     if (
       (value.event === "hq.request.failed" && value.status >= 500) ||
-      (value.event === "hq.github.batch.completed" && value.failed)
+      (value.event === "hq.github.batch.completed" && value.failed) ||
+      (value.event === "hq.hooks.coverage.completed" && value.failed)
     )
       console.error(value);
     else if (
@@ -148,6 +171,9 @@ export function emitDiagnostic(event: Diagnostic) {
       value.event === "hq.push.interrupted" ||
       value.event === "hq.secrets.cleanup.interrupted" ||
       value.event === "hq.request.failed" ||
+      (value.event === "hq.hooks.coverage.completed" && value.limited) ||
+      (value.event === "hq.hooks.coverage.source" &&
+        value.state !== "complete") ||
       (value.event === "hq.github.repository.completed" &&
         (value.status !== "succeeded" ||
           !value.receiptRecorded ||

@@ -9,6 +9,7 @@ import {
   hookDeliveriesInput,
   hookDeliveryInput,
   hookSubscriptionsInput,
+  hookSignalsInput,
   type HookAssociation,
   type HookConnection,
   type HookConnectionFields,
@@ -292,6 +293,15 @@ export class HooksService {
     ).forResources(workspaceId, "hook", connectionId, names);
     await this.unchanged(workspaceId, row);
     return { ...response, associations: associations.results, repositoryLinks };
+  }
+  async signals(input: unknown) {
+    const { workspaceId, connectionId, ...filters } = hookSignalsInput.parse(input);
+    await authorizeHooks(this.context, workspaceId);
+    const { row, provider } = await this.active(workspaceId, connectionId);
+    const response = await callHookProvider(provider, "signals", workspaceId, await hookProviderActor(this.context.principal.subject), filters);
+    await authorizeHooks(this.context, workspaceId);
+    await this.unchanged(workspaceId, row);
+    return response;
   }
   async deliveries(input: unknown) {
     const { workspaceId, connectionId, ...filters } =

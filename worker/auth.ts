@@ -1,3 +1,4 @@
+import { credentialIsCurrentSql } from "./credential-expiry";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import { z } from "zod";
 import { CAPABILITY, type Principal } from "../shared/domain";
@@ -138,7 +139,7 @@ export function createProductionPrincipalResolver(
         throw new DomainError("unauthorized", "Sign in to continue", 401);
       const hash = await credentialHash(authorization.slice(7));
       const row = await env.HQ_DB.prepare(
-        "SELECT c.id, c.workspace_id, c.owner_subject, c.scopes_json, c.source_id, c.reporter_id, c.automation_profile, c.name, c.expires_at, m.display_name FROM credentials c JOIN members m ON m.workspace_id = c.workspace_id AND m.subject = c.owner_subject WHERE c.token_hash = ? AND c.revoked_at IS NULL AND c.expires_at > ?",
+        `SELECT c.id, c.workspace_id, c.owner_subject, c.scopes_json, c.source_id, c.reporter_id, c.automation_profile, c.name, c.expires_at, m.display_name FROM credentials c JOIN members m ON m.workspace_id = c.workspace_id AND m.subject = c.owner_subject WHERE c.token_hash = ? AND c.revoked_at IS NULL AND ${credentialIsCurrentSql("?")}`,
       )
         .bind(hash, new Date(now()).toISOString())
         .first<{
@@ -151,7 +152,7 @@ export function createProductionPrincipalResolver(
           automation_profile: string | null;
           name: string;
           display_name: string;
-          expires_at: string;
+          expires_at: string | null;
         }>();
       if (!row)
         throw new DomainError(
@@ -171,7 +172,8 @@ export function createProductionPrincipalResolver(
       }
       return {
         subject: row.owner_subject,
-        expiresAt: Date.parse(row.expires_at),
+        expiresAt:
+          row.expires_at === null ? undefined : Date.parse(row.expires_at),
         displayName: row.automation_profile
           ? row.name + " (automation)"
           : row.display_name,
