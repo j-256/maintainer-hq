@@ -366,7 +366,7 @@ function Deliveries({
                     </td>
                     <td>{item.sinkName}</td>
                     <td>
-                      <HookStatus status={item.status} />
+                      <HookStatus status={item.status} resolvedAt={item.resolvedAt} />
                     </td>
                     <td>
                       <HookTime value={item.updatedAt} />

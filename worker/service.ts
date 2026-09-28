@@ -56,6 +56,7 @@ import { ActivityReader } from "./activity";
 import { activityFeedInput, goalActivityInput } from "../shared/activity";
 import { PreferenceService } from "./preferences";
 import { HooksService } from "./hooks";
+import { HookResolutions } from "./hook-resolutions";
 import { ResourceLinksService } from "./resource-links";
 import { repositoryContext } from "./repository-context";
 import { RepositoryCoverageService } from "./repository-coverage";
@@ -377,6 +378,11 @@ export class WorkspaceService {
   hooksSnapshot(input: unknown) {
     return new HooksService(this).snapshot(input);
   }
+  hooksSignals(input: unknown) { return new HooksService(this).signals(input); }
+  hooksResolutionPlan(input: unknown) { return new HookResolutions(this).plan(input); }
+  hooksResolutionApply(input: unknown) { return new HookResolutions(this).apply(input); }
+  hooksResolutionGet(input: unknown) { return new HookResolutions(this).get(input); }
+  hooksResolutionReconcile(input: unknown) { return new HookResolutions(this).reconcile(input); }
   hooksSubscriptions(input: unknown) {
     return new HooksService(this).subscriptions(input);
   }

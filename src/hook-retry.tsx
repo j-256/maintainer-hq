@@ -28,6 +28,7 @@ import {
 import {
   HookError,
   HookStatus,
+  HOOK_RESOLUTION_LABELS,
   HookTime,
   HOOK_REQUEST_TIMEOUT_MS,
   restoreHookFocus,
@@ -137,7 +138,7 @@ export function HookDeliveryDetail({
         {data ? (
           <>
             <div>
-              <HookStatus status={data.status} />
+              <HookStatus status={data.status} resolvedAt={data.resolvedAt} />
             </div>
             <dl className="hook-detail-grid">
               <div>
@@ -176,6 +177,12 @@ export function HookDeliveryDetail({
                   <dd>
                     <HookTime value={data.deliveredAt} />
                   </dd>
+                </div>
+              ) : null}
+              {data.resolvedAt ? (
+                <div>
+                  <dt>Recorded disposition</dt>
+                  <dd>{data.resolutionReason ? HOOK_RESOLUTION_LABELS[data.resolutionReason] : "Acknowledged"} at <HookTime value={data.resolvedAt} />. Delivery was not verified.</dd>
                 </div>
               ) : null}
               {data.decisionReason ? (

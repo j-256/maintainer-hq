@@ -21,6 +21,11 @@ export const HOOK_STATUS_LABELS: Record<HookDelivery["status"], string> = {
   filtered: "Filtered",
   exhausted: "Needs attention",
 };
+export const HOOK_RESOLUTION_LABELS = Object.freeze({
+  recovered: "Condition recovered",
+  obsolete: "No longer needed",
+  "accepted-loss": "Historical loss acknowledged",
+});
 const HOOK_STATUS_TONES: Record<HookDelivery["status"], StatusTone> = {
   pending: "info",
   queued: "info",
@@ -30,10 +35,10 @@ const HOOK_STATUS_TONES: Record<HookDelivery["status"], StatusTone> = {
   filtered: "neutral",
   exhausted: "danger",
 };
-export function HookStatus({ status }: { status: HookDelivery["status"] }) {
+export function HookStatus({ status, resolvedAt }: Pick<HookDelivery, "status" | "resolvedAt">) {
   return (
-    <StatusBadge tone={HOOK_STATUS_TONES[status]} data-hook-status={status}>
-      {HOOK_STATUS_LABELS[status]}
+    <StatusBadge tone={resolvedAt ? "neutral" : HOOK_STATUS_TONES[status]} data-hook-status={status}>
+      {resolvedAt ? "Acknowledged failure" : HOOK_STATUS_LABELS[status]}
     </StatusBadge>
   );
 }

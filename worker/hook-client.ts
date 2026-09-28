@@ -126,7 +126,7 @@ export async function callHookProvider<K extends HookCommand>(
   workspaceId: string,
   actorId: string,
   input: Record<string, unknown> = {},
-): Promise<{ result: HookResult<K>; capabilities: ("read" | "retry")[] }> {
+): Promise<{ result: HookResult<K>; capabilities: ("read" | "retry" | "resolve")[] }> {
   const controller = new AbortController();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -212,9 +212,9 @@ export async function callHookProvider<K extends HookCommand>(
           .object({
             version: z.number().int(),
             capabilities: z
-              .array(z.enum(["read", "retry"]))
+              .array(z.enum(["read", "retry", "resolve"]))
               .min(1)
-              .max(2),
+              .max(3),
             result: z.unknown(),
           })
           .strict()
