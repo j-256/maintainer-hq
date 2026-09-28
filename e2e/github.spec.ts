@@ -14,6 +14,7 @@ import {
 import type { GitHubSource, GitHubRefresh } from "../shared/github";
 import { GITHUB_CHECK_KEYS } from "../shared/github-evidence";
 import { mockWorkspaceView } from "./workspace-fixture";
+import { expectationHref } from "../shared/expectation-resolution";
 
 const workspaceId = "development";
 async function api<T>(
@@ -424,6 +425,175 @@ test("synthetic refresh receipts expose incomplete coverage, cancellation, and r
     page.getByRole("region", { name: "Observed evidence" }),
   ).toContainText("Coverage incomplete");
 });
+
+test("repository scope hides unchecked archives and preserves selected archives until explicitly removed", async ({
+  page,
+  request,
+}) => {
+  const active = await repository(request);
+  const archived: Repository[] = [];
+  for (let index = 0; index < 2; index++) {
+    const created = await repository(request);
+    const { fullName, description, projectId, classification, expectations } =
+      created;
+    archived.push(
+      await api<Repository>(request, "repository_update", {
+        workspaceId,
+        repositoryId: created.id,
+        revision: created.revision,
+        repository: {
+          fullName,
+          description,
+          projectId,
+          classification,
+          expectations,
+          lifecycle: "archived",
+        },
+      }),
+    );
+  }
+  const name = "Archive scope " + crypto.randomUUID();
+  const source = await api<GitHubSource>(request, "github_source_enroll", {
+    workspaceId,
+    sourceId: crypto.randomUUID(),
+    source: {
+      ...fields(active.id, name),
+      repositoryIds: [active.id, archived[0].id],
+    },
+  });
+  await page.goto("/settings/github?view=connections");
+  await page
+    .getByRole("article", { name, exact: true })
+    .getByRole("button", { name: "Edit GitHub settings" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  const include = dialog.getByRole("checkbox", {
+    name: "Include archived repositories",
+  });
+  const selected = dialog.getByRole("checkbox", {
+    name: archived[0].fullName + " (archived in HQ)",
+    exact: true,
+  });
+  const unselected = dialog.getByRole("checkbox", {
+    name: archived[1].fullName + " (archived in HQ)",
+    exact: true,
+  });
+  await expect(include).not.toBeChecked();
+  await expect(selected).toBeChecked();
+  await expect(unselected).toHaveCount(0);
+  await include.focus();
+  await page.keyboard.press("Space");
+  await expect(unselected).not.toBeChecked();
+  await dialog
+    .getByLabel("Find GitHub repositories")
+    .fill(archived[1].fullName);
+  await expect(unselected).toBeVisible();
+  await include.uncheck();
+  await expect(unselected).toHaveCount(0);
+  await dialog.getByLabel("Find GitHub repositories").fill("");
+  await selected.uncheck();
+  await expect(selected).not.toBeChecked();
+  await expect(selected).toBeFocused();
+  await expect(
+    dialog.getByRole("checkbox", { name: active.fullName, exact: true }),
+  ).toBeChecked();
+  await dialog
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  const snapshot = await api<Snapshot>(request, "workspace_snapshot", {
+    workspaceId,
+  });
+  expect(
+    snapshot.connections.find((item) => item.id === source.id)?.repositoryIds,
+  ).toEqual([active.id]);
+  expect(
+    snapshot.repositories.filter((item) =>
+      archived.some((repo) => repo.id === item.id),
+    ),
+  ).toHaveLength(2);
+  await page
+    .getByRole("article", { name, exact: true })
+    .getByRole("button", { name: "Edit GitHub settings" })
+    .click();
+  await expect(selected).toHaveCount(0);
+});
+
+for (const theme of ["light", "dark"])
+  for (const width of [390, 1280])
+    test(`scanner requirements support keyboard, save and cancel in ${theme} at ${width}`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("hq.theme.v1", value),
+        theme,
+      );
+      const repo = await repository(request);
+      await page.goto(expectationHref(workspaceId, repo.id));
+      const dialog = page.getByRole("dialog");
+      const choice = dialog.getByRole("combobox", {
+        name: "Code scanning",
+        exact: true,
+      });
+      await expect(choice).toHaveText("Required");
+      await choice.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("listbox")).toBeVisible();
+      await page.keyboard.press("End");
+      await expect(
+        page.getByRole("option", { name: "Not required", exact: true }),
+      ).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(choice).toHaveText("Not required");
+      await choice.scrollIntoViewIfNeeded();
+      expect(
+        (await new AxeBuilder({ page }).include('[role="dialog"]').analyze())
+          .violations,
+      ).toEqual([]);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: test
+          .info()
+          .outputPath("scanner-requirements-" + theme + "-" + width + ".png"),
+      });
+      await dialog
+        .getByRole("button", { name: "Save changes", exact: true })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      const saved = await api<Repository>(request, "repository_get", {
+        workspaceId,
+        repositoryId: repo.id,
+      });
+      expect(saved.expectations.githubSecurity).toEqual({
+        dependabot: "required",
+        codeScanning: "not_required",
+        secretScanning: "required",
+      });
+      await page.goto(expectationHref(workspaceId, repo.id));
+      await expect(choice).toHaveText("Not required");
+      await choice.click();
+      await page.getByRole("option", { name: "Required", exact: true }).click();
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "Discard changes", exact: true })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      expect(
+        (
+          await api<Repository>(request, "repository_get", {
+            workspaceId,
+            repositoryId: repo.id,
+          })
+        ).expectations.githubSecurity,
+      ).toEqual(saved.expectations.githubSecurity);
+    });
 
 test("GitHub settings remain accessible on mobile in both themes and explain viewer limits", async ({
   page,

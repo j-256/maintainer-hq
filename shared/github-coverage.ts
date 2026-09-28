@@ -12,6 +12,15 @@ import {
   githubManagementLinks,
   type GitHubManagementLink,
 } from "./github-settings";
+import {
+  DEFAULT_GITHUB_SECURITY,
+  githubCheckRequired,
+  type GitHubSecurityRequirements,
+} from "./github-requirements";
+import {
+  githubRemediation,
+  type GitHubRemediation,
+} from "./github-remediation";
 
 export const GITHUB_COVERAGE_LIMITS = Object.freeze({
   REPOSITORIES: 25,
@@ -35,6 +44,7 @@ export const githubCoverageInput = workspaceInput
 
 export const COVERAGE_LABELS = Object.freeze({
   current: "Coverage current",
+  requirements_met: "Required checks read",
   unavailable: "Access or feature gaps",
   incomplete: "Evidence incomplete",
   error: "Collection error",
@@ -58,11 +68,14 @@ export const COVERAGE_PRIORITY: readonly GitHubCoverageState[] = [
   "awaiting",
   "disabled",
   "not_collected",
+  "requirements_met",
   "current",
 ];
 export const COVERAGE_GUIDANCE: Record<GitHubCoverageState, string> =
   Object.freeze({
     current: "Open the repository to review CI results and security findings.",
+    requirements_met:
+      "Required checks were read. Other scanners are explicitly not required; their unread results remain visible and do not establish a clean scan.",
     unavailable:
       "Check repository access, the credential's read permissions and feature availability. A denied read does not identify which is missing.",
     incomplete:
@@ -85,7 +98,10 @@ export const COVERAGE_GUIDANCE: Record<GitHubCoverageState, string> =
       "Choose a GitHub connection only if this repository should be collected from GitHub.",
   });
 
-export type GitHubCoverageCheck = Pick<GitHubCheck, "key" | "state" | "count">;
+export type GitHubCoverageCheck = Pick<
+  GitHubCheck,
+  "key" | "state" | "count"
+> & { required: boolean };
 export type GitHubCoverageAttempt = {
   refreshId: string;
   sourceRevision: number;
@@ -127,6 +143,8 @@ export type GitHubCoverageRepository = {
   state: GitHubCoverageState;
   sources: GitHubCoverageSource[];
   managementLinks: GitHubManagementLink[];
+  securityRequirements: GitHubSecurityRequirements;
+  remediation: GitHubRemediation[];
 };
 export type GitHubCoverage = {
   generatedAt: string;
@@ -139,19 +157,28 @@ export function isGitHubSource(source: Connection): source is GitHubSource {
 }
 
 function checkCoverage(checks: GitHubCoverageCheck[]): GitHubCoverageState {
-  if (checks.some((check) => check.state === "error")) return "error";
-  if (checks.some((check) => check.state === "rate_limited"))
+  const required = checks.filter((check) => check.required);
+  if (required.some((check) => check.state === "error")) return "error";
+  if (required.some((check) => check.state === "rate_limited"))
     return "rate_limited";
-  if (checks.some((check) => check.state === "limited")) return "limited";
-  if (checks.some((check) => check.state === "unavailable"))
+  if (required.some((check) => check.state === "limited")) return "limited";
+  if (required.some((check) => check.state === "unavailable"))
     return "unavailable";
+  if (!required.every((check) => check.state === "observed"))
+    return "incomplete";
   return checks.every((check) => check.state === "observed")
     ? "current"
-    : "incomplete";
+    : "requirements_met";
+}
+
+export function githubCoverageSatisfied(state: GitHubCoverageState) {
+  return state === "current" || state === "requirements_met";
 }
 
 export function githubCoverageRepositories(
-  repositories: GitHubCoverageRepository["repository"][],
+  repositories: (GitHubCoverageRepository["repository"] & {
+    expectations?: Pick<Repository["expectations"], "githubSecurity">;
+  })[],
   connections: Connection[],
   observations: Observation[],
   now: number,
@@ -180,6 +207,8 @@ export function githubCoverageRepositories(
     }
   }
   return repositories.map((repository) => {
+    const requirements =
+      repository.expectations?.githubSecurity ?? DEFAULT_GITHUB_SECURITY;
     const sources = (scope.get(repository.id) ?? []).map(
       (source): GitHubCoverageSource => {
         const observation = evidence.get(
@@ -193,6 +222,7 @@ export function githubCoverageRepositories(
           );
           return {
             key,
+            required: githubCheckRequired(key, requirements),
             state: check?.state ?? "unobserved",
             ...(check?.count !== undefined ? { count: check.count } : {}),
           };
@@ -249,10 +279,19 @@ export function githubCoverageRepositories(
       },
       sources,
       state,
+      securityRequirements: requirements,
+      remediation: githubRemediation(
+        sources.flatMap((source) =>
+          source.evidence?.identityMatches ? source.evidence.checks : [],
+        ),
+        requirements,
+      ),
       managementLinks: githubManagementLinks(
         repository.fullName,
         sources.flatMap((source) =>
-          source.evidence?.identityMatches ? source.evidence.checks : [],
+          source.evidence?.identityMatches
+            ? source.evidence.checks.filter((check) => check.required)
+            : [],
         ),
       ),
     };

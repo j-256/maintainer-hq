@@ -6,6 +6,11 @@ import {
 import { StatusBadge, type StatusTone } from "./components/ui/status";
 import { githubManagementLinks } from "../shared/github-settings";
 import { GitHubGapActions } from "./github-gap-actions";
+import { githubRemediation } from "../shared/github-remediation";
+import {
+  githubCheckRequired,
+  type GitHubSecurityRequirements,
+} from "../shared/github-requirements";
 
 const CHECK_TONES: Record<GitHubCheck["state"], StatusTone> = {
   observed: "info",
@@ -19,9 +24,11 @@ const CHECK_TONES: Record<GitHubCheck["state"], StatusTone> = {
 export function GitHubEvidenceList({
   evidence,
   fullName,
+  requirements,
 }: {
   evidence: GitHubEvidence;
   fullName: string;
+  requirements?: GitHubSecurityRequirements;
 }) {
   return (
     <div className="github-evidence">
@@ -36,6 +43,9 @@ export function GitHubEvidenceList({
           <div key={check.key}>
             <dt>
               {GITHUB_CHECK_LABELS[check.key]}{" "}
+              {!githubCheckRequired(check.key, requirements) ? (
+                <span>Not required - </span>
+              ) : null}
               <StatusBadge tone={CHECK_TONES[check.state]}>
                 {check.state.replaceAll("_", " ")}
               </StatusBadge>
@@ -53,7 +63,13 @@ export function GitHubEvidenceList({
         ))}
       </dl>
       <GitHubGapActions
-        links={githubManagementLinks(fullName, evidence.checks)}
+        links={githubManagementLinks(
+          fullName,
+          evidence.checks.filter((check) =>
+            githubCheckRequired(check.key, requirements),
+          ),
+        )}
+        remediation={githubRemediation(evidence.checks, requirements)}
       />
     </div>
   );

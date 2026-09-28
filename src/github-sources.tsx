@@ -49,7 +49,11 @@ import { GitHubEditor } from "./github-editor";
 import { GitHubEvidenceList } from "./github-evidence";
 import { useSourceTime } from "./date-time";
 import { GitHubCoverageView } from "./github-coverage";
-import { githubCoverageHref } from "../shared/github-coverage";
+import {
+  githubCoverageHref,
+  githubCoverageRepositories,
+  githubCoverageSatisfied,
+} from "../shared/github-coverage";
 import { SOURCE_REQUEST_TIMEOUT_MS } from "./source-editor";
 import "./sources.css";
 import "./github.css";
@@ -58,26 +62,25 @@ function evidenceLabel(source: GitHubSource, snapshot: Snapshot) {
   if (!source.enabled) return "Collection disabled";
   if (!source.credentialConfigured || !source.github.configurationValid)
     return "Not configured";
-  const evidence = snapshot.observations.filter(
-    (item) =>
-      item.sourceId === source.id &&
-      source.repositoryIds.includes(item.resourceId),
+  const rows = githubCoverageRepositories(
+    snapshot.repositories.filter((repository) =>
+      source.repositoryIds.includes(repository.id),
+    ),
+    [source],
+    snapshot.observations,
+    Date.now(),
   );
-  if (!evidence.length) return "Awaiting first refresh";
-  const fresh = evidence.filter(
-    (item) => Date.parse(item.expiresAt) > Date.now(),
-  );
-  if (!fresh.length) return "Evidence stale";
+  if (!rows.length || rows.every((row) => row.state === "awaiting"))
+    return "Awaiting first refresh";
+  if (rows.every((row) => row.state === "stale")) return "Evidence stale";
   if (
-    fresh.length < source.repositoryIds.length ||
-    fresh.some(
-      (item) =>
-        !item.details.github ||
-        item.details.github.checks.some((check) => check.state !== "observed"),
-    )
+    rows.length !== source.repositoryIds.length ||
+    rows.some((row) => !githubCoverageSatisfied(row.state))
   )
     return "Incomplete evidence";
-  return "Evidence current";
+  return rows.some((row) => row.state === "requirements_met")
+    ? "Required checks read"
+    : "Evidence current";
 }
 
 function GitHubSourceCard({
@@ -607,6 +610,14 @@ export function GitHubRefreshDialog({
                       ) : null}
                       {item.evidence ? (
                         <GitHubEvidenceList
+                          requirements={
+                            snapshot.repositories.find(
+                              (repository) =>
+                                repository.id === item.repositoryId &&
+                                repository.fullName.toLowerCase() ===
+                                  item.fullName.toLowerCase(),
+                            )?.expectations.githubSecurity
+                          }
                           evidence={item.evidence}
                           fullName={item.fullName}
                         />

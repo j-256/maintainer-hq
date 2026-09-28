@@ -6,7 +6,9 @@ import {
   COVERAGE_LABELS,
   githubCoverageHref,
   githubCoverageRepositories,
+  githubCoverageSatisfied,
 } from "./github-coverage";
+import { requiredGitHubFindings } from "./github-requirements";
 import { GITHUB_CHECK_LABELS, GITHUB_LIMITS } from "./github-evidence";
 import { coverageAssessment } from "./coverage-evidence";
 
@@ -189,14 +191,19 @@ export function workspaceAttention(
       repository.expectations.ci === "required" ||
       repository.expectations.security === "required" ||
       repository.expectations.visibility !== "any";
-    if (row.state !== "current" && (row.sources.length || required)) {
-      const gaps = row.sources.filter((source) => source.state !== "current");
+    if (
+      !githubCoverageSatisfied(row.state) &&
+      (row.sources.length || required)
+    ) {
+      const gaps = row.sources.filter(
+        (source) => !githubCoverageSatisfied(source.state),
+      );
       const unread = [
         ...new Set(
           gaps.flatMap(
             (source) =>
               source.evidence?.checks
-                .filter((check) => check.state !== "observed")
+                .filter((check) => check.required && check.state !== "observed")
                 .map((check) => GITHUB_CHECK_LABELS[check.key]) ?? [],
           ),
         ),
@@ -305,8 +312,13 @@ export function workspaceAttention(
         });
       if (
         repository.expectations.security === "required" &&
-        evidence.openFindings === undefined &&
-        source.state === "current"
+        (evidence.github && repository.expectations.githubSecurity
+          ? requiredGitHubFindings(
+              evidence.github,
+              repository.expectations.githubSecurity,
+            )
+          : evidence.openFindings) === undefined &&
+        githubCoverageSatisfied(source.state)
       )
         items.push({
           ...observed,
@@ -322,7 +334,7 @@ export function workspaceAttention(
       if (
         repository.expectations.visibility !== "any" &&
         evidence.visibility === undefined &&
-        source.state === "current"
+        githubCoverageSatisfied(source.state)
       )
         items.push({
           ...observed,

@@ -39,6 +39,7 @@ import { githubCollectionOutcome } from "../shared/github-refresh-summary";
 import { commands, commandAnnotations } from "../shared/commands";
 import { GITHUB_COVERAGE_LIMITS } from "../shared/github-coverage";
 import { GITHUB_CHECK_KEYS } from "../shared/github-evidence";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -1782,6 +1783,69 @@ describe("Bounded GitHub coverage reads", () => {
     ).toBe(true);
   });
 
+  it("reads saved scanner requirements without rewriting collected evidence or receipts", async () => {
+    await service.githubRefresh(refresh());
+    await run(
+      fixture((url) =>
+        url.pathname.endsWith("/code-scanning/alerts")
+          ? new Response("private-denial", { status: 403 })
+          : undefined,
+      ),
+    );
+    const input = { workspaceId: WORKSPACE, repositoryIds: [repositoryId] };
+    expect((await service.githubCoverage(input)).repositories[0].state).toBe(
+      "unavailable",
+    );
+    const before = await service.snapshot({ workspaceId: WORKSPACE });
+    const receipt = await read();
+    const saved = await service.repository({
+      workspaceId: WORKSPACE,
+      repositoryId,
+    });
+    const {
+      fullName,
+      description,
+      projectId,
+      classification,
+      lifecycle,
+      expectations,
+    } = saved;
+    await service.updateRepository({
+      workspaceId: WORKSPACE,
+      repositoryId,
+      revision: saved.revision,
+      repository: {
+        fullName,
+        description,
+        projectId,
+        classification,
+        lifecycle,
+        expectations: {
+          ...expectations,
+          githubSecurity: {
+            ...DEFAULT_GITHUB_SECURITY,
+            codeScanning: "not_required",
+          },
+        },
+      },
+    });
+    const [row] = (await service.githubCoverage(input)).repositories;
+    expect(row).toMatchObject({
+      state: "requirements_met",
+      remediation: [],
+      managementLinks: [],
+    });
+    expect(row.sources[0].evidence?.checks).toContainEqual({
+      key: "codeScanning",
+      state: "unavailable",
+      required: false,
+    });
+    const after = await service.snapshot({ workspaceId: WORKSPACE });
+    expect(after.observations).toEqual(before.observations);
+    expect(after.connections).toEqual(before.connections);
+    expect(await read()).toEqual(receipt);
+  });
+
   it("shares a bounded read-only contract across HTTP, CLI and MCP", async () => {
     await service.githubRefresh(refresh());
     await run(
@@ -1796,6 +1860,13 @@ describe("Bounded GitHub coverage reads", () => {
         {
           repository: { id: repositoryId },
           state: "unavailable",
+          remediation: [
+            expect.objectContaining({
+              key: "secretScanning",
+              label: "Secret scanning",
+            }),
+          ],
+          securityRequirements: DEFAULT_GITHUB_SECURITY,
           managementLinks: expect.arrayContaining([
             {
               id: "security",

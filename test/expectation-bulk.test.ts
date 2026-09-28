@@ -28,6 +28,7 @@ import { ExpectationBulkService } from "../worker/expectation-bulk";
 import { createApplication } from "../worker/app";
 import { credentialHash } from "../worker/credential-hash";
 import type { Env } from "../worker/types";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -98,6 +99,44 @@ beforeEach(async () => {
 });
 
 describe("Reviewed expectation changes", () => {
+  it("preserves scanner decisions in bulk edits and rejects unsupported scanner patches", async () => {
+    const requirements = {
+      ...DEFAULT_GITHUB_SECURITY,
+      codeScanning: "not_required" as const,
+    };
+    await bindings.HQ_DB.prepare(
+      "UPDATE repositories SET expectations_json=? WHERE id='first'",
+    )
+      .bind(
+        JSON.stringify({
+          ...DEFAULT_EXPECTATIONS,
+          githubSecurity: requirements,
+        }),
+      )
+      .run();
+    const review = await as().expectationBulkPlan(fields());
+    expect(
+      review.rows.find((row) => row.repositoryId === "first")?.after
+        .githubSecurity,
+    ).toEqual(requirements);
+    await as().expectationBulkApply(applyInput(review));
+    expect(
+      (await as().repository({ ...workspace, repositoryId: "first" }))
+        .expectations.githubSecurity,
+    ).toEqual(requirements);
+    expect(
+      expectationBulkPlanInput.safeParse({
+        ...workspace,
+        repositories: [
+          {
+            repositoryId: "first",
+            revision: 2,
+            patch: { ci: "optional", githubSecurity: requirements },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
   it("recovers the receipt when Apply commits between review reads", async () => {
     const review = await as().expectationBulkPlan(fields());
     const target = ExpectationBulkService.prototype as unknown as {

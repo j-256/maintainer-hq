@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Observation } from "../shared/domain";
+import { expectationSchema, type Observation } from "../shared/domain";
 import { githubEvidenceSchema } from "../shared/github-evidence";
 import {
   GITHUB_COVERAGE_LIMITS,
@@ -56,7 +56,7 @@ export async function githubCoverage(
     await context.db.batch([
       context.db
         .prepare(
-          `SELECT id,full_name AS fullName,revision,lifecycle,classification FROM repositories
+          `SELECT id,full_name AS fullName,revision,lifecycle,classification,expectations_json FROM repositories
        WHERE workspace_id=? AND id IN (${selection}) AND ${guard.sql}`,
         )
         .bind(workspaceId, ids, ...guard.values),
@@ -132,8 +132,14 @@ export async function githubCoverage(
       "This selection has too many GitHub connections. Choose one connection or fewer repositories.",
       409,
     );
-  const repositoryRows =
-    repositories.results as GitHubCoverageRepository["repository"][];
+  const repositoryRows = (
+    repositories.results as (GitHubCoverageRepository["repository"] & {
+      expectations_json: string;
+    })[]
+  ).map(({ expectations_json, ...repository }) => ({
+    ...repository,
+    expectations: expectationSchema.parse(JSON.parse(expectations_json)),
+  }));
   const sourceRows = sources.results as GitHubSourceRow[];
   const connections = await describeGitHubSources(
     context.env,

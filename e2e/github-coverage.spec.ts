@@ -10,6 +10,7 @@ import type { GitHubSource } from "../shared/github";
 import type { WorkspaceView } from "../shared/workspace-sync";
 import { coverageFixture } from "./github-coverage-fixture";
 import { mockWorkspaceView } from "./workspace-fixture";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 
 const BASE = "/settings/github?workspace=development";
 function requests(page: Page) {
@@ -79,6 +80,9 @@ for (const theme of ["light", "dark"])
       await expect(row(page, "example/service-02")).toContainText(
         "Access or feature gaps",
       );
+      await expect(row(page, "example/service-02")).toContainText(
+        "Secret scanning unavailable",
+      );
       await expect(row(page, "example/service-03")).toContainText(
         "Evidence stale",
       );
@@ -132,6 +136,15 @@ for (const theme of ["light", "dark"])
         "A denied read does not identify which is missing",
       );
       await expect(details).toContainText("Evidence accepted by HQ");
+      await expect(
+        page.getByRole("region", { name: "Resolve unavailable GitHub checks" }),
+      ).toContainText("Secret scanning alerts read permission");
+      await expect(
+        page.getByRole("link", { name: "Choose required scanners" }),
+      ).toHaveAttribute("href", /dialog=expectations/);
+      await expect(
+        details.getByRole("button", { name: "Refresh GitHub evidence" }),
+      ).toBeEnabled();
       await expect(
         details.getByRole("list", { name: "Accepted check coverage" }),
       ).toContainText("Unavailable");
@@ -296,6 +309,12 @@ test("each connection exposes its own result and viewers retain read access with
   await expect(
     secondary.getByRole("button", { name: "Edit connection", exact: true }),
   ).toBeDisabled();
+  await expect(
+    secondary.getByRole("button", { name: "Refresh GitHub evidence" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("link", { name: "Choose required scanners" }),
+  ).toHaveCount(0);
   const securitySettings = page.getByRole("link", {
     name: "Security settings on GitHub",
   });
@@ -324,6 +343,92 @@ test("each connection exposes its own result and viewers retain read access with
     "Additional read-only connection",
   );
   await expect(page).toHaveURL(/refresh=receipt-coverage-secondary/);
+});
+
+test("coverage keeps deliberately unrequired scanner gaps visible without a warning or a clean scan claim", async ({
+  page,
+}) => {
+  const fixture = await populated(page);
+  const repository = fixture.repositories[1];
+  repository.expectations = {
+    ...repository.expectations,
+    githubSecurity: {
+      ...DEFAULT_GITHUB_SECURITY,
+      secretScanning: "not_required",
+    },
+  };
+  await page.goto(BASE + "&repository=" + repository.id);
+  await expect(row(page, repository.fullName)).toContainText(
+    "Required checks read",
+  );
+  await expect(row(page, repository.fullName)).not.toContainText(
+    "Access or feature gaps",
+  );
+  await page
+    .getByRole("button", {
+      name: "Inspect coverage for " + repository.fullName,
+    })
+    .click();
+  await expect(
+    page.getByRole("list", { name: "Accepted check coverage" }),
+  ).toContainText("Not required - Unavailable");
+  await expect(page.getByText(/do not establish a clean scan/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Security settings on GitHub" }),
+  ).toHaveCount(0);
+});
+
+test("coverage refresh recovers an interrupted response with the same request and opens its exact receipt", async ({
+  page,
+}) => {
+  const fixture = await populated(page);
+  const source = fixture.sources[0];
+  const calls = requests(page);
+  let first = true;
+  let refreshId = "";
+  await page.route("**/api/commands/github_refresh", async (route) => {
+    const input = route.request().postDataJSON();
+    expect(input).toMatchObject({
+      workspaceId: "development",
+      sourceId: source.id,
+      revision: source.revision,
+    });
+    if (first) {
+      first = false;
+      refreshId = input.refreshId;
+      return route.abort("failed");
+    }
+    expect(input.refreshId).toBe(refreshId);
+    return route.fulfill({
+      json: { ...fixture.receipt(source.id), id: refreshId },
+    });
+  });
+  await page.route("**/api/commands/github_refresh_get", (route) => {
+    expect(route.request().postDataJSON().refreshId).toBe(refreshId);
+    return route.fulfill({
+      json: { ...fixture.receipt(source.id), id: refreshId },
+    });
+  });
+  await page.goto(BASE + "&repository=coverage-2");
+  await page
+    .getByRole("button", { name: "Inspect coverage for example/service-02" })
+    .click();
+  const refresh = page.getByRole("button", { name: "Refresh GitHub evidence" });
+  await refresh.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "A refresh may already be queued",
+  );
+  await refresh.click();
+  await expect(page).toHaveURL(new RegExp("refresh=" + refreshId));
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByLabel("Refresh reference", { exact: true }),
+  ).toHaveValue(refreshId);
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(refresh).toBeFocused();
+  expect(calls.filter((call) => call.name === "github_refresh")).toHaveLength(
+    2,
+  );
 });
 
 test("coverage failure keeps accepted evidence visible and recovers explicitly", async ({

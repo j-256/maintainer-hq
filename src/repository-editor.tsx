@@ -45,6 +45,14 @@ import {
   REQUIREMENT_LABELS,
 } from "../shared/presentation";
 import { command, RequestError } from "./lib/api";
+import {
+  GITHUB_SECURITY_KEYS,
+  GITHUB_CHECK_LABELS,
+} from "../shared/github-evidence";
+import {
+  DEFAULT_GITHUB_SECURITY,
+  GITHUB_REQUIREMENT_LABELS,
+} from "../shared/github-requirements";
 import { focusInvalidField } from "./lib/form-focus";
 import { Disclosure } from "./components/ui/disclosure";
 import { Button } from "./components/ui/button";
@@ -530,6 +538,41 @@ export function RepositoryEditor({
                       );
                     })}
                   </div>
+                  <fieldset className="github-scanner-requirements">
+                    <legend>Required GitHub security checks</legend>
+                    <p className="field-help">
+                      These choices control GitHub coverage warnings. Choose Not
+                      required only for scanners this repository intentionally
+                      does not use. Their unread results remain visible.
+                      Observed findings still need attention.
+                    </p>
+                    <div className="github-scanner-options">
+                      {GITHUB_SECURITY_KEYS.map((key) => (
+                        <FormField
+                          key={key}
+                          id={"github-requirement-" + key}
+                          label={GITHUB_CHECK_LABELS[key]}
+                        >
+                          <Choice
+                            id={"github-requirement-" + key}
+                            label={GITHUB_CHECK_LABELS[key]}
+                            value={
+                              (draft.expectations.githubSecurity ??
+                                DEFAULT_GITHUB_SECURITY)[key]
+                            }
+                            options={GITHUB_REQUIREMENT_LABELS}
+                            onChange={(value) =>
+                              expectation("githubSecurity", {
+                                ...(draft.expectations.githubSecurity ??
+                                  DEFAULT_GITHUB_SECURITY),
+                                [key]: value,
+                              })
+                            }
+                          />
+                        </FormField>
+                      ))}
+                    </div>
+                  </fieldset>
                   <FormField
                     id="repository-visibility"
                     label="Expected visibility"

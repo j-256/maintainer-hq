@@ -2,6 +2,10 @@ import { reviewIsDue, type Repository, type Snapshot } from "./domain";
 import { githubCoverageRepositories } from "./github-coverage";
 import { GITHUB_SECURITY_KEYS, type GitHubCheckKey } from "./github-evidence";
 import type { RepositoryCoverage } from "./repository-coverage";
+import {
+  githubCheckRequired,
+  requiredGitHubFindings,
+} from "./github-requirements";
 import { coverageAssessment, coverageState } from "./coverage-evidence";
 
 export function hookExpectationResolution(
@@ -232,11 +236,15 @@ export function githubExpectationResolution(
   const complete =
     fresh.length === observations.length &&
     fresh.every((item) =>
-      GITHUB_EXPECTATION_CHECKS[kind].every((key) =>
-        item?.details.github?.checks.some(
-          (check) => check.key === key && check.state === "observed",
+      GITHUB_EXPECTATION_CHECKS[kind]
+        .filter((key) =>
+          githubCheckRequired(key, repository.expectations.githubSecurity),
+        )
+        .every((key) =>
+          item?.details.github?.checks.some(
+            (check) => check.key === key && check.state === "observed",
+          ),
         ),
-      ),
     );
   const satisfied =
     complete &&
@@ -244,10 +252,21 @@ export function githubExpectationResolution(
       kind === "ci"
         ? item?.details.ci === "passing"
         : kind === "security"
-          ? item?.details.openFindings === 0
+          ? item?.details.github && repository.expectations.githubSecurity
+            ? requiredGitHubFindings(
+                item.details.github,
+                repository.expectations.githubSecurity,
+              ) === 0
+            : item?.details.openFindings === 0
           : Boolean(item?.details.visibility) &&
             (repository.expectations.visibility === "any" ||
               item?.details.visibility === repository.expectations.visibility),
+    );
+  const noSecurityRequired =
+    kind === "security" &&
+    GITHUB_SECURITY_KEYS.every(
+      (key) =>
+        !githubCheckRequired(key, repository.expectations.githubSecurity),
     );
   if (satisfied)
     return {
@@ -255,10 +274,12 @@ export function githubExpectationResolution(
         kind === "ci"
           ? "CI passing"
           : kind === "security"
-            ? "No findings in checked coverage"
+            ? noSecurityRequired
+              ? "No security scanners required"
+              : "No findings in required security checks"
             : "Visibility matches",
       action: "View evidence",
-      tone: "success" as const,
+      tone: noSecurityRequired ? ("neutral" as const) : ("success" as const),
     };
   return {
     label: "Evidence unverified",

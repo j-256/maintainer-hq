@@ -8,6 +8,20 @@
   flex-wrap: wrap;
   gap: 12px 20px;
 }
+.github-gap-heading {
+  display: block;
+  font-size: var(--hq-text-support);
+  margin: 0 0 8px;
+}
+.github-remediation-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.github-remediation-list p {
+  margin: 4px 0 0;
+}
 .github-gap-links a {
   display: inline-flex;
   align-items: center;

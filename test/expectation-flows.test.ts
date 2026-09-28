@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { workspaceQueryMatches } from "../src/lib/workspace-push";
 import { coverageFixture } from "../e2e/github-coverage-fixture";
 import type { Snapshot } from "../shared/domain";
+import { DEFAULT_GITHUB_SECURITY } from "../shared/github-requirements";
 import {
   clearExpectationResolution,
   expectationHref,
@@ -80,6 +81,52 @@ it("distinguishes missing collection, actual failures, and the expected visibili
   expect(
     githubExpectationResolution(repository, snapshot, "ci", Date.now()).action,
   ).toBe("Connect GitHub");
+});
+it("evaluates required scanner counts without declaring unread or unrequired scanners clean", () => {
+  const { repository, snapshot, observation } = github();
+  repository.expectations = {
+    ...repository.expectations,
+    githubSecurity: {
+      ...DEFAULT_GITHUB_SECURITY,
+      codeScanning: "not_required",
+    },
+  };
+  delete observation.details.openFindings;
+  observation.details.github!.checks.forEach((check) => {
+    check.count = 0;
+    if (check.key === "codeScanning") {
+      check.state = "unavailable";
+      delete check.count;
+    }
+  });
+  const now = Date.now();
+  const resolve = () =>
+    githubExpectationResolution(repository, snapshot, "security", now);
+  expect(resolve()).toMatchObject({
+    tone: "success",
+    label: "No findings in required security checks",
+  });
+  observation.details.openFindings = 2;
+  expect(resolve()).toMatchObject({
+    tone: "danger",
+    label: "Open security findings",
+  });
+  delete observation.details.openFindings;
+  delete observation.details.github!.checks.find(
+    (check) => check.key === "dependabot",
+  )!.count;
+  expect(resolve().tone).toBe("warning");
+  repository.expectations.githubSecurity = {
+    dependabot: "not_required",
+    codeScanning: "not_required",
+    secretScanning: "not_required",
+  };
+  expect(resolve()).toMatchObject({
+    tone: "neutral",
+    label: "No security scanners required",
+  });
+  observation.expiresAt = new Date(now).toISOString();
+  expect(resolve().tone).toBe("warning");
 });
 it("requires every linked monitor to have complete fresh coverage", () => {
   const now = Date.now();

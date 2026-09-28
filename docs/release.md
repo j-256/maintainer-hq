@@ -55,6 +55,10 @@ Retain the credential table, review receipts, revisions, dependent connection in
 
 Cloudflare-aware recovery builds must preserve private transient input, whole-Worker deployment evidence, indexed submission markers, and indeterminate outcomes. Do not reinterpret a Cloudflare review as a GitHub-sealed operation or manufacture retained input. Database or Worker-code rollback cannot undo a provider deployment or restore a deleted supplied value; reconcile each captured receipt separately.
 
+## GitHub scanner requirements recovery
+
+GitHub scanner requirements add an optional `githubSecurity` map to repository expectations without a D1 migration. Deploy compatible expectation readers and writers before saving scanner choices, and reload browser clients. An omitted map means all scanners are required on enrollment and preserves an existing map during metadata updates. Existing bulk presets retain the map. Code rollback must keep readers and writers that understand these choices; older strict expectation schemas cannot read them. Preserve saved expectations and original evidence, and prefer a compatible forward repair over restoring an older database to undo the presentation.
+
 ## GitHub Activity recovery
 
 Source-attributed GitHub Activity requires `0026_github_activity.sql` after a private export and isolated restore test. It adds nullable journal references and bounded per-repository change comparisons without rewriting older events or assigning guessed provenance. Preserve the journal, refresh records, insertion ordering and push cursors as one recovery unit. Receipt retention may remove a linked refresh while the Activity reference remains; do not delete the journal entry or substitute another run. Code rollback must retain compatible readers for the added fields, and must not restore an old database merely to undo a presentation change.
