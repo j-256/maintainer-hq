@@ -150,7 +150,8 @@ test("opens retained failures beyond a zero-failure sample and renders rate-limi
 }) => {
   const state = await mockHooks(page);
   state.snapshot.deliveries.totals.exhausted = 0;
-  state.snapshot.deliveries.totals.delivered = state.snapshot.deliveries.sampled;
+  state.snapshot.deliveries.totals.delivered =
+    state.snapshot.deliveries.sampled;
   state.snapshot.signals.items[0]!.code = "ingress-rate-limited";
   state.snapshot.signals.items[0]!.severity = "warning";
   await page.goto(URL + "&subscription=Rare+subscription");
@@ -176,9 +177,12 @@ test("opens retained failures beyond a zero-failure sample and renders rate-limi
   expect(new globalThis.URL(page.url()).searchParams.has("subscription")).toBe(
     false,
   );
-  await expect(page.locator(".hook-table")).toContainText(HOOK_DELIVERY.eventId);
+  await expect(page.locator(".hook-table")).toContainText(
+    HOOK_DELIVERY.eventId,
+  );
   expect(
-    state.calls.filter((call) => call.name === "hooks_deliveries").at(-1)?.input,
+    state.calls.filter((call) => call.name === "hooks_deliveries").at(-1)
+      ?.input,
   ).toMatchObject({
     status: "exhausted",
     subscription: null,
@@ -404,4 +408,130 @@ test("Hooks screens and dialogs fit mobile and desktop in both themes with acces
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
     }
   expect(errors).toEqual([]);
+});
+
+test("shows complete unresolved summaries separately from bounded history", async ({
+  page,
+}) => {
+  const state = await mockHooks(page);
+  state.snapshot.deliveries.acknowledgedExhausted =
+    state.snapshot.deliveries.totals.exhausted;
+  state.snapshot.signals.unresolved = [];
+  await page.goto(URL);
+  await page
+    .getByText("Unresolved operational signals (0)", { exact: true })
+    .click();
+  await expect(
+    page.getByText("No unresolved warning signals were retained at this read."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Inspect all exhausted deliveries, 0 in sample",
+    }),
+  ).toBeVisible();
+  await page
+    .getByText("Recent operational signals (1)", { exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "Recent history is limited. The unresolved summary includes older retained warning signals.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Hookrelay has unresolved operational signals in its recent sample.",
+      { exact: true },
+    ),
+  ).toHaveCount(0);
+});
+
+test("opens operational dispositions from history and reconciles the original receipt", async ({
+  page,
+}) => {
+  const state = await mockHooks(page);
+  const id = "00000000-0000-4000-8000-000000000099";
+  const review = {
+    id,
+    fingerprint: "a".repeat(64),
+    connectionId: HOOK_CONNECTION.id,
+    connectionName: HOOK_CONNECTION.name,
+    actorMatches: true,
+    targets: [
+      {
+        kind: "signal",
+        fingerprint: "a".repeat(64),
+        lastSeenAt: HOOK_TIME,
+        occurrences: 4,
+      },
+      {
+        kind: "delivery",
+        eventId: HOOK_DELIVERY.eventId,
+        sinkName: HOOK_DELIVERY.sinkName,
+        generation: 4,
+        updatedAt: HOOK_TIME,
+      },
+    ],
+    reason: "accepted-loss",
+    note: "Synthetic historical delivery cannot be verified. Do not replay.",
+    createdAt: HOOK_TIME,
+    expiresAt: HOOK_TIME,
+    provider: null,
+    operation: {
+      id: "synthetic-operation",
+      status: "indeterminate",
+      summary: "Inspect the original provider receipt.",
+      updatedAt: HOOK_TIME,
+    },
+  };
+  await page.route("**/api/commands/hooks_*", async (route) => {
+    const name = route.request().url().split("/").at(-1)!;
+    if (
+      ![
+        "hooks_history",
+        "hooks_resolution_get",
+        "hooks_resolution_reconcile",
+      ].includes(name)
+    )
+      return route.fallback();
+    state.calls.push({ name, input: route.request().postDataJSON() });
+    if (name === "hooks_history")
+      return route.fulfill({
+        json: [
+          {
+            ...review.operation,
+            planId: id,
+            kind: "hookrelay.operations.resolve",
+            createdAt: HOOK_TIME,
+          },
+        ],
+      });
+    if (name === "hooks_resolution_reconcile") {
+      review.operation.status = "succeeded";
+      review.operation.summary =
+        "Original receipt confirms acknowledgement. Delivery remains unverified.";
+    }
+    return route.fulfill({ json: review });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(URL + "&view=history");
+  const open = page.getByRole("button", { name: "Open receipt" });
+  await open.click();
+  await expect(page).toHaveURL(/disposition=/);
+  const dialog = page.getByRole("dialog", {
+    name: "Operational disposition receipt",
+  });
+  await expect(dialog).toContainText(review.note);
+  await dialog.getByText("Reviewed records (2)", { exact: true }).click();
+  await expect(dialog).toContainText(HOOK_DELIVERY.eventId);
+  expect(
+    await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+  await dialog.getByRole("button", { name: "Reconcile receipt" }).click();
+  await expect(dialog.getByText("Accepted", { exact: true })).toBeVisible();
+  expect(
+    state.calls.filter((call) => call.name.endsWith("_apply")),
+  ).toHaveLength(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(open).toBeFocused();
 });

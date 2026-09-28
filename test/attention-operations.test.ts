@@ -197,6 +197,51 @@ describe("Operational attention evidence", () => {
       items: [expect.objectContaining({ category: "coverage" })],
     });
   });
+  it("keeps bounded history informational when unresolved failures are accounted for", () => {
+    const fixture = hookFixture();
+    fixture.snapshot.deliveries.truncated = true;
+    fixture.snapshot.signals.truncated = true;
+    fixture.snapshot.signals.unresolved = [];
+    expect(
+      hookAttention("alpha", source, fixture.snapshot, fixture.deliveries, NOW),
+    ).toEqual({ items: [], limited: false });
+    fixture.deliveries.nextCursor = {
+      updatedAt: READ,
+      eventId: "synthetic",
+      sinkName: "phone",
+    };
+    expect(
+      hookAttention("alpha", source, fixture.snapshot, fixture.deliveries, NOW),
+    ).toMatchObject({
+      limited: true,
+      items: [expect.objectContaining({ category: "coverage" })],
+    });
+  });
+  it("uses complete unresolved counts outside the sample", () => {
+    const fixture = hookFixture();
+    fixture.snapshot.signals.unresolved = [
+      {
+        code: "ingress-persistence-rejected",
+        records: 590,
+        occurrences: 698,
+        critical: true,
+        lastSeenAt: READ,
+      },
+    ];
+    const result = hookAttention(
+      "alpha",
+      source,
+      fixture.snapshot,
+      fixture.deliveries,
+      NOW,
+    );
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ severity: "critical" });
+    expect(result.items[0].reason).toContain(
+      "590 unresolved retained signal records.",
+    );
+    expect(result.items[0].reason).not.toContain("sample");
+  });
   it("distinguishes matching failed checks, stale evidence and configuration changes without endpoint URLs", () => {
     const fixture = monitorFixture();
     expect(

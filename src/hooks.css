@@ -296,6 +296,10 @@
 .hook-dialog [role="combobox"] {
   width: 100%;
 }
+.hook-disposition-receipt {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
 .hook-checkbox {
   display: flex;
   align-items: center;
