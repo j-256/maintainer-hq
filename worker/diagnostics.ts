@@ -3,6 +3,7 @@ import { githubDiagnosticsSchema } from "../shared/github-diagnostics";
 import { contextReadSchema } from "../shared/github-context";
 import { DEPENDENCIES_LIMITS } from "../shared/dependencies";
 import { dependencyOperationSchema } from "../shared/dependency-operations";
+import { HOOK_INVENTORY_LIMIT_REASONS } from "../shared/coverage-evidence";
 
 const identity = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const elapsed = z.number().int().nonnegative().max(86400000);
@@ -22,6 +23,8 @@ const diagnosticSchema = z.discriminatedUnion("event", [
       sourceId: identity,
       state: z.enum(["complete", "limited", "unavailable", "changed"]),
       stored: z.number().int().nonnegative(),
+      inventoryLimitReason: z.enum(HOOK_INVENTORY_LIMIT_REASONS).nullable(),
+      providerClockSkewMs: z.number().int().nonnegative().nullable(),
     })
     .strict(),
   z

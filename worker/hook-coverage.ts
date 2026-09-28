@@ -1,5 +1,6 @@
 import {
   COVERAGE_LIMITS,
+  HOOK_INVENTORY_LIMIT_REASONS,
   coverageAssessment,
   coverageEvidenceSchema,
   type CoverageResource,
@@ -12,6 +13,8 @@ export type HookInventory = {
   items: HookSubscription[];
   complete: boolean;
   observedAt: string;
+  limitReason: (typeof HOOK_INVENTORY_LIMIT_REASONS)[number] | null;
+  clockSkewMs: number;
 };
 
 export async function readHookInventory(
@@ -23,20 +26,37 @@ export async function readHookInventory(
   const cursors = new Set<string>();
   let cursor: string | null = null;
   let observedAt = iso(now());
+  let limitReason: HookInventory["limitReason"] = "page-limit";
+  let clockSkewMs = 0;
   for (let page = 0; page < COVERAGE_LIMITS.SUBSCRIPTION_PAGES; page++) {
-    if (!reserve()) break;
+    if (!reserve()) {
+      limitReason = "read-budget";
+      break;
+    }
     const response = await read(cursor);
+    const responseTime = Date.parse(response.observedAt);
+    const skew = Math.max(0, responseTime - now());
+    clockSkewMs = Math.max(clockSkewMs, skew);
     items.push(...response.items);
-    observedAt = iso(
-      Math.min(Date.parse(observedAt), Date.parse(response.observedAt)),
-    );
-    if (response.disappeared || Date.parse(response.observedAt) > now()) break;
+    observedAt = iso(Math.min(Date.parse(observedAt), responseTime));
+    if (response.disappeared) {
+      limitReason = "records-disappeared";
+      break;
+    }
+    if (skew > COVERAGE_LIMITS.HOOK_CLOCK_SKEW_MS) {
+      limitReason = "future-timestamp";
+      break;
+    }
     cursor = response.nextCursor;
-    if (!cursor) return { items, complete: true, observedAt };
-    if (cursors.has(cursor)) break;
+    if (!cursor)
+      return { items, complete: true, observedAt, limitReason: null, clockSkewMs };
+    if (cursors.has(cursor)) {
+      limitReason = "repeated-cursor";
+      break;
+    }
     cursors.add(cursor);
   }
-  return { items, complete: false, observedAt };
+  return { items, complete: false, observedAt, limitReason, clockSkewMs };
 }
 
 export function hookCoverageResource(

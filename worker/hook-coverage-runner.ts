@@ -102,6 +102,7 @@ export async function runHookCoverageScheduled(
       const diagnose = (
         state: "complete" | "limited" | "unavailable" | "changed",
         accepted = 0,
+        inventory: HookInventory | null = null,
       ) =>
         emitDiagnostic({
           event: "hq.hooks.coverage.source",
@@ -110,6 +111,8 @@ export async function runHookCoverageScheduled(
           sourceId: source.id,
           state,
           stored: accepted,
+          inventoryLimitReason: inventory?.limitReason ?? null,
+          providerClockSkewMs: inventory?.clockSkewMs ?? null,
         });
       const readAt = now();
       const page = (
@@ -284,6 +287,7 @@ export async function runHookCoverageScheduled(
               ? "limited"
               : "complete",
         acceptedCount,
+        inventory,
       );
       if (acceptedCount) await deliverWorkspacePush(env, source.workspace_id);
     }
