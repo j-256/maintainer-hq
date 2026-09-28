@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Observation, Repository } from "../shared/domain";
 import type { GitHubSource } from "../shared/github";
 import { GITHUB_CHECK_KEYS, type GitHubCheck } from "../shared/github-evidence";
+import { githubManagementLinks } from "../shared/github-settings";
 import {
   GITHUB_COVERAGE_LIMITS,
   githubCoverageInput,
@@ -94,6 +95,7 @@ describe("GitHub evidence coverage", () => {
     });
     expect(JSON.stringify(result)).not.toContain(PRIVATE);
     expect(result.sources[0]).not.toHaveProperty("credentialRef");
+    expect(result.managementLinks).toEqual([]);
   });
 
   it.each([
@@ -107,7 +109,9 @@ describe("GitHub evidence coverage", () => {
     (state, expected) => {
       const evidence = observation();
       evidence.details.github!.checks[0].state = state;
-      expect(coverage([source], [evidence]).state).toBe(expected);
+      const result = coverage([source], [evidence]);
+      expect(result.state).toBe(expected);
+      if (state !== "unavailable") expect(result.managementLinks).toEqual([]);
     },
   );
 
@@ -147,6 +151,13 @@ describe("GitHub evidence coverage", () => {
       "current",
       "unavailable",
     ]);
+    expect(result.managementLinks.map((link) => link.id)).toEqual([
+      "repository-access",
+      "security",
+      "fine-grained-tokens",
+      "classic-tokens",
+      "app-installations",
+    ]);
   });
 
   it("keeps cooldown and active refresh separate from still-current accepted coverage", () => {
@@ -168,9 +179,13 @@ describe("GitHub evidence coverage", () => {
   });
 
   it("rejects old names and unrelated source evidence while retaining historical timestamps", () => {
-    const old = { ...observation(), name: "example/previous-name" };
+    const old = {
+      ...observation("unavailable"),
+      name: "example/previous-name",
+    };
     const renamed = coverage([source], [old]);
     expect(renamed.state).toBe("awaiting");
+    expect(renamed.managementLinks).toEqual([]);
     expect(renamed.sources[0].evidence).toMatchObject({
       observedAt: OBSERVED,
       identityMatches: false,
@@ -227,5 +242,43 @@ describe("GitHub evidence coverage", () => {
     expect(githubCoverageHref("workspace", repository.id, source.id)).toBe(
       "/settings/github?workspace=workspace&repository=repository&lifecycle=all&connection=github",
     );
+  });
+
+  it("links scanner gaps to settings without assuming a repository access failure", () => {
+    const evidence = observation();
+    evidence.details.github!.checks.find(
+      (check) => check.key === "secretScanning",
+    )!.state = "unavailable";
+    const result = coverage([source], [evidence]);
+    expect(
+      result.managementLinks.filter((link) => link.scope === "repository"),
+    ).toEqual([
+      {
+        id: "security",
+        label: "Security settings on GitHub",
+        href: "https://github.com/example/repository/settings/security_analysis",
+        scope: "repository",
+      },
+    ]);
+    expect(
+      result.managementLinks.every(
+        (link) => new URL(link.href).origin === "https://github.com",
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(result.managementLinks)).not.toContain(PRIVATE);
+  });
+
+  it("keeps invalid repository names out of GitHub settings destinations", () => {
+    const checks = [{ key: "repository", state: "unavailable" }] as const;
+    for (const fullName of [
+      "https://other.example/repo",
+      "example/repo?x=1",
+      "example/repo#fragment",
+      "example/%2e%2e",
+      "Default branch evidence",
+    ])
+      expect(githubManagementLinks(fullName, checks)).toEqual([]);
+    expect(githubManagementLinks("example/..", checks)).toEqual([]);
+    expect(githubManagementLinks("example/.", checks)).toEqual([]);
   });
 });

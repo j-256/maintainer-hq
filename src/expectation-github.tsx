@@ -8,6 +8,7 @@ import {
   type GitHubCoverage,
 } from "../shared/github-coverage";
 import { githubRepositoryUrl } from "../shared/github-context";
+import { GITHUB_SETTINGS_PATHS } from "../shared/github-settings";
 import { GITHUB_REFRESH_LIMITS, type GitHubRefresh } from "../shared/github";
 import {
   GITHUB_EXPECTATION_CHECKS,
@@ -347,6 +348,7 @@ export function GitHubExpectationResolution({
             </p>
             {observation.details.github ? (
               <GitHubEvidenceList
+                fullName={observation.name}
                 evidence={{
                   ...observation.details.github,
                   checks: observation.details.github.checks.filter((check) =>
@@ -397,7 +399,7 @@ export function GitHubExpectationResolution({
                     "Open secret findings",
                   )}
                   {openExternal(
-                    "/settings/security_analysis",
+                    GITHUB_SETTINGS_PATHS.SECURITY,
                     "Configure security checks",
                   )}
                 </>

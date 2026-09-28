@@ -8,6 +8,10 @@ import {
 } from "./domain";
 import { GITHUB_CHECK_KEYS, type GitHubCheck } from "./github-evidence";
 import type { GitHubRefreshState, GitHubSource } from "./github";
+import {
+  githubManagementLinks,
+  type GitHubManagementLink,
+} from "./github-settings";
 
 export const GITHUB_COVERAGE_LIMITS = Object.freeze({
   REPOSITORIES: 25,
@@ -122,6 +126,7 @@ export type GitHubCoverageRepository = {
   >;
   state: GitHubCoverageState;
   sources: GitHubCoverageSource[];
+  managementLinks: GitHubManagementLink[];
 };
 export type GitHubCoverage = {
   generatedAt: string;
@@ -244,6 +249,12 @@ export function githubCoverageRepositories(
       },
       sources,
       state,
+      managementLinks: githubManagementLinks(
+        repository.fullName,
+        sources.flatMap((source) =>
+          source.evidence?.identityMatches ? source.evidence.checks : [],
+        ),
+      ),
     };
   });
 }

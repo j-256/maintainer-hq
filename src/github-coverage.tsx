@@ -30,6 +30,7 @@ import {
 import { command, RequestError } from "./lib/api";
 import { COORDINATED_QUERY_OPTIONS } from "./lib/workspace-query-refresh";
 import { useDateTime } from "./date-time";
+import { GitHubGapActions } from "./github-gap-actions";
 import "./github-coverage.css";
 
 const CLOCK_MS = 60 * 1000;
@@ -170,6 +171,7 @@ function CoverageDetails({
     );
   return (
     <div className="coverage-detail-body">
+      <GitHubGapActions links={row.managementLinks} />
       {row.sources.map((source) => (
         <section
           className="coverage-source-detail"

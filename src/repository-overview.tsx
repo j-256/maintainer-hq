@@ -634,7 +634,10 @@ export function RepositoryOverview({
                 / Observed {dates.dateTime(item.observedAt)}. {item.summary}
               </p>
               {item.details.github ? (
-                <GitHubEvidenceList evidence={item.details.github} />
+                <GitHubEvidenceList
+                  evidence={item.details.github}
+                  fullName={item.name}
+                />
               ) : (
                 <p>No per-check details were reported.</p>
               )}

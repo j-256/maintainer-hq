@@ -1783,6 +1783,30 @@ describe("Bounded GitHub coverage reads", () => {
   });
 
   it("shares a bounded read-only contract across HTTP, CLI and MCP", async () => {
+    await service.githubRefresh(refresh());
+    await run(
+      fixture((url) =>
+        url.pathname.endsWith("/secret-scanning/alerts")
+          ? new Response("private-denial", { status: 403 })
+          : undefined,
+      ),
+    );
+    const expected = {
+      repositories: [
+        {
+          repository: { id: repositoryId },
+          state: "unavailable",
+          managementLinks: expect.arrayContaining([
+            {
+              id: "security",
+              label: "Security settings on GitHub",
+              href: "https://github.com/example/first/settings/security_analysis",
+              scope: "repository",
+            },
+          ]),
+        },
+      ],
+    };
     const app = createApplication(async () => ({
       subject: "viewer",
       displayName: "Viewer",
@@ -1800,9 +1824,7 @@ describe("Bounded GitHub coverage reads", () => {
       runtime,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      repositories: [{ repository: { id: repositoryId }, state: "awaiting" }],
-    });
+    expect(await response.json()).toMatchObject(expected);
     expect(commands.github_coverage.method).toBe("githubCoverage");
     expect(
       commandAnnotations("github_coverage", commands.github_coverage.readOnly),
@@ -1816,9 +1838,7 @@ describe("Bounded GitHub coverage reads", () => {
       app.fetch(new Request(request, { ...init, redirect: "manual" }), runtime),
     );
     const result = await callCommand(config, "github_coverage", input);
-    expect(result).toMatchObject({
-      repositories: [{ repository: { id: repositoryId }, state: "awaiting" }],
-    });
+    expect(result).toMatchObject(expected);
     const rpc = await app.fetch(
       new Request("https://hq.example/mcp", {
         method: "POST",
@@ -1842,9 +1862,7 @@ describe("Bounded GitHub coverage reads", () => {
       result: { isError?: boolean; content: { text: string }[] };
     };
     expect(body.result.isError).not.toBe(true);
-    expect(JSON.parse(body.result.content[0].text)).toMatchObject({
-      repositories: [{ repository: { id: repositoryId }, state: "awaiting" }],
-    });
+    expect(JSON.parse(body.result.content[0].text)).toMatchObject(expected);
   });
 });
 

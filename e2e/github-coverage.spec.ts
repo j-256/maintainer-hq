@@ -135,6 +135,25 @@ for (const theme of ["light", "dark"])
       await expect(
         details.getByRole("list", { name: "Accepted check coverage" }),
       ).toContainText("Unavailable");
+      const securitySettings = page.getByRole("link", {
+        name: "Security settings on GitHub",
+      });
+      await expect(securitySettings).toHaveAttribute(
+        "href",
+        "https://github.com/example/service-02/settings/security_analysis",
+      );
+      await expect(securitySettings).toHaveAttribute("target", "_blank");
+      await expect(securitySettings).toHaveAttribute(
+        "rel",
+        "noopener noreferrer",
+      );
+      await securitySettings.focus();
+      await page.keyboard.press("Tab");
+      await expect(page.locator(".github-gap-actions summary")).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(
+        page.getByRole("link", { name: "Fine-grained tokens" }),
+      ).toBeVisible();
       await page.getByRole("heading", { level: 1 }).scrollIntoViewIfNeeded();
       expect(
         await page.evaluate(
@@ -277,6 +296,27 @@ test("each connection exposes its own result and viewers retain read access with
   await expect(
     secondary.getByRole("button", { name: "Edit connection", exact: true }),
   ).toBeDisabled();
+  const securitySettings = page.getByRole("link", {
+    name: "Security settings on GitHub",
+  });
+  await expect(securitySettings).toBeVisible();
+  const calls = requests(page);
+  const destination =
+    "https://github.com/example/service-12/settings/security_analysis";
+  await page.context().route(destination, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<h1>Synthetic GitHub settings destination</h1>",
+    }),
+  );
+  const popupPromise = page.waitForEvent("popup");
+  await securitySettings.click();
+  const popup = await popupPromise;
+  await expect(popup).toHaveURL(destination);
+  await expect(page).toHaveURL(/repository=coverage-12/);
+  expect(calls.map((call) => call.name)).not.toContain("github_refresh");
+  expect(calls.map((call) => call.name)).not.toContain("github_source_update");
+  await popup.close();
   await secondary
     .getByRole("button", { name: "Open refresh receipt", exact: true })
     .click();
