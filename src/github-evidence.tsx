@@ -4,6 +4,8 @@ import {
   type GitHubEvidence,
 } from "../shared/github-evidence";
 import { StatusBadge, type StatusTone } from "./components/ui/status";
+import { githubManagementLinks } from "../shared/github-settings";
+import { GitHubGapActions } from "./github-gap-actions";
 
 const CHECK_TONES: Record<GitHubCheck["state"], StatusTone> = {
   observed: "info",
@@ -14,7 +16,13 @@ const CHECK_TONES: Record<GitHubCheck["state"], StatusTone> = {
   rate_limited: "warning",
 };
 
-export function GitHubEvidenceList({ evidence }: { evidence: GitHubEvidence }) {
+export function GitHubEvidenceList({
+  evidence,
+  fullName,
+}: {
+  evidence: GitHubEvidence;
+  fullName: string;
+}) {
   return (
     <div className="github-evidence">
       {evidence.headSha ? (
@@ -44,6 +52,9 @@ export function GitHubEvidenceList({ evidence }: { evidence: GitHubEvidence }) {
           </div>
         ))}
       </dl>
+      <GitHubGapActions
+        links={githubManagementLinks(fullName, evidence.checks)}
+      />
     </div>
   );
 }

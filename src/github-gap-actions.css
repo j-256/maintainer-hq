@@ -1,0 +1,32 @@
+.github-gap-actions {
+  display: grid;
+  gap: 12px;
+  font-size: var(--hq-text-support);
+}
+.github-gap-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.github-gap-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+.github-gap-actions summary {
+  cursor: pointer;
+  min-height: 28px;
+}
+.github-gap-actions details[open] > p {
+  margin: 8px 0;
+}
+.github-gap-actions p {
+  color: var(--muted-foreground);
+}
+.github-gap-actions a:focus-visible,
+.github-gap-actions summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 3px;
+}

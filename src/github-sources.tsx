@@ -606,7 +606,10 @@ export function GitHubRefreshDialog({
                         </p>
                       ) : null}
                       {item.evidence ? (
-                        <GitHubEvidenceList evidence={item.evidence} />
+                        <GitHubEvidenceList
+                          evidence={item.evidence}
+                          fullName={item.fullName}
+                        />
                       ) : null}
                     </article>
                   ))}
