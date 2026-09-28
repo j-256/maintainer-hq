@@ -14,6 +14,7 @@ const bindings = env as unknown as Env & {
 const db = bindings.HQ_DB;
 let now: number;
 let runtime: Env;
+let successLog: ReturnType<typeof vi.spyOn>;
 let warningLog: ReturnType<typeof vi.spyOn>;
 let errorLog: ReturnType<typeof vi.spyOn>;
 let fetcher: ReturnType<
@@ -63,7 +64,7 @@ async function coverage(workspace = "alpha", repository = "repo000") {
 beforeAll(async () => applyD1Migrations(db, bindings.TEST_MIGRATIONS));
 beforeEach(async () => {
   now = Date.now();
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  successLog = vi.spyOn(console, "log").mockImplementation(() => {});
   warningLog = vi.spyOn(console, "warn").mockImplementation(() => {});
   errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
   await db.prepare("DELETE FROM workspaces").run();
@@ -250,7 +251,61 @@ it("allows only one concurrent inventory and recovers an abandoned lease", async
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
-it("does not turn bounded, inconsistent, or future subscription inventory into healthy coverage", async () => {
+it("continues pagination across bounded provider clock skew without extending evidence freshness", async () => {
+  await repositories(1);
+  fetcher.mockImplementation(async (_url, init) => {
+    const { input } = JSON.parse(String(init.body));
+    return response({
+      ...inventory(),
+      items: input.cursor ? [] : inventory().items,
+      nextCursor: input.cursor ? null : "next-page",
+      observedAt: new Date(now + COVERAGE_LIMITS.HOOK_CLOCK_SKEW_MS).toISOString(),
+    });
+  });
+  await run();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const result = await coverage();
+  expect(result.complete).toBe(true);
+  expect(result.resources[0]).toMatchObject({
+    state: "configured",
+    observedAt: stamp(),
+  });
+  expect(result.freshUntil).toBe(
+    new Date(now + COVERAGE_LIMITS.HOOK_FRESH_MS).toISOString(),
+  );
+  expect(successLog).toHaveBeenCalledWith(
+    expect.objectContaining({
+      event: "hq.hooks.coverage.source",
+      inventoryLimitReason: null,
+      providerClockSkewMs: COVERAGE_LIMITS.HOOK_CLOCK_SKEW_MS,
+    }),
+  );
+});
+
+it("preserves expired page evidence when another page has tolerated clock skew", async () => {
+  await repositories(1);
+  const earlier = now - COVERAGE_LIMITS.HOOK_FRESH_MS;
+  fetcher.mockImplementation(async (_url, init) => {
+    const { input } = JSON.parse(String(init.body));
+    return response({
+      ...inventory(),
+      items: input.cursor ? [] : inventory().items,
+      nextCursor: input.cursor ? null : "next-page",
+      observedAt: new Date(
+        input.cursor ? earlier : now + COVERAGE_LIMITS.HOOK_CLOCK_SKEW_MS,
+      ).toISOString(),
+    });
+  });
+  await run();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const result = await coverage();
+  expect(result.complete).toBe(true);
+  expect(result.resources[0].observedAt).toBe(new Date(earlier).toISOString());
+  expect(result.freshUntil).toBe(stamp());
+  expect(coverageAssessment(result, now).satisfied).toBe(false);
+});
+
+it("does not turn bounded, inconsistent, or excessively future subscription inventory into healthy coverage", async () => {
   await repositories(1);
   fetcher.mockImplementation(async () =>
     response({ ...inventory(), nextCursor: crypto.randomUUID() }),
@@ -263,9 +318,17 @@ it("does not turn bounded, inconsistent, or future subscription inventory into h
   fetcher.mockImplementation(async () =>
     response({
       ...inventory(),
-      observedAt: new Date(now + 1000).toISOString(),
+      observedAt: new Date(
+        now + COVERAGE_LIMITS.HOOK_CLOCK_SKEW_MS + 1,
+      ).toISOString(),
     }),
   );
   await run();
   expect((await coverage()).complete).toBe(false);
+  expect(warningLog).toHaveBeenCalledWith(
+    expect.objectContaining({
+      event: "hq.hooks.coverage.source",
+      inventoryLimitReason: "future-timestamp",
+    }),
+  );
 });

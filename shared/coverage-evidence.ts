@@ -9,6 +9,7 @@ export const COVERAGE_LIMITS = Object.freeze({
   REFRESH_MS: 60_000,
   HOOK_FRESH_MS: 15 * 60_000,
   HOOK_SCHEDULE_MS: 5 * 60_000,
+  HOOK_CLOCK_SKEW_MS: 5_000,
   SCHEDULE_CONNECTIONS: 2,
   SCHEDULE_REPOSITORIES: 25,
   LEASE_MS: 120_000,
@@ -16,6 +17,13 @@ export const COVERAGE_LIMITS = Object.freeze({
   WORKSPACE_READS: 10,
   RESPONSE_BYTES: 64 * 1024,
 });
+export const HOOK_INVENTORY_LIMIT_REASONS = [
+  "page-limit",
+  "read-budget",
+  "records-disappeared",
+  "future-timestamp",
+  "repeated-cursor",
+] as const;
 export const COVERAGE_STATES = [
   "passing",
   "configured",
