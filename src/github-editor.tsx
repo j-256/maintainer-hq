@@ -96,6 +96,7 @@ export function GitHubEditor({
   const [sourceId] = useState(() => initial?.id ?? crypto.randomUUID());
   const [revision, setRevision] = useState(initial?.revision);
   const [search, setSearch] = useState("");
+  const [includeArchived, setIncludeArchived] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -120,8 +121,13 @@ export function GitHubEditor({
         signal,
       ),
   });
-  const available = snapshot.repositories.filter((repository) =>
-    repository.fullName.toLowerCase().includes(search.toLowerCase()),
+  const available = snapshot.repositories.filter(
+    (repository) =>
+      repository.fullName.toLowerCase().includes(search.toLowerCase()) &&
+      (repository.lifecycle === "active" ||
+        includeArchived ||
+        base.repositoryIds.includes(repository.id) ||
+        draft.repositoryIds.includes(repository.id)),
   );
   const missingRef =
     draft.credentialRef &&
@@ -382,9 +388,21 @@ export function GitHubEditor({
                   </span>
                 </legend>
                 <p className="field-help">
-                  A disabled source can stay empty while preparing a project
-                  transfer. Saving it does not grant provider access.
+                  These are repositories enrolled in HQ. Archived records may
+                  retain history for repositories removed from GitHub. Selected
+                  archived repositories remain visible while editing so you
+                  can remove them or undo a selection before saving.
                 </p>
+                <label className="source-archived-filter">
+                  <Checkbox
+                    checked={includeArchived}
+                    disabled={busy}
+                    onCheckedChange={(checked) =>
+                      setIncludeArchived(checked === true)
+                    }
+                  />
+                  Include archived repositories
+                </label>
                 <Input
                   aria-label="Find GitHub repositories"
                   placeholder="Find a repository..."
@@ -428,7 +446,12 @@ export function GitHubEditor({
                           })
                         }
                       />
-                      <span>{repository.fullName}</span>
+                      <span>
+                        {repository.fullName}
+                        {repository.lifecycle === "archived"
+                          ? " (archived in HQ)"
+                          : ""}
+                      </span>
                     </label>
                   ))}
                   {!available.length ? (
@@ -439,6 +462,12 @@ export function GitHubEditor({
                     </p>
                   ) : null}
                 </div>
+                <p className="field-help">
+                  Review enrollment from Repositories to reconcile GitHub names
+                  and archive status. Unavailable reads alone do not prove
+                  deletion. A disabled connection can have an empty selection.
+                  Saving collection settings does not grant GitHub access.
+                </p>
               </fieldset>
               <label className="source-enabled">
                 <Checkbox
