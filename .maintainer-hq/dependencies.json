@@ -18,6 +18,21 @@
           "reviewedAt": "2026-09-09T16:00:00.000Z",
           "reviewBy": "2026-10-09T16:00:00.000Z",
           "removeWhen": "Remove the override after both the development and test toolchains stop requesting Sharp 0.35.2, and the regenerated lockfile contains no Sharp version affected by this advisory."
+        },
+        {
+          "id": "undici-websocket-decompression",
+          "lifecycle": "active",
+          "parent": "miniflare",
+          "package": "undici",
+          "requested": "7.29.0",
+          "replacement": "7.29.1",
+          "advisory": "GHSA-3wwx-pv8p-q78v",
+          "vulnerable": "<7.29.1",
+          "reason": "Miniflare pins an Undici release whose WebSocket decompression error handling can terminate the process. The development and test toolchains must use the patched release.",
+          "owner": "HQ maintainers",
+          "reviewedAt": "2026-09-29T15:34:50.000Z",
+          "reviewBy": "2026-10-29T15:34:50.000Z",
+          "removeWhen": "Remove the override after every installed Miniflare release stops requesting Undici 7.29.0, and the regenerated lockfile contains no Undici version affected by this advisory."
         }
       ]
     }
