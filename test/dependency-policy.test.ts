@@ -41,6 +41,31 @@ describe("temporary npm override lifecycle", () => {
       },
     ]);
   });
+  it("verifies distinct reviewed requests from concurrent parent versions", () => {
+    const fixture = dependencyFixture();
+    fixture.rule.replacement = "1.0.3";
+    fixture.rule.vulnerable = "<1.0.3";
+    fixture.manifest.overrides.runner["decoder@1.0.0"] = "1.0.3";
+    Object.assign(fixture.manifest.overrides.runner, { "decoder@1.0.2": "1.0.3" });
+    fixture.policy.manifests[0]!.overrides.push({
+      ...fixture.rule,
+      id: "decoder-second-request",
+      requested: "1.0.2",
+    });
+    fixture.lock.packages["node_modules/harness/node_modules/runner"]!.dependencies = {
+      decoder: "1.0.2",
+    };
+    fixture.lock.packages["node_modules/decoder"]!.version = "1.0.3";
+    const result = analyzeDependencyPolicy(fixture.policy, fixture.documents, NOW);
+    expect(result.outcome).toBe("passed");
+    expect(result.findings.map((finding) => finding.status)).toEqual([
+      "mitigated", "mitigated",
+    ]);
+    fixture.lock.packages["node_modules/decoder"]!.version = "1.0.4";
+    const drift = analyzeDependencyPolicy(fixture.policy, fixture.documents, NOW);
+    expect(drift.outcome).toBe("failed");
+    expect(drift.issues.map((issue) => issue.code)).toContain("invalid_resolution");
+  });
   it("accepts exact version build metadata without accepting prefixed or loose versions", () => {
     const fixture = dependencyFixture();
     fixture.rule.replacement = "1.0.1+build.7";
