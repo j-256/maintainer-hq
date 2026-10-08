@@ -10,14 +10,14 @@
           "parent": "miniflare",
           "package": "sharp",
           "requested": "0.35.2",
-          "replacement": "0.35.4",
-          "advisory": "GHSA-rgj7-g3m4-5g8c",
-          "vulnerable": "<0.35.4",
-          "reason": "Miniflare's local image tooling pins a Sharp release containing vulnerable libheif decoders. HQ does not use that image-processing path, but the development toolchain must use the patched decoder.",
+          "replacement": "0.35.5",
+          "advisory": "GHSA-wq5f-xc86-pv6w",
+          "vulnerable": "<0.35.5",
+          "reason": "Miniflare's local image tooling pins a Sharp release containing vulnerable native decoders. The replacement includes patched libheif and librsvg dependencies; the development and test toolchains must use it.",
           "owner": "HQ maintainers",
-          "reviewedAt": "2026-09-09T16:00:00.000Z",
-          "reviewBy": "2026-10-09T16:00:00.000Z",
-          "removeWhen": "Remove the override after both the development and test toolchains stop requesting Sharp 0.35.2, and the regenerated lockfile contains no Sharp version affected by this advisory."
+          "reviewedAt": "2026-10-08T16:00:00.000Z",
+          "reviewBy": "2026-11-07T16:00:00.000Z",
+          "removeWhen": "Remove the override after every installed Miniflare release stops requesting Sharp 0.35.2, and the regenerated lockfile contains no Sharp version affected by the native decoder advisories."
         },
         {
           "id": "undici-websocket-decompression",
@@ -33,6 +33,41 @@
           "reviewedAt": "2026-09-29T15:34:50.000Z",
           "reviewBy": "2026-10-29T15:34:50.000Z",
           "removeWhen": "Remove the override after every installed Miniflare release stops requesting Undici 7.29.0, and the regenerated lockfile contains no Undici version affected by this advisory."
+        },
+        {
+          "id": "sharp-librsvg",
+          "lifecycle": "active",
+          "parent": "miniflare",
+          "package": "sharp",
+          "requested": "0.35.4",
+          "replacement": "0.35.5",
+          "advisory": "GHSA-wq5f-xc86-pv6w",
+          "vulnerable": "<0.35.5",
+          "reason": "Miniflare's local image tooling pins a Sharp release containing vulnerable native decoders. The replacement includes patched libheif and librsvg dependencies; the development and test toolchains must use it.",
+          "owner": "HQ maintainers",
+          "reviewedAt": "2026-10-08T16:00:00.000Z",
+          "reviewBy": "2026-11-07T16:00:00.000Z",
+          "removeWhen": "Remove the override after every installed Miniflare release stops requesting Sharp 0.35.4, and the regenerated lockfile contains no Sharp version affected by the librsvg advisory."
+        }
+      ]
+    },
+    {
+      "path": "site/package.json",
+      "overrides": [
+        {
+          "id": "selector-parser-flat-selectors",
+          "lifecycle": "active",
+          "parent": "postcss-nested",
+          "package": "postcss-selector-parser",
+          "requested": "6.1.2",
+          "replacement": "7.1.6",
+          "advisory": "GHSA-rj75-hqrm-r3gf",
+          "vulnerable": "<7.1.6",
+          "reason": "The documentation styling toolchain requests a selector parser with quadratic flat-selector parsing. Version 7 makes insertion during iteration safe and includes the linear parsing fix; verify the documentation CSS and build before adoption.",
+          "owner": "HQ maintainers",
+          "reviewedAt": "2026-10-08T16:00:00.000Z",
+          "reviewBy": "2026-11-07T16:00:00.000Z",
+          "removeWhen": "Remove the override after every installed postcss-nested release requests a patched selector parser and the documentation lockfile contains no affected version."
         }
       ]
     }
