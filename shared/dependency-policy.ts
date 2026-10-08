@@ -514,6 +514,19 @@ export function analyzeDependencyPolicy(
             continue;
           }
           const overridden = active && intersects(requested, rule.requested);
+          // Another exact request can have its own reviewed replacement for the same parent
+          const reviewedReplacements = new Set(
+            declared.overrides
+              .filter((candidate) =>
+                candidate.lifecycle === "active" &&
+                candidate.parent === rule.parent &&
+                candidate.package === rule.package &&
+                intersects(requested, candidate.requested) &&
+                object(children) &&
+                children[candidate.package + "@" + candidate.requested] === candidate.replacement,
+              )
+              .map((candidate) => candidate.replacement),
+          );
           if (overridden) matchingRequests++;
           const resolved = installedDependency(packages, path, rule.package);
           const version =
@@ -528,8 +541,8 @@ export function analyzeDependencyPolicy(
               "A parent dependency cannot be resolved from the lockfile",
             );
           else if (
-            overridden
-              ? version !== rule.replacement
+            reviewedReplacements.size > 0
+              ? reviewedReplacements.size !== 1 || !reviewedReplacements.has(version)
               : !satisfies(version, requested)
           )
             add(

@@ -23,5 +23,10 @@
     "astro": "7.3.5",
     "parse5": "8.0.1",
     "typescript": "6.0.3"
+  },
+  "overrides": {
+    "postcss-nested": {
+      "postcss-selector-parser@6.1.2": "7.1.6"
+    }
   }
 }

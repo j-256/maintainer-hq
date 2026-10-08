@@ -117,6 +117,10 @@ Repository writes require `0034_repository_credentials.sql`, which widens the cr
 
 ## HQ's Sharp mitigation
 
-HQ's development and test Miniflare dependencies request Sharp `0.35.2`. The lifecycle policy replaces that request with `0.35.4` for [GHSA-rgj7-g3m4-5g8c](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c). The reviewed advisory identifies the fixed Sharp release and its libheif update; the native runtime probe on 2026-09-09 reported Sharp `0.35.4` and libheif `1.23.2`. HQ does not invoke the affected local image-transformation paths, and the native tooling is absent from its deployed Worker bundle. This reduces production exposure but does not justify leaving the development toolchain vulnerable.
+HQ's development and test Miniflare dependencies request Sharp `0.35.2` and `0.35.4`. The lifecycle policy replaces both requests with `0.35.5`, which includes patched native decoders for [the libheif advisory](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c) and [the librsvg advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w). HQ does not invoke the affected local image-transformation paths, and the native tooling is absent from its deployed Worker bundle. This reduces production exposure but does not justify leaving the development toolchain vulnerable.
 
 Do not use a forceful audit fix that downgrades the Cloudflare toolchain. The policy and matching native lock packages must change together. Regenerate and verify the lockfile through npm, then exercise the complete application checks before integrating a toolchain update.
+
+## Documentation selector parsing
+
+The documentation toolchain overrides `postcss-nested`'s `postcss-selector-parser` request with `7.1.6` for [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf). The parser's [version 7 change](https://github.com/postcss/postcss-selector-parser/releases/tag/v7.0.0) makes insertion during iteration safe. Keep the scoped override and its lifecycle record aligned, and verify nested CSS processing and the documentation checks when changing it.
