@@ -11,6 +11,99 @@ import {
 } from "./fixtures/dependencies";
 
 describe("temporary npm override lifecycle", () => {
+  it("retains manifest-wide failure status after path diagnostics fill the report", () => {
+    const fixture = dependencyFixture();
+    const secondary = dependencyFixture();
+    fixture.lock.packages["node_modules/decoder"]!.version = "1.0.2";
+    const failingParents = 260;
+    for (let index = 0; index < failingParents; index++)
+      fixture.lock.packages[
+        `node_modules/parent-${index}/node_modules/runner`
+      ] = {
+        version: "2.1.0",
+        dependencies: { decoder: "1.0.0" },
+      };
+    secondary.lock.packages[""]!.devDependencies = { runner: "2.2.0" };
+    fixture.policy.manifests.push({
+      path: "secondary/package.json",
+      overrides: [{ ...secondary.rule, id: "secondary-decoder-advisory" }],
+    });
+    fixture.documents.push({
+      manifestPath: "secondary/package.json",
+      manifest: secondary.manifest,
+      lock: secondary.lock,
+    });
+    const result = analyzeDependencyPolicy(
+      fixture.policy,
+      fixture.documents,
+      NOW,
+    );
+    expect(result.issues.at(-1)?.code).toBe("evidence_limit");
+    expect(
+      result.issues.some(
+        (issue) => issue.manifestPath === "secondary/package.json",
+      ),
+    ).toBe(false);
+    expect(
+      result.findings.find(
+        (finding) => finding.manifestPath === "secondary/package.json",
+      )?.status,
+    ).toBe("invalid");
+  });
+  it("identifies the parent path and expected resolution for every violating dependency", () => {
+    const fixture = dependencyFixture();
+    fixture.lock.packages["node_modules/decoder"]!.version = "1.0.2";
+    const result = analyzeDependencyPolicy(
+      fixture.policy,
+      fixture.documents,
+      NOW,
+    );
+    const issues = result.issues.filter(
+      (issue) => issue.code === "invalid_resolution",
+    );
+    expect(issues).toMatchObject([
+      {
+        overrideId: "decoder-advisory",
+        resolution: {
+          parentPath: "node_modules/runner",
+          parentVersion: "2.1.0",
+          requested: "1.0.0",
+          resolved: "1.0.2",
+          reviewedVersions: ["1.0.1"],
+        },
+      },
+      {
+        overrideId: "decoder-advisory",
+        resolution: {
+          parentPath: "node_modules/harness/node_modules/runner",
+          parentVersion: "2.0.0",
+          requested: "1.0.0",
+          resolved: "1.0.2",
+          reviewedVersions: ["1.0.1"],
+        },
+      },
+    ]);
+  });
+  it("distinguishes an unreviewed declared range from a reviewed replacement", () => {
+    const fixture = dependencyFixture();
+    fixture.lock.packages[
+      "node_modules/harness/node_modules/runner"
+    ]!.dependencies = { decoder: "^2.0.0" };
+    const result = analyzeDependencyPolicy(
+      fixture.policy,
+      fixture.documents,
+      NOW,
+    );
+    expect(
+      result.issues.find((issue) => issue.code === "invalid_resolution"),
+    ).toMatchObject({
+      resolution: {
+        requested: "^2.0.0",
+        resolved: "1.0.1",
+        reviewedVersions: [],
+      },
+    });
+  });
   it("verifies both development and test parents against a hoisted patched dependency", () => {
     const fixture = dependencyFixture();
     const result = analyzeDependencyPolicy(

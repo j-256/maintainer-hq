@@ -374,7 +374,11 @@ function Finding({
   const { rule, upstream } = finding;
   const scopes = [...new Set(finding.matches.map((match) => match.scope))];
   return (
-    <article className="dependency-finding">
+    <article
+      className="dependency-finding"
+      id={"dependency-rule-" + rule.id}
+      tabIndex={-1}
+    >
       <div className="dependency-finding-heading">
         <div>
           <h3>
@@ -393,6 +397,12 @@ function Finding({
       </div>
       <p>{rule.reason}</p>
       <dl className="dependency-facts">
+        <div>
+          <dt>Rule</dt>
+          <dd>
+            <code>{rule.id}</code>
+          </dd>
+        </div>
         <div>
           <dt>Scope</dt>
           <dd>
@@ -839,11 +849,71 @@ export function RepositoryDependencies({
             <div className="dependency-notice" role="status">
               <h3>Policy checks need attention</h3>
               <ul>
-                {evidence.report.analysis.issues.map((issue, index) => (
-                  <li key={index}>
-                    <code>{issue.manifestPath}</code>: {issue.message}
-                  </li>
-                ))}
+                {evidence.report.analysis.issues.map((issue, index) => {
+                  const finding = evidence.report!.analysis.findings.find(
+                    (item) =>
+                      item.rule.id === issue.overrideId &&
+                      item.manifestPath === issue.manifestPath,
+                  );
+                  return (
+                    <li key={index}>
+                      <p>
+                        <code>{issue.manifestPath}</code>: {issue.message}
+                      </p>
+                      {finding ? (
+                        <p>
+                          <a
+                            className="quiet-link"
+                            href={"#dependency-rule-" + finding.rule.id}
+                            aria-label={"View override " + finding.rule.id}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              const target = document.getElementById(
+                                "dependency-rule-" + finding.rule.id,
+                              );
+                              target?.focus();
+                              target?.scrollIntoView({ block: "nearest" });
+                            }}
+                          >
+                            Rule <code>{finding.rule.id}</code>
+                          </a>
+                          {" / "}
+                          <code>
+                            {finding.rule.parent} &gt; {finding.rule.package}@
+                            {finding.rule.requested}
+                          </code>
+                        </p>
+                      ) : issue.overrideId ? (
+                        <p>
+                          Rule <code>{issue.overrideId}</code>
+                        </p>
+                      ) : null}
+                      {issue.resolution ? (
+                        <div className="dependency-resolution">
+                          <code>{issue.resolution.parentPath}</code>
+                          <p>
+                            {finding?.rule.parent ?? "Parent"}@
+                            {issue.resolution.parentVersion} requests{" "}
+                            {finding?.rule.package ?? "dependency"}{" "}
+                            {issue.resolution.requested}
+                          </p>
+                          <p>
+                            {issue.resolution.reviewedVersions.length
+                              ? "Expected reviewed replacement: " +
+                                issue.resolution.reviewedVersions.join(" or ")
+                              : "Expected declared range: " +
+                                issue.resolution.requested}
+                          </p>
+                          <p>
+                            Resolved:{" "}
+                            {issue.resolution.resolved ??
+                              "missing from lockfile"}
+                          </p>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : (

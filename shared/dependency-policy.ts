@@ -6,6 +6,7 @@ export const DEPENDENCY_LIMITS = Object.freeze({
   MANIFESTS: 8,
   OVERRIDES: 32,
   PACKAGES: 20000,
+  PACKAGE_PATH_LENGTH: 1024,
   MATCHES: 64,
   FILE_BYTES: 8 * 1024 * 1024,
   POLICY_BYTES: 64 * 1024,
@@ -164,6 +165,18 @@ export const dependencyIssueSchema = z
     manifestPath: dependencyManifestPathSchema,
     overrideId: z.string().max(64).nullable(),
     message: z.string().max(400),
+    resolution: z
+      .object({
+        parentPath: z.string().max(DEPENDENCY_LIMITS.PACKAGE_PATH_LENGTH),
+        parentVersion: dependencyVersionSchema,
+        requested: z.string().max(160),
+        resolved: dependencyVersionSchema.nullable(),
+        reviewedVersions: z
+          .array(dependencyVersionSchema)
+          .max(DEPENDENCY_LIMITS.OVERRIDES),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type DependencyIssue = z.infer<typeof dependencyIssueSchema>;
@@ -263,19 +276,34 @@ export function analyzeDependencyPolicy(
   const findings: DependencyFinding[] = [];
   const checkedAt = new Date(now).toISOString();
   const issueCodes = new Map<string, Set<DependencyIssue["code"]>>();
+  const issueKeys = new Set<string>();
   const add = (
     code: DependencyIssue["code"],
     manifestPath: string,
     overrideId: string | null,
     message: string,
+    resolution?: DependencyIssue["resolution"],
   ) => {
+    // Different parent paths can violate the same rule with different resolutions
     const key = JSON.stringify([manifestPath, overrideId]);
+    const issueKey = JSON.stringify([
+      key,
+      code,
+      resolution?.parentPath ?? null,
+    ]);
     const codes = issueCodes.get(key) ?? new Set<DependencyIssue["code"]>();
-    if (codes.has(code)) return;
+    if (issueKeys.has(issueKey)) return;
+    issueKeys.add(issueKey);
     codes.add(code);
     issueCodes.set(key, codes);
     if (issues.length < 255)
-      issues.push({ code, manifestPath, overrideId, message });
+      issues.push({
+        code,
+        manifestPath,
+        overrideId,
+        message,
+        ...(resolution ? { resolution } : {}),
+      });
     else if (issues.length === 255)
       issues.push({
         code: "evidence_limit",
@@ -321,7 +349,8 @@ export function analyzeDependencyPolicy(
       const invalidPath = Object.keys(packages).some(
         (path) =>
           path !== "" &&
-          (!path.startsWith("node_modules/") ||
+          (path.length > DEPENDENCY_LIMITS.PACKAGE_PATH_LENGTH ||
+            !path.startsWith("node_modules/") ||
             path.includes("\\") ||
             /[\x00-\x20]/.test(path) ||
             path
@@ -517,13 +546,15 @@ export function analyzeDependencyPolicy(
           // Another exact request can have its own reviewed replacement for the same parent
           const reviewedReplacements = new Set(
             declared.overrides
-              .filter((candidate) =>
-                candidate.lifecycle === "active" &&
-                candidate.parent === rule.parent &&
-                candidate.package === rule.package &&
-                intersects(requested, candidate.requested) &&
-                object(children) &&
-                children[candidate.package + "@" + candidate.requested] === candidate.replacement,
+              .filter(
+                (candidate) =>
+                  candidate.lifecycle === "active" &&
+                  candidate.parent === rule.parent &&
+                  candidate.package === rule.package &&
+                  intersects(requested, candidate.requested) &&
+                  object(children) &&
+                  children[candidate.package + "@" + candidate.requested] ===
+                    candidate.replacement,
               )
               .map((candidate) => candidate.replacement),
           );
@@ -533,16 +564,25 @@ export function analyzeDependencyPolicy(
             object(resolved) && typeof resolved.version === "string"
               ? resolved.version
               : null;
+          const resolution = {
+            parentPath: path,
+            parentVersion: entry.version as string,
+            requested,
+            resolved: version,
+            reviewedVersions: [...reviewedReplacements].sort(),
+          };
           if (!version)
             add(
               "missing_resolution",
               manifestPath,
               rule.id,
               "A parent dependency cannot be resolved from the lockfile",
+              resolution,
             );
           else if (
             reviewedReplacements.size > 0
-              ? reviewedReplacements.size !== 1 || !reviewedReplacements.has(version)
+              ? reviewedReplacements.size !== 1 ||
+                !reviewedReplacements.has(version)
               : !satisfies(version, requested)
           )
             add(
@@ -550,6 +590,7 @@ export function analyzeDependencyPolicy(
               manifestPath,
               rule.id,
               "A parent dependency resolves outside its reviewed or declared version",
+              resolution,
             );
           if (matches.length < DEPENDENCY_LIMITS.MATCHES)
             matches.push({
@@ -587,10 +628,8 @@ export function analyzeDependencyPolicy(
       ];
       const invalid =
         !packages ||
-        issues.some(
-          (issue) =>
-            issue.manifestPath === manifestPath && issue.overrideId === null,
-        ) ||
+        // Status must retain failures beyond the bounded display report
+        Boolean(issueCodes.get(JSON.stringify([manifestPath, null]))?.size) ||
         own.some(
           (code) =>
             ![
