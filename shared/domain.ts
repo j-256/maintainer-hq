@@ -512,10 +512,17 @@ export function assessRepository(
       : unverified.length
         ? "unknown"
         : "healthy";
+  // Compare presentation-only punctuation while retaining distinct source detail
+  const reasons = new Map<string, string>();
+  for (const reason of [...issues, ...unverified]) {
+    const text = reason.trim();
+    const key = text.replace(/\.+$/, "");
+    if (!reasons.has(key)) reasons.set(key, text);
+  }
   return {
     health,
     freshness: "fresh",
-    reasons: [...new Set([...issues, ...unverified])],
+    reasons: [...reasons.values()],
     observedAt: latest?.observedAt ?? null,
   };
 }
