@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { Check, FolderGit2 as Github, Plus, RefreshCw } from "lucide-react";
@@ -18,6 +18,7 @@ import {
   githubCollectionOutcome,
 } from "../shared/github-refresh-summary";
 import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { Badge } from "./components/ui/badge";
 import {
   Select,
@@ -57,6 +58,14 @@ import {
 import { SOURCE_REQUEST_TIMEOUT_MS } from "./source-editor";
 import "./sources.css";
 import "./github.css";
+
+const RECEIPT_JUMP_LIMIT = 5;
+const receiptNeedsAttention = (
+  item: Parameters<typeof githubCollectionOutcome>[0],
+) =>
+  ["failure", "coverage_gap", "cancelled"].includes(
+    githubCollectionOutcome(item),
+  );
 
 function evidenceLabel(source: GitHubSource, snapshot: Snapshot) {
   if (!source.enabled) return "Collection disabled";
@@ -336,6 +345,12 @@ export function GitHubRefreshDialog({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resultScope, setResultScope] = useState<
+    "all" | "changed" | "attention" | null
+  >(null);
+  const [repositorySearch, setRepositorySearch] = useState("");
+  const [jump, setJump] = useState<string | null>(null);
+  const resultPrefix = useId();
   const client = useQueryClient();
   const history = useQuery({
     ...COORDINATED_QUERY_OPTIONS,
@@ -367,6 +382,46 @@ export function GitHubRefreshDialog({
       ),
   });
   const active = result.data && githubRefreshActive(result.data.status);
+  const items = result.data?.items ?? [];
+  const changedItems = items.filter((item) => item.changes?.length);
+  const attentionItems = items.filter(receiptNeedsAttention);
+  const scope =
+    resultScope ??
+    (attentionItems.length
+      ? "attention"
+      : changedItems.length
+        ? "changed"
+        : "all");
+  const visibleItems = items.filter(
+    (item) =>
+      item.fullName
+        .toLowerCase()
+        .includes(repositorySearch.trim().toLowerCase()) &&
+      (scope === "all" ||
+        (scope === "changed"
+          ? Boolean(item.changes?.length)
+          : receiptNeedsAttention(item))),
+  );
+  const jumps = [
+    ...new Map(
+      [...changedItems, ...attentionItems].map((item) => [
+        item.repositoryId,
+        item,
+      ]),
+    ).values(),
+  ].slice(0, RECEIPT_JUMP_LIMIT);
+  useEffect(() => {
+    setResultScope(null);
+    setRepositorySearch("");
+    setJump(null);
+  }, [refreshId]);
+  useEffect(() => {
+    if (!jump) return;
+    const target = document.getElementById(resultPrefix + jump);
+    target?.focus();
+    target?.scrollIntoView({ block: "nearest" });
+    setJump(null);
+  }, [jump, resultPrefix]);
   const receipts = history.data ?? [];
   const outsideHistory =
     refreshId && !receipts.some((receipt) => receipt.id === refreshId);
@@ -510,6 +565,27 @@ export function GitHubRefreshDialog({
                     finished
                   </strong>
                   <p>{result.data.summary}</p>
+                  {jumps.length ? (
+                    <div
+                      className="github-result-jumps"
+                      aria-label="Changed or attention results"
+                    >
+                      {jumps.map((item) => (
+                        <Button
+                          key={item.repositoryId}
+                          variant="outline"
+                          aria-label={"Show result for " + item.fullName}
+                          onClick={() => {
+                            setResultScope("all");
+                            setRepositorySearch("");
+                            setJump(item.repositoryId);
+                          }}
+                        >
+                          {item.fullName}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <p className="field-help">
                   Requested by {result.data.actor}. Scope revision{" "}
@@ -546,10 +622,56 @@ export function GitHubRefreshDialog({
                       : "Copy reference"}
                   </Button>
                 </div>
+                <div className="github-result-filters">
+                  <label className="form-field">
+                    Search receipt repositories
+                    <Input
+                      value={repositorySearch}
+                      maxLength={160}
+                      onChange={(event) =>
+                        setRepositorySearch(event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="form-field">
+                    Repository results
+                    <Select
+                      value={scope}
+                      onValueChange={(value: "all" | "changed" | "attention") =>
+                        setResultScope(value)
+                      }
+                    >
+                      <SelectTrigger aria-label="Repository results">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="attention">
+                          Needs attention ({attentionItems.length})
+                        </SelectItem>
+                        <SelectItem value="changed">
+                          Changed ({changedItems.length})
+                        </SelectItem>
+                        <SelectItem value="all">
+                          All ({items.length})
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+                </div>
+                <p className="field-help" role="status">
+                  Showing {visibleItems.length} of {items.length} repository
+                  results. Needs attention includes collection failures, access
+                  gaps, and cancellations.
+                </p>
+                {!visibleItems.length ? (
+                  <p role="status">No matching repository results.</p>
+                ) : null}
                 <div className="github-results">
-                  {result.data.items?.map((item) => (
+                  {visibleItems.map((item) => (
                     <article
                       key={item.repositoryId}
+                      id={resultPrefix + item.repositoryId}
+                      tabIndex={-1}
                       className="github-result"
                       aria-label={item.fullName}
                     >

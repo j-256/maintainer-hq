@@ -229,6 +229,58 @@ for (const theme of ["light", "dark"]) {
   }
 }
 
+test("receipt triage searches and jumps to changed results while keeping the full fleet accessible", async ({
+  page,
+  request,
+}) => {
+  const data = await fixture(page, request);
+  const changed = data.receipt.items![0]!;
+  data.receipt.items = [
+    ...Array.from({ length: 25 }, (_, index) => ({
+      ...changed,
+      repositoryId: "unchanged-" + index,
+      fullName: "example/aaa-" + String(index).padStart(2, "0"),
+      status: "succeeded" as const,
+      changes: [],
+    })),
+    changed,
+  ];
+  data.receipt.total = data.receipt.finished = 26;
+  await page.goto(ACTIVITY_URL);
+  await page.getByRole("link", { name: "View refresh receipt" }).click();
+  const dialog = page.getByRole("dialog");
+  const view = dialog.getByRole("combobox", { name: "Repository results" });
+  await view.click();
+  await page.getByRole("option", { name: "Changed (1)", exact: true }).click();
+  await expect(dialog.locator(".github-result")).toHaveCount(1);
+  await dialog
+    .getByRole("textbox", { name: "Search receipt repositories" })
+    .fill("missing");
+  await expect(
+    dialog.getByText("No matching repository results.", { exact: true }),
+  ).toBeVisible();
+  await dialog
+    .getByRole("button", {
+      name: "Show result for " + changed.fullName,
+      exact: true,
+    })
+    .click();
+  const result = dialog.getByRole("article", {
+    name: changed.fullName,
+    exact: true,
+  });
+  await expect(result).toBeFocused();
+  await expect(dialog.locator(".github-result")).toHaveCount(26);
+  await expect(
+    dialog.getByRole("textbox", { name: "Search receipt repositories" }),
+  ).toHaveValue("");
+  await view.click();
+  await page
+    .getByRole("option", { name: "Needs attention (1)", exact: true })
+    .click();
+  await expect(dialog.locator(".github-result")).toHaveCount(1);
+});
+
 test("inline Activity receipt selection preserves the journal URL", async ({
   page,
   request,
