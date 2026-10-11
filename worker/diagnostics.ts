@@ -4,6 +4,7 @@ import { contextReadSchema } from "../shared/github-context";
 import { DEPENDENCIES_LIMITS } from "../shared/dependencies";
 import { dependencyOperationSchema } from "../shared/dependency-operations";
 import { HOOK_INVENTORY_LIMIT_REASONS } from "../shared/coverage-evidence";
+import { monitorTargetScanSchema } from "../shared/monitoring";
 
 const identity = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const elapsed = z.number().int().nonnegative().max(86400000);
@@ -15,6 +16,14 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  monitorTargetScanSchema
+    .extend({
+      event: z.literal("hq.monitoring.targets.limited"),
+      workspaceId: identity,
+      connectionId: identity,
+      elapsedMs: elapsed,
+    })
+    .strict(),
   z
     .object({
       event: z.literal("hq.hooks.coverage.source"),
@@ -174,6 +183,7 @@ export function emitDiagnostic(event: Diagnostic) {
       value.event === "hq.push.interrupted" ||
       value.event === "hq.secrets.cleanup.interrupted" ||
       value.event === "hq.request.failed" ||
+      value.event === "hq.monitoring.targets.limited" ||
       (value.event === "hq.hooks.coverage.completed" && value.limited) ||
       (value.event === "hq.hooks.coverage.source" &&
         value.state !== "complete") ||

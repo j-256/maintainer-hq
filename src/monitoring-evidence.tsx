@@ -18,6 +18,9 @@ import { HookTime as MonitorTime } from "./hook-components";
 
 const CLOCK_TICK_MS = 1000;
 const EvidenceClock = createContext(0);
+export function useMonitoringClock() {
+  return useContext(EvidenceClock);
+}
 export function MonitoringEvidenceClock({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { CAPABILITY, workspaceInput } from "../shared/domain";
+import { CAPABILITY, LIMITS, workspaceInput } from "../shared/domain";
 import {
   MONITOR_LIMITS,
   monitorConnectionInput,
@@ -10,13 +10,18 @@ import {
   monitorIncidentsInput,
   type MonitorConnection,
   type MonitorConnectionFields,
+  type MonitorResult,
+  type MonitorTargetScan,
 } from "../shared/monitoring";
+import { monitorTargetStatusMatches } from "../shared/monitoring-freshness";
+import { emitDiagnostic } from "./diagnostics";
 import {
   authorizeHooks as authorizeOperator,
   hookActorGuard as actorGuard,
 } from "./hook-authority";
 import {
   callMonitorProvider,
+  MonitorProviderError,
   monitorProvider,
   monitorProviderReferences,
 } from "./monitoring-client";
@@ -25,6 +30,7 @@ import {
   ResourceLinksService,
 } from "./resource-links";
 import { DomainError } from "./errors";
+import type { ResourceLinks } from "../shared/resource-links";
 import type { WorkspaceService } from "./service";
 
 export type MonitorConnectionRow = {
@@ -254,26 +260,151 @@ export class MonitoringService {
     return response;
   }
   async targets(input: unknown) {
-    const { workspaceId, connectionId, cursor } =
+    const { workspaceId, connectionId, cursor, search, status, repositoryId } =
       monitorTargetsInput.parse(input);
     await authorizeOperator(this.context, workspaceId);
+    if (repositoryId)
+      await this.context.repository({ workspaceId, repositoryId });
     const { row, provider } = await this.active(workspaceId, connectionId);
-    const response = await callMonitorProvider(
-      provider,
-      "targets",
-      workspaceId,
-      { cursor },
+    const needle = search.toLowerCase();
+    const matchingRepositories = search
+      ? await this.db
+          .prepare(
+            "SELECT id FROM repositories WHERE workspace_id=? AND instr(lower(full_name),?)>0 LIMIT ?",
+          )
+          .bind(workspaceId, needle, LIMITS.MAX_REPOSITORIES + 1)
+          .all<{ id: string }>()
+      : null;
+    if (
+      matchingRepositories &&
+      matchingRepositories.results.length > LIMITS.MAX_REPOSITORIES
+    )
+      throw new DomainError(
+        "capacity",
+        "Repository search exceeds the supported workspace limit.",
+        409,
+      );
+    const matchingIds = new Set(
+      matchingRepositories?.results.map((item) => item.id),
     );
-    const repositoryLinks = await new ResourceLinksService(
-      this.context,
-    ).forResources(
-      workspaceId,
-      "monitor",
-      connectionId,
-      response.result.items.map((value) => value.id),
-    );
-    await this.unchanged(workspaceId, row);
-    return { ...response, repositoryLinks };
+    const filtered = Boolean(search || status !== "all" || repositoryId);
+    const started = Date.now();
+    const deadline = started + MONITOR_LIMITS.TARGET_SCAN_MS;
+    const reference = crypto.randomUUID();
+    let nextCursor = cursor;
+    let configuration: MonitorResult<"targets">["configuration"] | undefined;
+    let targets = 0;
+    const seen = new Set<string>(cursor ? [cursor] : []);
+    type TargetPage = Awaited<
+      ReturnType<typeof callMonitorProvider<"targets">>
+    > & { repositoryLinks: ResourceLinks[] };
+    let completed: TargetPage | undefined;
+    const finish = async (
+      response: TargetPage,
+      pages: number,
+      stopReason: MonitorTargetScan["stopReason"],
+    ) => {
+      await this.unchanged(workspaceId, row);
+      if (repositoryId)
+        await this.context.repository({ workspaceId, repositoryId });
+      const scan = { reference, pages, targets, stopReason };
+      if (stopReason === "page_limit" || stopReason === "time_limit")
+        emitDiagnostic({
+          event: "hq.monitoring.targets.limited",
+          workspaceId,
+          connectionId,
+          ...scan,
+          elapsedMs: Date.now() - started,
+        });
+      return { ...response, scan };
+    };
+    for (let pages = 1; ; pages++) {
+      await this.unchanged(workspaceId, row);
+      const remaining = deadline - Date.now();
+      if (completed && remaining <= 0)
+        return finish(completed, pages - 1, "time_limit");
+      let response: Awaited<ReturnType<typeof callMonitorProvider<"targets">>>;
+      try {
+        response = await callMonitorProvider(
+          provider,
+          "targets",
+          workspaceId,
+          { cursor: nextCursor },
+          Math.max(1, remaining),
+        );
+      } catch (error) {
+        // Preserve the last safe continuation only when a later page exhausts the shared budget
+        if (
+          completed &&
+          remaining < MONITOR_LIMITS.PROVIDER_TIMEOUT_MS &&
+          error instanceof MonitorProviderError &&
+          error.localDeadlineExceeded
+        )
+          return finish(completed, pages - 1, "time_limit");
+        throw error;
+      }
+      const data = response.result;
+      // Never combine pages from different executing configurations
+      if (
+        configuration !== undefined &&
+        (configuration?.revision !== data.configuration?.revision ||
+          configuration?.configFingerprint !==
+            data.configuration?.configFingerprint)
+      )
+        throw new DomainError(
+          "revision_conflict",
+          "Monitor targets changed during the search. Restart from the first page.",
+          409,
+        );
+      configuration = data.configuration;
+      if (
+        new Set(data.items.map((item) => item.id)).size !== data.items.length ||
+        (data.nextCursor && seen.has(data.nextCursor))
+      )
+        throw new DomainError(
+          "monitoring_response_invalid",
+          "The monitoring provider repeated a target or pagination cursor. Restart the target read.",
+          503,
+        );
+      if (data.nextCursor) seen.add(data.nextCursor);
+      targets += data.items.length;
+      const links = await new ResourceLinksService(this.context).forResources(
+        workspaceId,
+        "monitor",
+        connectionId,
+        data.items.map((item) => item.id),
+      );
+      const byTarget = new Map(links.map((link) => [link.resourceKey, link]));
+      const now = this.context.now();
+      const items = data.items.filter((item) => {
+        const ids = byTarget.get(item.id)?.repositoryIds ?? [];
+        return (
+          (!repositoryId || ids.includes(repositoryId)) &&
+          (!search ||
+            item.id.toLowerCase().includes(needle) ||
+            item.url.toLowerCase().includes(needle) ||
+            ids.some((id) => matchingIds.has(id))) &&
+          monitorTargetStatusMatches(item.evidence, status, now)
+        );
+      });
+      const stopReason: MonitorTargetScan["stopReason"] | null =
+        !data.nextCursor
+          ? "complete"
+          : !filtered || items.length
+            ? "page"
+            : pages >= MONITOR_LIMITS.TARGET_SCAN_PAGES
+              ? "page_limit"
+              : Date.now() >= deadline
+                ? "time_limit"
+                : null;
+      completed = {
+        ...response,
+        result: { ...data, items },
+        repositoryLinks: items.map((item) => byTarget.get(item.id)!),
+      };
+      if (stopReason) return finish(completed, pages, stopReason);
+      nextCursor = data.nextCursor;
+    }
   }
   async target(input: unknown) {
     const { workspaceId, connectionId, targetId } =

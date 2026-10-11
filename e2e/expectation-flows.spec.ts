@@ -46,6 +46,125 @@ async function monitoring(page: Page, viewer = false) {
   );
   return state;
 }
+test("monitoring resolver can narrow the inventory to linked targets and preserve search", async ({
+  page,
+}) => {
+  const state = await monitoring(page);
+  state.links.get("monitor/" + MONITOR_TARGET.id)!.repositoryIds = [
+    MONITOR_REPOSITORIES[0]!.id,
+  ];
+  state.configuration.targets.push({ ...MONITOR_TARGET, id: "other-target" });
+  state.links.set("monitor/other-target", {
+    ...state.links.get("monitor/" + MONITOR_TARGET.id)!,
+    resourceKey: "other-target",
+    repositoryIds: [],
+  });
+  await page.goto(repositoryUrl(MONITOR_REPOSITORIES[0]!.id, "monitoring"));
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "other-target", exact: true }),
+  ).toBeVisible();
+  await dialog
+    .getByRole("checkbox", { name: "Linked to this repository", exact: true })
+    .check();
+  await expect(
+    dialog.getByRole("heading", { name: "other-target", exact: true }),
+  ).toHaveCount(0);
+  await dialog
+    .getByRole("textbox", { name: "Search monitor targets" })
+    .fill("other");
+  await expect(
+    dialog.getByText("No matching targets in this scan.", { exact: true }),
+  ).toBeVisible();
+  await dialog
+    .getByRole("checkbox", { name: "Linked to this repository", exact: true })
+    .uncheck();
+  await expect(
+    dialog.getByRole("heading", { name: "other-target", exact: true }),
+  ).toBeVisible();
+});
+test("linked target results stay scoped when switching repositories and the next read fails", async ({
+  page,
+}) => {
+  const state = await monitoring(page);
+  const first = MONITOR_REPOSITORIES[0]!;
+  const second = MONITOR_REPOSITORIES[1]!;
+  state.links.get("monitor/" + MONITOR_TARGET.id)!.repositoryIds = [first.id];
+  await page.route("**/api/commands/monitoring_targets", (route) => {
+    if (route.request().postDataJSON().repositoryId !== second.id)
+      return route.fallback();
+    return route.fulfill({
+      status: 503,
+      json: {
+        error: {
+          code: "monitoring_provider_unavailable",
+          message: "Synthetic second repository read failed",
+        },
+      },
+    });
+  });
+  await page.goto(repositoryUrl(first.id, "monitoring"));
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("checkbox", { name: "Linked to this repository", exact: true })
+    .check();
+  await expect(
+    dialog.getByRole("heading", { name: MONITOR_TARGET.id, exact: true }),
+  ).toBeVisible();
+  await page.evaluate(
+    (url) => {
+      history.pushState({}, "", url);
+      dispatchEvent(new PopStateEvent("popstate"));
+    },
+    repositoryUrl(second.id, "monitoring"),
+  );
+  await dialog
+    .getByRole("checkbox", { name: "Linked to this repository", exact: true })
+    .check();
+  await expect(
+    dialog.getByText("Synthetic second repository read failed", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: MONITOR_TARGET.id, exact: true }),
+  ).toHaveCount(0);
+});
+test("passing-only resolver results expire with their check badges", async ({
+  page,
+}) => {
+  const at = Date.now();
+  const observedAt = new Date(at).toISOString();
+  const freshUntil = at + 60000;
+  await page.clock.install({ time: at });
+  const state = await monitoring(page);
+  state.check = {
+    state: "passed",
+    observedAt,
+    lastSuccessAt: observedAt,
+    freshUntil: new Date(freshUntil).toISOString(),
+    scheduledAt: observedAt,
+    configurationRevision: 1,
+    configurationMatches: true,
+    status: 200,
+    errorCode: null,
+  };
+  await page.goto(repositoryUrl(MONITOR_REPOSITORIES[0]!.id, "monitoring"));
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Target evidence" }).click();
+  await page.getByRole("option", { name: "Check passed", exact: true }).click();
+  await expect(
+    dialog.getByRole("heading", { name: MONITOR_TARGET.id, exact: true }),
+  ).toBeVisible();
+  await page.clock.pauseAt(freshUntil - 1000);
+  await page.clock.runFor(4000);
+  await expect(
+    dialog.getByRole("heading", { name: MONITOR_TARGET.id, exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByText("No matching targets in this scan.", { exact: true }),
+  ).toBeVisible();
+});
 async function github(page: Page, viewer = false) {
   const fixture = coverageFixture();
   await mockWorkspaceView(page, (snapshot) => ({

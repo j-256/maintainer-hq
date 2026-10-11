@@ -584,7 +584,7 @@ export const commands = {
     schema: monitorTargetsInput,
     method: "monitoringTargets",
     title:
-      "Read a bounded target page with check evidence and repository links",
+      "Search bounded target pages by target, URL, repository, and current check evidence",
     readOnly: true,
   },
   monitoring_target: {

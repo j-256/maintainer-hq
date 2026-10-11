@@ -105,7 +105,11 @@ const messages = {
     "The monitoring response does not match the supported contract. No provider state can be inferred from it.",
 } as const;
 export class MonitorProviderError extends DomainError {
-  constructor(readonly providerCode: keyof typeof messages) {
+  // Provider-reported timeouts remain errors rather than successful scan limits
+  constructor(
+    readonly providerCode: keyof typeof messages,
+    readonly localDeadlineExceeded = false,
+  ) {
     super(
       "monitoring_provider_" + providerCode,
       messages[providerCode],
@@ -124,6 +128,7 @@ export async function callMonitorProvider<K extends MonitorCommand>(
   command: K,
   workspaceId: string,
   input: Record<string, unknown> = {},
+  timeoutMs: number = MONITOR_LIMITS.PROVIDER_TIMEOUT_MS,
 ): Promise<{
   result: MonitorResult<K>;
   capabilities: (typeof MONITOR_CAPABILITIES)[number][];
@@ -132,11 +137,14 @@ export async function callMonitorProvider<K extends MonitorCommand>(
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      reject(new MonitorProviderError("timeout"));
-      controller.abort();
-      void reader?.cancel().catch(() => {});
-    }, MONITOR_LIMITS.PROVIDER_TIMEOUT_MS);
+    timer = setTimeout(
+      () => {
+        reject(new MonitorProviderError("timeout", true));
+        controller.abort();
+        void reader?.cancel().catch(() => {});
+      },
+      Math.min(MONITOR_LIMITS.PROVIDER_TIMEOUT_MS, timeoutMs),
+    );
   });
   try {
     return await Promise.race([

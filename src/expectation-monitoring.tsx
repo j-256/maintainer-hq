@@ -2,7 +2,18 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CAPABILITY, type Repository, type Snapshot } from "../shared/domain";
 import { COVERAGE_LIMITS } from "../shared/coverage-evidence";
-import type { MonitorConnection, MonitorResult } from "../shared/monitoring";
+import type {
+  MonitorConnection,
+  MonitorResult,
+  MonitorTargetScan,
+  MonitorTargetStatus,
+} from "../shared/monitoring";
+import { monitorTargetStatusMatches } from "../shared/monitoring-freshness";
+import {
+  MonitorTargetFilters,
+  MonitorTargetScanNote,
+  useMonitorTargetSearch,
+} from "./monitoring-target-filters";
 import type { ResourceLinks } from "../shared/resource-links";
 import { monitoringExpectationResolution } from "../shared/expectation-resolution";
 import { command } from "./lib/api";
@@ -20,6 +31,7 @@ import { MonitoringConnectionEditor } from "./monitoring-connection";
 import { MonitoringReview } from "./monitoring-review";
 import {
   MonitoringEvidenceClock,
+  useMonitoringClock,
   MonitorEvidence,
   MonitorCheckTimes,
   MonitorExecution,
@@ -29,22 +41,29 @@ import {
   ResolutionDialog,
   useResolutionNavigation,
   useResolutionCoverage,
-  useExpectationClock,
 } from "./expectation-flow";
 import "./hooks.css";
 import "./monitoring.css";
 
 const CREATE_TARGET = ":create";
 const DEFAULTS_TARGET = ":defaults";
-export function MonitoringResolution({
-  repository,
-  snapshot,
-  onBack,
-}: {
+type MonitoringResolutionProps = {
   repository: Repository;
   snapshot: Snapshot;
   onBack: () => void;
-}) {
+};
+export function MonitoringResolution(props: MonitoringResolutionProps) {
+  return (
+    <MonitoringEvidenceClock>
+      <MonitoringResolutionContent {...props} />
+    </MonitoringEvidenceClock>
+  );
+}
+function MonitoringResolutionContent({
+  repository,
+  snapshot,
+  onBack,
+}: MonitoringResolutionProps) {
   const { params, navigate, focus } = useResolutionNavigation();
   const client = useQueryClient();
   const workspaceId = snapshot.workspace.id;
@@ -52,6 +71,10 @@ export function MonitoringResolution({
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState("");
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<MonitorTargetStatus>("all");
+  const [linkedOnly, setLinkedOnly] = useState(false);
+  const searchReady = useMonitorTargetSearch(search);
   const canEdit = snapshot.capabilities.includes(CAPABILITY.EDIT);
   const canOperate = snapshot.capabilities.includes(CAPABILITY.OPERATE);
   const owner = snapshot.capabilities.includes(CAPABILITY.ADMIN);
@@ -98,25 +121,47 @@ export function MonitoringResolution({
       connectionId,
       selected?.revision,
       cursors.at(-1),
+      search,
+      status,
+      linkedOnly,
+      linkedOnly ? repository.id : null,
     ],
     queryFn: ({ signal }) =>
       command<{
         result: MonitorResult<"targets">;
         repositoryLinks: ResourceLinks[];
         capabilities: string[];
+        scan?: MonitorTargetScan;
       }>(
         "monitoring_targets",
-        { workspaceId, connectionId, cursor: cursors.at(-1) },
+        {
+          workspaceId,
+          connectionId,
+          cursor: cursors.at(-1),
+          search,
+          status,
+          repositoryId: linkedOnly ? repository.id : null,
+        },
         signal,
       ),
-    enabled: active && !targetId && !reviewId,
+    enabled: active && !targetId && !reviewId && searchReady,
     retry: false,
   });
   const coverage = useResolutionCoverage(repository, snapshot);
-  const state = monitoringExpectationResolution(
-    coverage.data,
-    useExpectationClock(),
+  const now = useMonitoringClock();
+  const state = monitoringExpectationResolution(coverage.data, now);
+  const linksByTarget = new Map(
+    (inventory.data?.repositoryLinks ?? []).map((link) => [
+      link.resourceKey,
+      link.repositoryIds,
+    ]),
   );
+  const linked = (id: string) =>
+    Boolean(linksByTarget.get(id)?.includes(repository.id));
+  const items =
+    inventory.data?.result.items
+      .filter((item) => monitorTargetStatusMatches(item.evidence, status, now))
+      .sort((a, b) => Number(linked(b.id)) - Number(linked(a.id))) ?? [];
   const configure =
     canOperate && Boolean(runtime.data?.capabilities.includes("configure"));
   async function refresh(check = false) {
@@ -190,7 +235,7 @@ export function MonitoringResolution({
     void refresh();
   }
   return (
-    <MonitoringEvidenceClock>
+    <>
       <ResolutionDialog
         kind="monitoring"
         repository={repository}
@@ -315,6 +360,23 @@ export function MonitoringResolution({
             {runtime.data ? (
               <MonitorExecution data={runtime.data.result} />
             ) : null}
+            <MonitorTargetFilters
+              search={search}
+              status={status}
+              linkedOnly={linkedOnly}
+              onSearch={(value) => {
+                setSearch(value);
+                setCursors([null]);
+              }}
+              onStatus={(value) => {
+                setStatus(value);
+                setCursors([null]);
+              }}
+              onLinkedOnly={(value) => {
+                setLinkedOnly(value);
+                setCursors([null]);
+              }}
+            />
             {inventory.error ? (
               <>
                 <MonitorError error={inventory.error} />
@@ -329,11 +391,8 @@ export function MonitoringResolution({
             {inventory.isPending ? (
               <p role="status">Reading monitor targets...</p>
             ) : null}
-            {inventory.data?.result.items.map((item) => {
-              const links =
-                inventory.data.repositoryLinks.find(
-                  (link) => link.resourceKey === item.id,
-                )?.repositoryIds ?? [];
+            {items.map((item) => {
+              const links = linksByTarget.get(item.id) ?? [];
               const linked = links.includes(repository.id);
               return (
                 <article className="resolution-card" key={item.id}>
@@ -370,12 +429,20 @@ export function MonitoringResolution({
                 </article>
               );
             })}
-            {inventory.data && !inventory.data.result.items.length ? (
+            {inventory.data && !items.length ? (
               <p>
-                {inventory.data.result.nextCursor
-                  ? "No targets on this page. Continue to the next page."
-                  : "No monitors configured. Create one to begin."}
+                {search.trim() || status !== "all" || linkedOnly
+                  ? "No matching targets in this scan."
+                  : inventory.data.result.nextCursor
+                    ? "No targets on this page. Continue to the next page."
+                    : "No monitors configured. Create one to begin."}
               </p>
+            ) : null}
+            {inventory.data ? (
+              <MonitorTargetScanNote
+                scan={inventory.data.scan}
+                hasMore={Boolean(inventory.data.result.nextCursor)}
+              />
             ) : null}
             <div className="resolution-actions">
               <Button
@@ -475,6 +542,6 @@ export function MonitoringResolution({
           )}
         </ResolutionDialog>
       ) : null}
-    </MonitoringEvidenceClock>
+    </>
   );
 }

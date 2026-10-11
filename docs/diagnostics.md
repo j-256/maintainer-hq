@@ -26,6 +26,7 @@ Inspect the exact serving Worker with Cloudflare Fleet first. In Workers Observa
 | Application event | Correlation and interpretation |
 | --- | --- |
 | `hq.request.failed` | `reference`, bounded `operation`, HTTP `status`, safe `classification`, and elapsed time |
+| `hq.monitoring.targets.limited` | `reference`, `workspaceId`, `connectionId`, inspected page and target counts, elapsed time, and the stopping reason identify a bounded search that can continue; target URLs and search text are excluded |
 | `hq.github.repository.started` | `refreshId`, `repositoryId`, `sourceId`, `workspaceId`, and server-generated `runId` identify the claimed attempt |
 | `hq.github.repository.completed` | The same identities plus collection status, `receiptRecorded`, `evidenceStored`, `capacityLimited`, and diagnostic counters; incomplete collection can occur inside an otherwise successful Worker invocation |
 | `hq.github.batch.completed` | `runId`, scheduled/background trigger, processed count, elapsed time, and stop reason |

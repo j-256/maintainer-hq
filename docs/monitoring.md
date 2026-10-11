@@ -23,6 +23,10 @@ Browser deadlines advance independently of polling, including after a failed ref
 
 ## Configuration and triage
 
+Search monitor targets by target ID, URL, or linked repository name and filter by retained evidence: passing checks, attention needed, or no retained evidence. Attention includes failed or overdue checks, changed configurations, exceptional evidence, and unresolved incidents. A passing recovery probe with an unresolved incident stays in the attention selection. Badges and visible matches continue to age; refresh the search to include newly matching targets. The repository expectation resolver also offers **Linked to this repository** and lists linked targets first within each returned page.
+
+Target search uses the selected connection's existing provider pages. Each request scans only the page and elapsed-time slice in `MONITOR_LIMITS`, stopping at a page with matches or a bound. The result reports pages and targets inspected and preserves the provider continuation. **More targets remain** means the inventory has not been fully searched; use **Next** to continue even when the scan found no matches. Changing search, evidence, or repository filters restarts at the first page. Configuration changes during a scan reject it for a fresh read. No matches in a scan are separate from an empty provider configuration.
+
 Inspect a target to edit its URL, method, accepted statuses, timeout, failure/recovery thresholds, and optional response assertions. JSON subset expectations use a structured nested-value editor, not raw JSON text. The defaults editor controls the shared schedule and probe defaults. Adding, editing, or removing a target creates a review against the exact saved configuration; unrelated targets are preserved. Public HTTP/HTTPS URLs are required, and provider validation remains authoritative for schedule capacity and normalized configuration.
 
 The [monitoring expectation action](repositories.md#resolve-an-expectation) opens the same target and schedule editors from a repository or bulk expectation draft. Saved reviews have addressable URLs, and returning keeps the expectation choices. After creating a monitor, choose **Link monitor** to associate it with the repository; acceptance of target configuration and verification of monitoring coverage are separate steps.
@@ -50,6 +54,8 @@ Browser, CLI, HTTP MCP, and stdio MCP share validated workspace commands. Discov
 
 Reader automation can inspect metadata but cannot configure or triage. Source publishers and activity reporters have no Monitoring authority. HQ actions also require the selected provider credential's matching capability. Inputs never accept caller-selected management URLs, SQL, binding names, shell commands, or provider token values. Endpoint Monitor's own `status` CLI reads the same retained run/check evidence without probing targets or reading a local target file.
 
+`monitoring_targets` accepts bounded `search`, `status` (`all`, `attention`, `passed`, or `unobserved`), and optional workspace-local `repositoryId` filters alongside the provider cursor. CLI and MCP use the same filtering, live authorization, scan counters, and continuation as the browser. Reuse a cursor with its original selection; start with a null cursor after changing filters.
+
 ## Provider deployment and credential boundary
 
 Apply Endpoint Monitor's remote-configuration, management, and bounded run-status migrations before deploying its compatible provider. Preserve the executing remote configuration and its revisions; a stale local deployment file must not overwrite online edits. Apply HQ's repository-association and Monitoring migrations before deploying the compatible HQ artifact. Preserve private database backups, prior artifacts, bindings, runtime settings, and separately recoverable credentials. Migrations are additive; database restoration and code rollback are independent decisions.
@@ -63,6 +69,8 @@ Deployment verification uses real read-only provider metadata, configuration-bou
 ## Resource and Free-plan considerations
 
 `MONITOR_LIMITS` bounds connections, provider references, target documents, page sizes, pending reviews, response bytes, deadlines, notes, nested assertions, and returned history. Provider reads do not persist snapshots into HQ. Visible first pages refresh on a bounded cadence; deeper pages do not repeatedly poll. Reviewed mutations add HQ journal/receipt writes and provider-owned writes. None of these bounds is a global spending limit or an edge rate limit.
+
+Filtered target reads can inspect multiple provider pages within `TARGET_SCAN_PAGES` and the shared `TARGET_SCAN_MS` deadline. Each inspected page adds a provider call and bounded authorized association reads; repository-name search adds a bounded workspace query. Browser search waits briefly for typing to settle. Scan limits return a continuation and emit a correlated diagnostic without URLs, repository names, or search text. These are per-request limits, not measured Free-plan compatibility or a global traffic cap.
 
 The provider's aggregate snapshot changes at most one row per completed scheduled minute, including disabled runs with configured storage. Duplicate completion for the same minute does not replace the accepted row. A continuously completing minute schedule projects at most 1,440 aggregate snapshot changes per day; that is a logical-write projection, not measured billable D1 rows or index work. Probe, incident, notification, analytics, retention, and review work have separate costs. There is no per-probe success log or unbounded success-event journal.
 

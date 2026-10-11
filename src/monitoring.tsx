@@ -15,7 +15,15 @@ import {
   type MonitorConnection,
   type MonitorResult,
   type MonitorReview,
+  type MonitorTargetStatus,
+  type MonitorTargetScan,
 } from "../shared/monitoring";
+import { monitorTargetStatusMatches } from "../shared/monitoring-freshness";
+import {
+  MonitorTargetFilters,
+  MonitorTargetScanNote,
+  useMonitorTargetSearch,
+} from "./monitoring-target-filters";
 import type { ResourceLinks } from "../shared/resource-links";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
@@ -50,6 +58,7 @@ import {
   MonitorCheckTimes,
   MonitorExecution,
   MonitoringEvidenceClock,
+  useMonitoringClock,
 } from "./monitoring-evidence";
 import { MonitoringConfigurationEditor } from "./monitoring-editor";
 import { MonitoringConnectionEditor } from "./monitoring-connection";
@@ -69,6 +78,7 @@ import "./monitoring.css";
 const VIEWS = ["targets", "incidents", "history"] as const;
 type TargetsResponse = MonitorResponse<MonitorResult<"targets">> & {
   repositoryLinks: ResourceLinks[];
+  scan?: MonitorTargetScan;
 };
 function MonitoringSummary({
   data,
@@ -169,6 +179,10 @@ function MonitoringTargets({
   const workspaceId = snapshot.workspace.id;
   const client = useQueryClient();
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<MonitorTargetStatus>("all");
+  const now = useMonitoringClock();
+  const searchReady = useMonitorTargetSearch(search);
   const cursor = cursors.at(-1) ?? null;
   const key = [
     "monitoring",
@@ -178,21 +192,28 @@ function MonitoringTargets({
     connection.revision,
   ];
   const query = useQuery({
-    queryKey: [...key, cursor],
+    queryKey: [...key, search, status, cursor],
     queryFn: ({ signal }) =>
       command<TargetsResponse>(
         "monitoring_targets",
-        { workspaceId, connectionId: connection.id, cursor },
+        { workspaceId, connectionId: connection.id, cursor, search, status },
         signal,
       ),
     staleTime: MONITOR_LIMITS.REFRESH_MS,
     refetchInterval: cursor ? false : MONITOR_LIMITS.REFRESH_MS,
+    retry: false,
+    enabled: searchReady,
   });
   const data = query.data?.result;
+  const items =
+    data?.items.filter((target) =>
+      monitorTargetStatusMatches(target.evidence, status, now),
+    ) ?? [];
+  const filtered = Boolean(search.trim() || status !== "all");
   function refresh() {
     if (!cursor) void query.refetch();
     else {
-      void client.invalidateQueries({ queryKey: [...key, null] });
+      void client.invalidateQueries({ queryKey: key });
       setCursors([null]);
     }
   }
@@ -223,12 +244,24 @@ function MonitoringTargets({
           ) : null}
         </div>
       </div>
+      <MonitorTargetFilters
+        search={search}
+        status={status}
+        onSearch={(value) => {
+          setSearch(value);
+          setCursors([null]);
+        }}
+        onStatus={(value) => {
+          setStatus(value);
+          setCursors([null]);
+        }}
+      />
       {query.error ? <MonitorError error={query.error} /> : null}
       {query.isPending ? <p role="status">Loading monitor targets...</p> : null}
       {data ? (
         <>
           <div className="monitor-card-list">
-            {data.items.map((target) => (
+            {items.map((target) => (
               <article className="monitor-card" key={target.id}>
                 <div className="hook-section-heading">
                   <h3>{target.id}</h3>
@@ -255,17 +288,27 @@ function MonitoringTargets({
               </article>
             ))}
           </div>
-          {!data.items.length ? (
+          {!items.length ? (
             <div className="hook-empty">
               <Activity size={28} aria-hidden="true" />
-              <h3>No targets configured</h3>
+              <h3>
+                {filtered
+                  ? "No matching targets in this scan."
+                  : "No targets configured"}
+              </h3>
               <p>
-                {canConfigure
-                  ? "Add a target to define its endpoint and response checks. You will review the change before it is saved to the provider."
-                  : "A maintainer with provider configuration access can add targets. This is an empty configuration, not a health result."}
+                {filtered
+                  ? "Try another search or evidence filter. Continue to the next page when more targets remain."
+                  : canConfigure
+                    ? "Add a target to define its endpoint and response checks. You will review the change before it is saved to the provider."
+                    : "A maintainer with provider configuration access can add targets. This is an empty configuration, not a health result."}
               </p>
             </div>
           ) : null}
+          <MonitorTargetScanNote
+            scan={query.data?.scan}
+            hasMore={Boolean(data.nextCursor)}
+          />
           <p className="hook-muted">
             Read <MonitorTime value={data.readAt} />.
           </p>

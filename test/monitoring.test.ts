@@ -223,7 +223,10 @@ beforeEach(async () => {
             ? configuration.targets.filter(
                 (value) => value.id === input.targetId,
               )
-            : configuration.targets;
+            : configuration.targets.slice(
+                Number(input.cursor ?? 0),
+                Number(input.cursor ?? 0) + MONITOR_LIMITS.PAGE_SIZE,
+              );
         if (command === "target" && !selected.length)
           return fail("not_found", 404);
         result = {
@@ -251,7 +254,12 @@ beforeEach(async () => {
               },
             },
           })),
-          nextCursor: null,
+          nextCursor:
+            command === "targets" &&
+            Number(input.cursor ?? 0) + MONITOR_LIMITS.PAGE_SIZE <
+              configuration.targets.length
+              ? String(Number(input.cursor ?? 0) + MONITOR_LIMITS.PAGE_SIZE)
+              : null,
         };
         break;
       }
@@ -429,6 +437,218 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("Monitoring enrollment, reads, and private transport", () => {
+  it("searches beyond the first provider page and matches linked repository names", async () => {
+    await save();
+    configuration.targets = Array.from({ length: 120 }, (_, index) => ({
+      ...target,
+      id: "health-" + String(index).padStart(3, "0"),
+      url: "https://example.com/check/" + index,
+    }));
+    const found = await as("viewer").monitoringTargets({
+      ...connection,
+      search: "check/119",
+    });
+    expect(found).toMatchObject({
+      result: { items: [{ id: "health-119" }], nextCursor: null },
+      scan: { pages: 3, targets: 120, stopReason: "complete" },
+    });
+    await as().resourceRepositoriesSave({
+      ...connection,
+      kind: "monitor",
+      resourceKey: "health-119",
+      revision: 0,
+      connectionRevision: 1,
+      repositoryIds: ["repo-b"],
+    });
+    expect(
+      await as("viewer").monitoringTargets({
+        ...connection,
+        search: "EXAMPLE/REPO-B",
+      }),
+    ).toMatchObject({ result: { items: [{ id: "health-119" }] } });
+    expect(
+      await as("viewer").monitoringTargets({
+        ...connection,
+        repositoryId: "repo-a",
+      }),
+    ).toMatchObject({ result: { items: [] } });
+    await expect(
+      as("viewer").monitoringTargets({
+        ...connection,
+        repositoryId: "foreign-repository",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+  it("returns a continuation when a filtered scan reaches its bounded page slice", async () => {
+    await save();
+    configuration.targets = Array.from({ length: 200 }, (_, index) => ({
+      ...target,
+      id: "health-" + String(index).padStart(3, "0"),
+    }));
+    const first = await as().monitoringTargets({
+      ...connection,
+      search: "health-199",
+    });
+    expect(first).toMatchObject({
+      result: { items: [], nextCursor: "150" },
+      scan: { pages: 3, targets: 150, stopReason: "page_limit" },
+    });
+    expect(
+      await as().monitoringTargets({
+        ...connection,
+        search: "health-199",
+        cursor: first.result.nextCursor,
+      }),
+    ).toMatchObject({
+      result: { items: [{ id: "health-199" }], nextCursor: null },
+      scan: { stopReason: "complete" },
+    });
+    expect(
+      commands.monitoring_targets.schema.parse({
+        ...connection,
+        search: "health",
+        status: "attention",
+        repositoryId: "repo-a",
+      }),
+    ).toMatchObject({
+      search: "health",
+      status: "attention",
+      repositoryId: "repo-a",
+    });
+    expect(
+      commandAnnotations(
+        "monitoring_targets",
+        commands.monitoring_targets.readOnly,
+      ),
+    ).toMatchObject({ readOnlyHint: true });
+  });
+  it("keeps stale checks and unresolved incidents out of a passing-only selection", async () => {
+    await save();
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url, init) => {
+      const response = await original(url, init);
+      const body = (await response.json()) as {
+        result: { items: { evidence: Record<string, unknown> }[] };
+      };
+      body.result.items[0]!.evidence = {
+        state: "incident",
+        observedAt: time(),
+        incidentId: "still-open",
+        configurationMatches: true,
+        status: 503,
+        errorCode: null,
+        check: {
+          state: "passed",
+          observedAt: time(),
+          lastSuccessAt: time(),
+          freshUntil: new Date(now + 60000).toISOString(),
+          scheduledAt: time(),
+          configurationRevision: 1,
+          configurationMatches: true,
+          status: 200,
+          errorCode: null,
+        },
+      };
+      return Response.json(body);
+    });
+    expect(
+      await as().monitoringTargets({ ...connection, status: "passed" }),
+    ).toMatchObject({ result: { items: [] } });
+    expect(
+      await as().monitoringTargets({ ...connection, status: "attention" }),
+    ).toMatchObject({ result: { items: [{ id: target.id }] } });
+  });
+  it("preserves a completed scan page when its continuation exhausts the shared deadline", async () => {
+    await save();
+    configuration.targets = Array.from({ length: 60 }, (_, index) => ({
+      ...target,
+      id: "health-" + index,
+    }));
+    const original = fetcher.getMockImplementation()!;
+    let wallTime = Date.now();
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => wallTime);
+    let reads = 0;
+    fetcher.mockImplementation(async (url, init) => {
+      if (reads++) return new Promise<Response>(() => {});
+      const response = await original(url, init);
+      wallTime += MONITOR_LIMITS.TARGET_SCAN_MS - 5;
+      return response;
+    });
+    try {
+      const first = await as().monitoringTargets({
+        ...connection,
+        search: "health-59",
+      });
+      expect(first).toMatchObject({
+        result: { items: [], nextCursor: "50" },
+        scan: { pages: 1, targets: 50, stopReason: "time_limit" },
+      });
+      fetcher.mockImplementation(original);
+      expect(
+        await as().monitoringTargets({
+          ...connection,
+          search: "health-59",
+          cursor: first.result.nextCursor,
+        }),
+      ).toMatchObject({
+        result: { items: [{ id: "health-59" }], nextCursor: null },
+        scan: { pages: 1, targets: 10, stopReason: "complete" },
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it("preserves an early provider timeout as a failed read instead of a scan limit", async () => {
+    await save();
+    configuration.targets = Array.from({ length: 60 }, (_, index) => ({
+      ...target,
+      id: "health-" + index,
+    }));
+    const original = fetcher.getMockImplementation()!;
+    let reads = 0;
+    fetcher.mockImplementation(async (url, init) =>
+      reads++
+        ? Response.json({ error: { code: "timeout" } }, { status: 408 })
+        : original(url, init),
+    );
+    await expect(
+      as().monitoringTargets({ ...connection, search: "health-59" }),
+    ).rejects.toMatchObject({
+      code: "monitoring_provider_timeout",
+      status: 503,
+    });
+  });
+  it("rejects a changed configuration or nonadvancing cursor within a filtered scan", async () => {
+    await save();
+    configuration.targets = Array.from({ length: 60 }, (_, index) => ({
+      ...target,
+      id: "health-" + index,
+    }));
+    const original = fetcher.getMockImplementation()!;
+    let reads = 0;
+    fetcher.mockImplementation(async (url, init) => {
+      if (reads++) configurationRevision++;
+      return original(url, init);
+    });
+    await expect(
+      as().monitoringTargets({ ...connection, search: "missing" }),
+    ).rejects.toMatchObject({ status: 409 });
+    fetcher.mockImplementation(async (url, init) => {
+      const response = await original(url, init);
+      const body = (await response.json()) as {
+        result: { nextCursor: string | null };
+      };
+      body.result.nextCursor = "repeated";
+      return Response.json(body);
+    });
+    await expect(
+      as().monitoringTargets({
+        ...connection,
+        cursor: "repeated",
+        search: "missing",
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+  });
   it("evaluates a run that completes during the provider read using the post-read clock", async () => {
     await save();
     const original = fetcher.getMockImplementation()!;
