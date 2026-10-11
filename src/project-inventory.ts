@@ -83,6 +83,7 @@ export function projectHref(
   const params = new URLSearchParams({ workspace: workspaceId, section });
   if (context) {
     params.set(PROJECT_LIST_CONTEXT, projectListContext(context));
+    copyQuery(params, context, ["releaseRepository", "releaseSource"]);
     if (
       section === "repositories" &&
       (context.get("section") === "repositories" || context.has("fromProject"))

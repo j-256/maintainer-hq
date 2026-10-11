@@ -46,6 +46,26 @@ function repository(id: string, projectId: string): Repository {
 }
 const query = (input = "") => projectQuery(new URLSearchParams(input));
 describe("Project inventory", () => {
+  it("keeps an explicit release selection through project section navigation", () => {
+    const overview = new URL(
+      projectHref(
+        "workspace",
+        "project",
+        "overview",
+        new URLSearchParams(
+          "section=releases&releaseRepository=chosen&releaseSource=source&redirect=evil",
+        ),
+      ),
+      "https://hq.example",
+    );
+    const releases = new URL(
+      projectHref("workspace", "project", "releases", overview.searchParams),
+      "https://hq.example",
+    );
+    expect(releases.searchParams.get("releaseRepository")).toBe("chosen");
+    expect(releases.searchParams.get("releaseSource")).toBe("source");
+    expect(releases.searchParams.has("redirect")).toBe(false);
+  });
   it("normalizes untrusted filters and bounds pagination", () => {
     expect(
       query(
