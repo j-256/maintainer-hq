@@ -151,7 +151,7 @@ export function RepositoryReleases({
   const base = githubRepositoryUrl(repository.fullName);
   const stale = Boolean(
     evidence &&
-      now >= Date.parse(evidence.observedAt) + RELEASE_LIMITS.CACHE_MS,
+    now >= Date.parse(evidence.observedAt) + RELEASE_LIMITS.CACHE_MS,
   );
   const waiting = Boolean(
     result?.nextReadAt && now < Date.parse(result.nextReadAt),
@@ -174,10 +174,7 @@ export function RepositoryReleases({
       <div className="release-toolbar">
         <div>
           <h2>Releases and deployments</h2>
-          <p>
-            Published versions, deployment records, and changes from the release
-            to the default branch.
-          </p>
+          <p>Versions, deployments, and unreleased changes.</p>
         </div>
         {source ? (
           <Button

@@ -5,9 +5,12 @@ import {
   Activity,
   ArrowRight,
   History,
+  Clock3,
+  Monitor,
   Plus,
   RefreshCw,
   Settings2,
+  Shield,
 } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
@@ -28,6 +31,7 @@ import type { ResourceLinks } from "../shared/resource-links";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -69,7 +73,6 @@ import {
   MonitorPagination,
   type MonitorResponse,
 } from "./monitoring-incidents";
-import { useDateTime } from "./date-time";
 import { ResourceProjectEditor } from "./resource-project";
 import "./sources.css";
 import "./hooks.css";
@@ -92,7 +95,7 @@ function MonitoringSummary({
       <MonitorExecution data={data} />
       <dl className="hook-metrics">
         <div>
-          <dt>Configured targets</dt>
+          <dt>Targets</dt>
           <dd>{data.configuration?.targetCount ?? "Not configured"}</dd>
         </div>
         <div>
@@ -132,14 +135,16 @@ function MonitoringSummary({
           ? "A plus sign marks a bounded count; additional records are not included."
           : "Counts cover retained records at read time."}
       </p>
-      <details className="hook-signals">
-        <summary>What this status can tell you</summary>
+      <Disclosure title="Schedule and evidence details" icon={Clock3}>
         <p>
-          Completed runs publish a bounded snapshot with check outcomes and the
-          configuration they used. Scheduler completion and each target's last
-          check have separate deadlines. A pass proves the recorded check met
-          its expectations; it is not continuous uptime or incident resolution.
-          Cached evidence continues to age even when a refresh fails.
+          Scheduler runs are expected every minute, with two minutes of grace.
+          Target checks follow their configured interval.
+        </p>
+        <p>
+          Scheduler runs and target checks have separate deadlines. A pass
+          proves that recorded check met its expectations; it does not establish
+          continuous uptime or resolve an incident. Cached evidence keeps aging
+          after a failed refresh.
         </p>
         <p>
           Notification intent:{" "}
@@ -154,10 +159,9 @@ function MonitoringSummary({
             : data.analyticsEnabled
               ? "enabled"
               : "disabled"}
-          . These are configuration settings, not delivery or execution
-          evidence.
+          . These settings do not verify delivery or execution.
         </p>
-      </details>
+      </Disclosure>
     </section>
   );
 }
@@ -665,7 +669,6 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
   const [notice, setNotice] = useState("");
   const focus = useRef<HTMLElement | null>(null);
   const workspaceId = snapshot.workspace.id;
-  const date = useDateTime();
   const canAdmin = snapshot.capabilities.includes(CAPABILITY.ADMIN);
   const connections = useQuery({
     queryKey: ["monitoring", workspaceId, "connections"],
@@ -732,14 +735,11 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
       <RepositoryContext snapshot={snapshot} section="monitoring" />
       <div className="page-heading">
         <div>
-          <div className="eyebrow">ENDPOINT OPERATIONS</div>
-          <h1 tabIndex={-1}>Monitoring</h1>
-          <p>
-            Endpoint intent, failure evidence, and deliberate triage. Times use{" "}
-            {date.zoneLabel}.
-          </p>
+          <h1 className="page-title" tabIndex={-1}>
+            <Monitor size={28} aria-hidden="true" /> Monitoring
+          </h1>
         </div>
-        {canAdmin ? (
+        {canAdmin && connections.data?.length ? (
           <Button
             onClick={() => {
               rememberFocus();
@@ -772,14 +772,32 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
       ) : null}
       {connections.data?.length === 0 ? (
         <div className="hook-empty">
-          <Activity size={32} aria-hidden="true" />
-          <h2>Bring endpoint monitoring into view</h2>
+          <Monitor size={32} aria-hidden="true" />
+          <h2>Monitoring is not connected</h2>
           <p>
-            Connect Endpoint Monitor to manage targets and inspect health
-            checks, scheduler runs, and incidents.
+            Connect Endpoint Monitor to inspect targets, checks, and incidents.
           </p>
           {!canAdmin ? <p>Ask a workspace owner to add a connection.</p> : null}
+          {canAdmin ? (
+            <Button
+              onClick={() => {
+                rememberFocus();
+                setEditingConnection(":new");
+              }}
+            >
+              <Plus size={16} aria-hidden="true" /> Connect Endpoint Monitor
+            </Button>
+          ) : null}
         </div>
+      ) : null}
+      {connections.data?.length === 0 ? (
+        <Disclosure title="Connection requirements" icon={Shield}>
+          <p>
+            The deployment owner provisions a workspace-scoped credential and
+            private binding. Connecting a provider does not add targets or
+            enable probes.
+          </p>
+        </Disclosure>
       ) : null}
       {connections.data?.length ? (
         <div className="hook-connection-bar">

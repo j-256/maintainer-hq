@@ -151,16 +151,15 @@ export function RepositoryReviewResolution({
                 : "No next review scheduled."}
             </p>
             <p>
-              The outcome is recorded in repository and project Activity. CI,
-              security, hooks, and monitoring still use their own observed
+              Outcome saved to Activity. Check health still uses observed
               evidence.
             </p>
           </section>
         ) : (
           <>
             <p>
-              Record what you checked and any follow-up work. Completing this
-              review updates its date and keeps the outcome in Activity.
+              Record the outcome and follow-up. Completion updates the review
+              date and saves to Activity.
             </p>
             <p>
               Saved review date: {repository.expectations.reviewDate ?? "None"}

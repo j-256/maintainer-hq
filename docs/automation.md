@@ -1,11 +1,11 @@
 ---
-title: Automation access
+title: Automation
 description: Connect a scoped agent or script without granting owner authority.
 ---
 
-# Automation access
+# Automation
 
-Settings > Automation access creates owner-managed credentials for agents and scripts. A credential belongs to one workspace and its issuing member, can be revoked immediately, and never exceeds the issuing member's live role. Readers can use a finite lifetime or **No expiry**. Reporters must expire. Removing the issuing member revokes their credentials; rejoining does not reactivate them. Credential values use the `hqa_` [machine credential prefix](access.md#machine-credential-prefixes), are shown once, and are stored only as digests.
+Settings > Automation creates owner-managed credentials for agents and scripts. A credential belongs to one workspace and its issuing member, can be revoked immediately, and never exceeds the issuing member's live role. Readers can use a finite lifetime or **No expiry**. Reporters must expire. Removing the issuing member revokes their credentials; rejoining does not reactivate them. Credential values use the `hqa_` [machine credential prefix](access.md#machine-credential-prefixes), are shown once, and are stored only as digests.
 
 | Profile | Permissions | Excluded |
 | --- | --- | --- |

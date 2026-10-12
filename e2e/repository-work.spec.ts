@@ -262,11 +262,17 @@ test("keyboard filters and sample pagination persist without reading other tabs"
   });
   await filter.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("option", { name: "All sampled PRs", exact: true })).toBeFocused();
+  await expect(
+    page.getByRole("option", { name: "All sampled PRs", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("option", { name: "Pending review", exact: true })).toBeFocused();
+  await expect(
+    page.getByRole("option", { name: "Pending review", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("option", { name: "Failing checks", exact: true })).toBeFocused();
+  await expect(
+    page.getByRole("option", { name: "Failing checks", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(filter).toBeFocused();
@@ -317,11 +323,13 @@ test("keeps old evidence dated on temporary failure and hides it after access ch
   await expect(
     page.getByText("Evidence needs refresh", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.work-signals [data-tone="success"]')).toHaveCount(0);
+  await expect(page.locator('.work-signals [data-tone="success"]')).toHaveCount(
+    0,
+  );
   state.rejectStatus = 503;
   await page.getByRole("button", { name: "Refresh work", exact: true }).click();
   await expect(
-    page.getByText("Any evidence below belongs to the previous read."),
+    page.getByText("Evidence below is from the previous read."),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Open pull requests 51" }),

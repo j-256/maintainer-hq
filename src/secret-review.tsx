@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { KeyRound } from "lucide-react";
 import type { Location } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Snapshot } from "../shared/domain";
@@ -287,17 +288,19 @@ export function SecretReviewPanel({
     <section className="hook-section" aria-labelledby="secret-review-title">
       <div className="hook-section-heading">
         <div>
-          <h2 id="secret-review-title" ref={heading} tabIndex={-1}>
+          <h2
+            className="page-title"
+            id="secret-review-title"
+            ref={heading}
+            tabIndex={-1}
+          >
+            <KeyRound size={22} aria-hidden="true" />
             {data?.operation
               ? "Distribution receipts"
               : data?.recovery
                 ? "Retained-input recovery review"
                 : "Review secret distribution"}
           </h2>
-          <p>
-            Exact destinations, provider acceptance, and independent metadata
-            evidence.
-          </p>
         </div>
         <Button variant="outline" disabled={busy} onClick={guard.requestClose}>
           Back to Secrets
@@ -623,8 +626,7 @@ export function SecretReviewPanel({
         <AlertDialogContent
           className="secret-dialog"
           onOpenAutoFocus={() => {
-            confirmationTrigger.current =
-              document.activeElement as HTMLElement;
+            confirmationTrigger.current = document.activeElement as HTMLElement;
             confirmed.current = false;
           }}
           onCloseAutoFocus={(event) => {
@@ -724,9 +726,7 @@ export function SecretReviewPanel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>
-              Keep receipt open
-            </AlertDialogCancel>
+            <AlertDialogCancel>Keep receipt open</AlertDialogCancel>
             <Button disabled={busy} onClick={guard.discard}>
               {hasValue ? "Discard value and leave" : "Leave receipt"}
             </Button>

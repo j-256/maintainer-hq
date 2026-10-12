@@ -17,7 +17,7 @@ The sign-out action is also available before an account has workspace membership
 
 ## Give someone access
 
-If you are an owner, open **Settings > Members and invitations**. Invite the email address the person uses to sign in, select their role, and set an expiry. HQ does not send an invitation email: ask them to open the dashboard and accept the invitation using that account.
+If you are an owner, open **Settings > Members**. Invite the email address the person uses to sign in, select their role, and set an expiry. HQ does not send an invitation email: ask them to open the dashboard and accept the invitation using that account.
 
 Choose Viewer for inspection, Operator for ordinary maintenance and permitted operations, or Owner for membership and connection authority. Review the full scope before granting Owner. Existing members and machine credentials can be revoked from Settings; revocation does not undo provider operations that were already accepted.
 
@@ -51,7 +51,7 @@ Deleting memberships or the workspace does not reopen setup. Never remove the in
 
 ## Member controls
 
-Settings > Members and invitations provides owner-only membership and invitation controls. Owners manage access and credentials; operators edit metadata and run permitted provider operations; viewers read workspace information. Credentials remain constrained by both their own scopes and their owner's live role. At least one owner must remain after every role change or removal, including concurrent requests.
+Settings > Members provides owner-only membership and invitation controls. Owners manage access and credentials; operators edit metadata and run permitted provider operations; viewers read workspace information. Credentials remain constrained by both their own scopes and their owner's live role. At least one owner must remain after every role change or removal, including concurrent requests.
 
 Every human role can set its own [date and time preferences](preferences.md). That personal capability does not permit changing another account's settings or workspace metadata. Fixed automation profiles remain read-only or reporting-only as declared.
 
@@ -82,7 +82,7 @@ The client rejects ambiguous credential modes, insecure remote destinations, inv
 
 Shared service authorization rechecks identity expiry and the live credential's workspace, owner, publisher or reporter binding, revocation, expiry, and required scope. Resolving an identity does not preserve authority after its credential changes. An already-resolved credential that loses authority receives `forbidden`; an expired human identity requires sign-in again. Session discovery and basic inventory reads use this check as well as consequential operations. Conditional write guards remain responsible for access changes at the database write boundary.
 
-For unattended agents and scripts, use the fixed Reporter or Reader profiles in Settings > Automation access. They do not inherit the owner's broad permissions. Their paired Access ingress transport, exact reviews, live revocation, and one-time value recovery are documented in [automation access](automation.md). Clear both Access service variables when switching to a human session.
+For unattended agents and scripts, use the fixed Reporter or Reader profiles in Settings > Automation. They do not inherit the owner's broad permissions. Their paired Access ingress transport, exact reviews, live revocation, and one-time value recovery are documented in [automation access](automation.md). Clear both Access service variables when switching to a human session.
 
 ## Lost access and recovery
 

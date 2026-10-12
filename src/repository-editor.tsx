@@ -381,8 +381,8 @@ export function RepositoryEditor({
             </DialogTitle>
             <DialogDescription>
               {initial
-                ? "Set expectations and use the coverage actions to satisfy them."
-                : "Track a repository in this workspace. Enrollment does not grant GitHub access or change provider settings."}
+                ? "Changes apply to this workspace."
+                : "Enrollment does not grant GitHub access or change provider settings."}
             </DialogDescription>
           </DialogHeader>
           <form ref={form} onSubmit={submit} noValidate>
@@ -392,10 +392,6 @@ export function RepositoryEditor({
                   Repository details and expectations
                 </legend>
                 <section className="editor-section">
-                  <h2>
-                    <FolderGit2 size={18} aria-hidden="true" />
-                    Repository
-                  </h2>
                   <div className="form-grid">
                     <FormField
                       id="repository-name"
@@ -422,22 +418,10 @@ export function RepositoryEditor({
                       />
                     </FormField>
                     <FormField
-                      id="repository-classification"
-                      label="Relationship"
-                    >
-                      <Choice
-                        id="repository-classification"
-                        label="Relationship"
-                        value={draft.classification}
-                        options={CLASSIFICATION_LABELS}
-                        onChange={(value) => update("classification", value)}
-                      />
-                    </FormField>
-                    <FormField
                       id="repository-project"
                       label="Owning project"
                       error={errors.projectId}
-                      help="Every repository belongs to one project in this workspace."
+                      help="Required. This project owns the repository."
                     >
                       <Select
                         value={draft.projectId}
@@ -463,18 +447,6 @@ export function RepositoryEditor({
                         </SelectContent>
                       </Select>
                     </FormField>
-                    <FormField id="repository-lifecycle" label="Tracking">
-                      <Choice
-                        id="repository-lifecycle"
-                        label="Tracking"
-                        value={draft.lifecycle}
-                        options={{
-                          active: "Active",
-                          archived: "Archived in this workspace",
-                        }}
-                        onChange={(value) => update("lifecycle", value)}
-                      />
-                    </FormField>
                   </div>
                   <FormField
                     id="repository-description"
@@ -493,13 +465,51 @@ export function RepositoryEditor({
                     />
                   </FormField>
                 </section>
-                <section className="editor-section">
-                  <h2>
-                    <ClipboardCheck size={18} aria-hidden="true" />
-                    Expectations
-                  </h2>
+                <Disclosure
+                  title="Tracking"
+                  description={
+                    CLASSIFICATION_LABELS[draft.classification] +
+                    " / " +
+                    (draft.lifecycle === "active" ? "Active" : "Archived")
+                  }
+                  icon={FolderGit2}
+                  open={Boolean(initial) || undefined}
+                >
+                  <div className="form-grid">
+                    <FormField
+                      id="repository-classification"
+                      label="Relationship"
+                    >
+                      <Choice
+                        id="repository-classification"
+                        label="Relationship"
+                        value={draft.classification}
+                        options={CLASSIFICATION_LABELS}
+                        onChange={(value) => update("classification", value)}
+                      />
+                    </FormField>
+                    <FormField id="repository-lifecycle" label="Tracking">
+                      <Choice
+                        id="repository-lifecycle"
+                        label="Tracking"
+                        value={draft.lifecycle}
+                        options={{
+                          active: "Active",
+                          archived: "Archived in this workspace",
+                        }}
+                        onChange={(value) => update("lifecycle", value)}
+                      />
+                    </FormField>
+                  </div>
+                </Disclosure>
+                <Disclosure
+                  title="Expectations"
+                  description="Checks and visibility"
+                  icon={ClipboardCheck}
+                  open={Boolean(initial) || undefined}
+                >
                   <p className="section-description">
-                    Required checks need fresh evidence to pass assessment.
+                    Required checks need fresh evidence.
                   </p>
                   <div className="expectation-fields">
                     {(
@@ -541,10 +551,9 @@ export function RepositoryEditor({
                   <fieldset className="github-scanner-requirements">
                     <legend>Required GitHub security checks</legend>
                     <p className="field-help">
-                      These choices control GitHub coverage warnings. Choose Not
-                      required only for scanners this repository intentionally
-                      does not use. Their unread results remain visible.
-                      Observed findings still need attention.
+                      Not required removes coverage warnings for unused
+                      scanners. Unread results stay visible; observed findings
+                      still need attention.
                     </p>
                     <div className="github-scanner-options">
                       {GITHUB_SECURITY_KEYS.map((key) => (
@@ -624,10 +633,10 @@ export function RepositoryEditor({
                       ))}
                     </dl>
                   </Disclosure>
-                </section>
+                </Disclosure>
                 <section className="editor-section">
                   <Disclosure
-                    title="Review and maintainer context"
+                    title="Review and context"
                     description={[
                       draft.expectations.reviewDate
                         ? "Review date set"
@@ -641,7 +650,7 @@ export function RepositoryEditor({
                     <FormField
                       id="repository-review"
                       label="Review by (UTC date)"
-                      help="Optional. Marks the review as due in Overview; it does not send a notification."
+                      help="Marks a review as due in Overview. No notification is sent."
                       error={errors["expectations.reviewDate"]}
                     >
                       <Input
@@ -667,7 +676,7 @@ export function RepositoryEditor({
                     <FormField
                       id="repository-note"
                       label="Maintainer context"
-                      help="Explain an exception or decision. Do not put credentials or secret values here."
+                      help="Optional. Keep credentials and secret values out."
                       error={errors["expectations.note"]}
                     >
                       <Textarea
@@ -684,7 +693,7 @@ export function RepositoryEditor({
                             ? "repository-note-error"
                             : "repository-note-help"
                         }
-                        placeholder="Anything a future maintainer should know..."
+                        placeholder="Exception or decision (optional)"
                       />
                     </FormField>
                   </Disclosure>
@@ -704,7 +713,7 @@ export function RepositoryEditor({
                       <>
                         <p>
                           Saved version {latest.revision} is available. Your
-                          draft is still in the form above.
+                          draft is preserved.
                         </p>
                         <Button
                           type="button"

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Check, KeyRound, Plus, RefreshCw } from "lucide-react";
+import { Check, KeyRound, Plus, RefreshCw, Shield } from "lucide-react";
 import { type Snapshot } from "../shared/domain";
 import {
   MANAGED_CREDENTIAL_PREFIX,
@@ -22,6 +22,7 @@ import {
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -162,8 +163,7 @@ function ProviderCredentialRow({
             ? "Usable ciphertext was discarded; upstream token revocation is separate."
             : "This credential cannot be used. Review its cutoff, token and deployment key."}
       </p>
-      <details>
-        <summary>Resource scope and credential identity</summary>
+      <Disclosure title="Resource scope and credential identity" icon={Shield}>
         <p className="hook-muted">
           Credential ID: <code>{credential.id}</code> / Revision{" "}
           {credential.revision}
@@ -185,7 +185,7 @@ function ProviderCredentialRow({
             </li>
           ))}
         </ul>
-      </details>
+      </Disclosure>
       <div className="secret-actions">
         <Button
           variant="outline"
@@ -335,9 +335,7 @@ function ProviderCredentialRow({
             : evidence.evidence === "variable-values-readable"
               ? "Variable values"
               : "Secret metadata"}{" "}
-          {evidence.evidence === "variable-values-readable"
-            ? "were"
-            : "was"}{" "}
+          {evidence.evidence === "variable-values-readable" ? "were" : "was"}{" "}
           readable for {evidence.resourceName}
           {evidence.scope.kind === "environment"
             ? " / environment " + evidence.scope.name
@@ -447,7 +445,13 @@ export function ProviderAccessView({
     <section className="hook-section" aria-labelledby="provider-access-heading">
       <div className="hook-section-heading">
         <div>
-          <h2 ref={heading} tabIndex={-1} id="provider-access-heading">
+          <h2
+            className="page-title"
+            ref={heading}
+            tabIndex={-1}
+            id="provider-access-heading"
+          >
+            <Shield size={22} aria-hidden="true" />
             {purpose === "repositories"
               ? "Repository write access"
               : "Provider access"}
@@ -455,7 +459,7 @@ export function ProviderAccessView({
           <p>
             {purpose === "repositories"
               ? "Dedicated access for reviewed maintenance branches and pull requests. Read-only sources and Secrets stay separate."
-              : "Manage the credentials HQ uses to connect to your providers."}
+              : "Scoped credentials for HQ provider connections."}
           </p>
         </div>
         <div className="secret-actions">
@@ -473,10 +477,9 @@ export function ProviderAccessView({
       </div>
       {data && !data.storageReady ? (
         <p className="hook-notice">
-          Private credential storage is not enabled on this deployment. Its
-          operator must install and independently back up the encryption keyring
-          before UI setup can save tokens. Deployment-managed connections remain
-          separate and can still work.
+          Private credential storage is unavailable. The deployment owner must
+          install and independently back up the encryption keyring before HQ can
+          save tokens. Deployment-managed connections can still work.
         </p>
       ) : null}
       <nav className="hook-views" aria-label="Credential lifecycle">
@@ -559,8 +562,7 @@ export function ProviderAccessView({
         </>
       ) : null}
       {deploymentReferences.length ? (
-        <details className="hook-signals">
-          <summary>Deployment-managed provider access</summary>
+        <Disclosure title="Deployment-managed provider access" icon={Shield}>
           <p>
             These references are configured on the Worker, outside UI-managed
             credential storage. Their values are never returned here.
@@ -590,7 +592,7 @@ export function ProviderAccessView({
               </article>
             ))}
           </div>
-        </details>
+        </Disclosure>
       ) : null}
       {purpose === "secrets" && legacy.error ? (
         <SecretError error={legacy.error} />

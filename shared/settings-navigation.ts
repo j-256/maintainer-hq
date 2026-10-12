@@ -4,8 +4,8 @@ import { normalizeAppPathname } from "./app-pathname";
 export const SETTINGS_SECTIONS = [
   {
     id: "members",
-    label: "Members and invitations",
-    title: "Workspace members",
+    label: "Members",
+    title: "Members",
     description: "Review membership, roles, and invitations.",
     group: "Workspace access",
     guide: "access",
@@ -13,8 +13,8 @@ export const SETTINGS_SECTIONS = [
   },
   {
     id: "automation",
-    label: "Automation access",
-    title: "Automation access",
+    label: "Automation",
+    title: "Automation",
     description: "Manage credentials for agents and scripts.",
     group: "Workspace access",
     guide: "automation",
@@ -22,9 +22,10 @@ export const SETTINGS_SECTIONS = [
   },
   {
     id: "github",
-    label: "GitHub evidence",
-    title: "GitHub evidence",
-    description: "Review repository coverage, collection progress and connections.",
+    label: "GitHub",
+    title: "GitHub",
+    description:
+      "Review repository coverage, collection progress and connections.",
     group: "Evidence sources",
     guide: "github",
     view: "settings-sources",
@@ -41,7 +42,7 @@ export const SETTINGS_SECTIONS = [
   {
     id: "import",
     label: "Import metadata",
-    title: "Bring your project metadata",
+    title: "Import metadata",
     description: "Review a starting inventory for an empty workspace.",
     group: "Workspace data",
     guide: "import",
@@ -49,7 +50,7 @@ export const SETTINGS_SECTIONS = [
   },
   {
     id: "preferences",
-    label: "Date and time preferences",
+    label: "Date and time",
     title: "Date and time",
     description: "Choose your clock, date format, and time zone.",
     group: "Your account",

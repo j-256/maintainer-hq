@@ -354,6 +354,7 @@ for (const theme of ["light", "dark"])
       await expect(
         page.getByRole("link", { name: fixture.project.name, exact: true }),
       ).toHaveAttribute("href", new RegExp("/projects/" + fixture.project.id));
+      await page.locator(".repository-recent-activity > summary").click();
       const preview = page.getByRole("region", {
         name: "Recent repository activity",
       });
@@ -375,7 +376,7 @@ for (const theme of ["light", "dark"])
       );
       await page
         .locator("summary")
-        .filter({ hasText: "GitHub evidence details" })
+        .filter({ hasText: "Evidence and record details" })
         .focus();
       await page.keyboard.press("Enter");
       await expect(
@@ -383,7 +384,7 @@ for (const theme of ["light", "dark"])
       ).toBeVisible();
       await page
         .locator("summary")
-        .filter({ hasText: "Maintainer context" })
+        .filter({ hasText: /^Expectations/ })
         .focus();
       await page.keyboard.press("Enter");
       await expect(

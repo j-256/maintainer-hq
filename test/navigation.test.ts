@@ -55,9 +55,9 @@ it("labels app tabs, resource sections, and missing routes without fetching anot
   expect(
     navigationContext("/secrets", "?view=operations", snapshot).label,
   ).toBe("Secret operations");
-  expect(
-    navigationContext("/secrets", "?view=managed", snapshot).label,
-  ).toBe("Managed configuration");
+  expect(navigationContext("/secrets", "?view=managed", snapshot).label).toBe(
+    "Managed configuration",
+  );
   expect(navigationContext("/settings/preferences", "", snapshot).label).toBe(
     "Date and time",
   );
@@ -112,7 +112,7 @@ it("aligns route aliases without changing resource identity or query context", (
     navigationContext("/Secrets/", "?view=providers", snapshot).label,
   ).toBe("Provider access");
   expect(navigationContext("/Settings/GitHub/", "", snapshot).label).toBe(
-    "GitHub evidence",
+    "GitHub",
   );
   expect(workspaceDestination("/Settings/GitHub/", "CaseSensitive-ID")).toBe(
     "/settings/github?workspace=CaseSensitive-ID",

@@ -651,7 +651,7 @@ for (const width of [1440, 390])
         .getByLabel("Repository names, one owner/repository per line")
         .fill("example/repository");
       await dialog
-        .getByRole("checkbox", { name: /Allow explicitly reviewed writes/ })
+        .getByRole("checkbox", { name: /Allow reviewed writes/ })
         .check();
       await dialog
         .getByRole("button", { name: "Review access", exact: true })

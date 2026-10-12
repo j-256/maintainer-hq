@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Shield } from "lucide-react";
 import type { Snapshot } from "../shared/domain";
 import {
   secretConnectionFields,
@@ -12,6 +13,7 @@ import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -178,18 +180,21 @@ export function SecretConnectionEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
-              {initial
-                ? "Secrets connection settings"
-                : "Connect a Secrets provider"}
+            <DialogTitle className="page-title">
+              <KeyRound size={20} aria-hidden="true" />
+              {initial ? "Secrets connection settings" : "Connect provider"}
             </DialogTitle>
             <DialogDescription>
-              Choose the credential and resources HQ may use. Saving changes
-              access through this connection, not provider permissions or
-              configuration values.
+              Choose an installed provider and enrolled resources.
             </DialogDescription>
           </DialogHeader>
           <form className="secret-form" onSubmit={save}>
+            {providers.data && !providers.data.length ? (
+              <p className="hook-notice">
+                <strong>No installed provider.</strong> Close this form and add
+                a scoped credential through Provider access.
+              </p>
+            ) : null}
             <label className="hook-field">
               Connection name
               <Input
@@ -260,14 +265,6 @@ export function SecretConnectionEditor({
                 </Button>
               </>
             ) : null}
-            {providers.data && !providers.data.length ? (
-              <p className="hook-notice">
-                No provider configuration credential is configured. Close this
-                form and open Provider access to add a scoped token through
-                private input. Do not paste credentials in connection settings
-                or reuse the fleet collector token.
-              </p>
-            ) : null}
             {provider ? (
               <p className="hook-muted">
                 Credential expires <SecretTime value={provider.expiresAt} />.{" "}
@@ -328,14 +325,23 @@ export function SecretConnectionEditor({
                   setDraft({ ...draft, enabled: enabled === true })
                 }
               />
-              <span>Enable this connection in HQ</span>
+              <span>Enabled in HQ</span>
             </label>
             <p className="hook-muted">
-              Disabling blocks provider reads and new secret changes through
-              this connection. It does not revoke the provider credential,
-              remove configuration or undo changes already sent to the
-              provider.
+              Controls HQ access, not provider permissions or stored values.
             </p>
+            <Disclosure title="Credential and connection scope" icon={Shield}>
+              <p>
+                Add credentials only through the privileged Provider access
+                form. Do not paste them in connection settings or reuse the
+                fleet collector token. Saving changes HQ access, not provider
+                permissions or configuration values.
+              </p>
+              <p>
+                Disabling blocks new HQ reads and changes. It does not revoke
+                the credential, remove configuration, or undo earlier changes.
+              </p>
+            </Disclosure>
             {error ? <SecretError error={error} /> : null}
             <div className="secret-actions">
               <Button type="submit" disabled={busy || !provider?.available}>

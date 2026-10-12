@@ -1,3 +1,4 @@
+import { isOpenGoal } from "../shared/goals";
 import { test, expect, type APIRequestContext } from "./test-fixture";
 import AxeBuilder from "@axe-core/playwright";
 import { createHash } from "node:crypto";
@@ -72,7 +73,7 @@ test.beforeAll(async ({ request }) => {
   await api(request, "goal_sync", ACTIVE_GOAL);
 });
 
-test("Activity counts reported goals without a source inventory dependency", async ({
+test("Activity shows reported open goals without a source inventory dependency", async ({
   page,
   request,
 }) => {
@@ -104,12 +105,11 @@ test("Activity counts reported goals without a source inventory dependency", asy
     snapshot.connections.filter((source) => !source.lastSuccessAt).length,
   ).toBeGreaterThanOrEqual(2);
   await page.goto(ACTIVITY_URL);
-  await expect(
-    page
-      .locator(".context-stat")
-      .filter({ hasText: "Reported goals" })
-      .locator("strong"),
-  ).toHaveText(String(snapshot.goals.length), { timeout: 2000 });
+  await expect(page.locator(".goals-panel .goal-objective")).toHaveText(
+    snapshot.goals
+      .filter((goal) => isOpenGoal(goal.status))
+      .map((goal) => goal.objective),
+  );
 });
 
 test("goal sections and journal pages preserve choices, exact text, and stable history", async ({
@@ -263,6 +263,11 @@ test("linked notes survive reload and goal controls stay accessible in both them
   await dialog
     .getByLabel("Details", { exact: true })
     .fill("A note attached through the structured goal picker");
+  await dialog
+    .locator("summary")
+    .filter({ hasText: "Related project or goal" })
+    .focus();
+  await page.keyboard.press("Enter");
   await dialog
     .getByRole("combobox", { name: "Goal (optional)", exact: true })
     .click();

@@ -94,7 +94,9 @@ const OverviewView = lazy(() =>
   import("./overview").then((module) => ({ default: module.OverviewView })),
 );
 const DependenciesView = lazy(() =>
-  import("./dependencies").then((module) => ({ default: module.DependenciesView })),
+  import("./dependencies").then((module) => ({
+    default: module.DependenciesView,
+  })),
 );
 const SettingsView = lazy(() =>
   import("./settings").then((module) => ({ default: module.SettingsView })),
@@ -417,7 +419,15 @@ export function App() {
               >
                 {data && workspaceAvailable ? (
                   <Routes>
-                    <Route path="/dependencies" element={<DependenciesView key={data.workspace.id} snapshot={data} />} />
+                    <Route
+                      path="/dependencies"
+                      element={
+                        <DependenciesView
+                          key={data.workspace.id}
+                          snapshot={data}
+                        />
+                      }
+                    />
                     <Route
                       path="/overview"
                       element={<OverviewView snapshot={data} />}
@@ -482,7 +492,10 @@ export function App() {
                     <Route
                       path="/monitoring"
                       element={
-                        <MonitoringView key={data.workspace.id} snapshot={data} />
+                        <MonitoringView
+                          key={data.workspace.id}
+                          snapshot={data}
+                        />
                       }
                     />
                     <Route
@@ -495,7 +508,9 @@ export function App() {
                             queryClient.setQueryData<Session>(
                               ["session"],
                               (prior) =>
-                                prior ? { ...prior, preferences: record } : prior,
+                                prior
+                                  ? { ...prior, preferences: record }
+                                  : prior,
                             )
                           }
                         />
@@ -511,8 +526,8 @@ export function App() {
                         <section className="settings-card navigation-recovery">
                           <h1>Page not found</h1>
                           <p>
-                            This link does not match an HQ page. Your workspace is
-                            still available.
+                            This link does not match an HQ page. Your workspace
+                            is still available.
                           </p>
                           <div className="navigation-recovery-links">
                             <Button asChild>
@@ -535,14 +550,6 @@ export function App() {
             ) : null}
             <footer className="workspace-footer">
               <span>
-                Maintainer HQ <span aria-hidden="true">/</span> Work worth
-                keeping track of.
-              </span>
-              <span>
-                {data?.development
-                  ? "Development workspace"
-                  : "Workspace-scoped access"}
-                <span aria-hidden="true">/</span>
                 <a
                   aria-label="Source code (opens in a new tab)"
                   href={SOURCE_REPOSITORY_URL}

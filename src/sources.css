@@ -91,11 +91,13 @@
 .source-metadata dd {
   font-size: var(--hq-text-support);
   font-family: "Geist Mono Variable", monospace;
+  overflow-wrap: anywhere;
 }
 .source-card-footer {
   border-top: 1px solid var(--border);
   padding-top: 16px;
   margin-top: 20px;
+  justify-content: flex-end;
 }
 .source-card-footer code {
   color: var(--muted-foreground);

@@ -179,10 +179,7 @@ export function workspaceAttention(
         category: "review",
         severity: "info",
         title: "Expectation review overdue",
-        reason:
-          "Review date: " +
-          repository.expectations.reviewDate +
-          ". Confirm the requirements still fit this repository.",
+        reason: "Review due: " + repository.expectations.reviewDate,
         action: "Complete repository review",
         href: expectationHref(workspaceId, repository.id, "review"),
       });

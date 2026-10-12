@@ -17,7 +17,7 @@ Owners manage membership and connection authority. Operators maintain metadata a
 
 ## Set your display preferences
 
-Open **Settings > Date and time preferences**. Choose your date pattern, clock, and time zone, inspect the preview, and save. Local follows the browser's detected zone on each device; UTC is explicit. These preferences follow your account across workspaces. They do not change stored timestamps, schedules, or calendar-only deadlines.
+Open **Settings > Date and time**. Choose your date pattern, clock, and time zone, inspect the preview, and save. Local follows the browser's detected zone on each device; UTC is explicit. These preferences follow your account across workspaces. They do not change stored timestamps, schedules, or calendar-only deadlines.
 
 ## Add a project and its repository
 

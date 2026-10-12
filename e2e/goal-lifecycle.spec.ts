@@ -86,9 +86,7 @@ test("paused and cleared goals stay truthful, preserve history and update throug
   expect(await paused.locator(".goal-objective").textContent()).toBe(
     replacement.objective,
   );
-  await expect(
-    paused.getByText(/HQ does not resume source goals/),
-  ).toBeVisible();
+  await expect(paused.getByText(/HQ cannot resume it/)).toBeVisible();
   expect(requests).not.toContain("/api/commands/workspace_snapshot");
   expect(requests).not.toContain("/api/commands/workspace_view");
 
@@ -146,9 +144,7 @@ test("paused and cleared goals stay truthful, preserve history and update throug
   });
   await expect(paused.getByText("ACTIVE /GOAL", { exact: true })).toBeVisible();
   await expect(paused.getByText("In progress", { exact: true })).toBeVisible();
-  await expect(paused.getByText(/HQ does not resume source goals/)).toHaveCount(
-    0,
-  );
+  await expect(paused.getByText(/HQ cannot resume it/)).toHaveCount(0);
   await sync(request, {
     ...replacement,
     status: "cleared",

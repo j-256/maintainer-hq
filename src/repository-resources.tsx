@@ -104,12 +104,13 @@ export function RepositoryResourcesView({
     >
       <div className="resource-section-heading">
         <div>
-          <h2>{hooks ? "Hooks" : "Monitoring"}</h2>
+          <h2 className="page-title">
+            <Icon size={22} aria-hidden="true" />
+            {hooks ? "Hooks" : "Monitoring"}
+          </h2>
           <p>
-            {hooks
-              ? "Subscriptions explicitly linked to this repository."
-              : "Monitor targets explicitly linked to this repository."}{" "}
-            Shared resources appear in every linked repository.
+            {hooks ? "Linked subscriptions." : "Linked monitor targets."} Shared
+            resources appear in each linked repository.
           </p>
         </div>
         <div className="resource-actions">
@@ -171,11 +172,12 @@ export function RepositoryResourcesView({
                     </Badge>
                   ) : null}
                 </div>
-                <p className="hook-muted">
-                  {resource.connectionEnabled
-                    ? "Open to read current provider state. A saved link is not a health check; removed resources may still be linked."
-                    : "Provider reads are disabled through this connection. The provider itself has not been paused."}
-                </p>
+                {!resource.connectionEnabled ? (
+                  <p className="hook-muted">
+                    Provider reads are disabled. The provider itself has not
+                    been paused.
+                  </p>
+                ) : null}
                 <div className="resource-actions">
                   <Button asChild variant="outline">
                     <Link
@@ -200,15 +202,19 @@ export function RepositoryResourcesView({
               </article>
             ))}
           </div>
+          {query.data.items.length ? (
+            <p className="hook-muted">
+              Open a resource to inspect health evidence. Links may outlive
+              removed resources.
+            </p>
+          ) : null}
           {!query.data.items.length ? (
             <div className="resource-empty">
               <Icon size={28} aria-hidden="true" />
               <h3>No {hooks ? "hooks" : "monitors"} linked yet</h3>
               <p>
-                This is an association view, not evidence that the repository
-                has no {hooks ? "hooks" : "monitoring"}. Browse the provider's
-                resources and choose Related repositories to add the connection
-                here.
+                No links are saved here; provider resources may still exist.
+                Browse resources and choose Related repositories to link them.
               </p>
               <Button asChild variant="outline">
                 <Link to={browse}>

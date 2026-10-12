@@ -738,3 +738,34 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.repository-inventory .inventory-description {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+  font-weight: 400;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.repository-classification {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+}
+/* Keep rows compact; repository details retain the full description */
+@media (min-width: 1101px) {
+  .inventory-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .inventory-identity > a {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .repository-inventory .inventory-description {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-top: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}

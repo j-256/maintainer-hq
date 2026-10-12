@@ -22,7 +22,7 @@ test("settings preserve open drafts across workspace refreshes without duplicate
   await expect(page.locator(".connection-state")).toContainText("Live updates");
   await page.waitForLoadState("networkidle");
   await page
-    .getByRole("button", { name: "Create automation credential", exact: true })
+    .getByRole("button", { name: "Create credential", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
   const name = dialog.getByLabel("Credential name", { exact: true });

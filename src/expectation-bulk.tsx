@@ -8,6 +8,7 @@ import { restoreVisibleFocus } from "./lib/focus";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, type Location } from "react-router-dom";
+import { Info, SlidersHorizontal } from "lucide-react";
 import { CAPABILITY, type Repository, type Snapshot } from "../shared/domain";
 import {
   EXPECTATION_BULK_LIMITS,
@@ -29,6 +30,7 @@ import {
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -682,8 +684,8 @@ export function ExpectationBulkEditor({
                     </p>
                   </section>
                   <p className="expectation-muted">
-                    Requirements are not health results. Optional and Not
-                    managed here never mean healthy.
+                    Required checks need fresh evidence. Optional and Not
+                    managed here do not establish health.
                   </p>
                   <section
                     className="expectation-stack"
@@ -764,14 +766,16 @@ export function ExpectationBulkEditor({
                           </p>
                         ) : null}
                         <Changes row={row} />
-                        <details>
-                          <summary>
-                            Exceptions
-                            {Object.keys(exceptions[row.repositoryId] ?? {})
+                        <Disclosure
+                          title="Exceptions"
+                          description={
+                            Object.keys(exceptions[row.repositoryId] ?? {})
                               .length
-                              ? " (customized)"
-                              : ""}
-                          </summary>
+                              ? "Customized"
+                              : "Using batch choices"
+                          }
+                          icon={SlidersHorizontal}
+                        >
                           <ExpectationFields
                             id={"exception-" + row.repositoryId}
                             exception
@@ -799,7 +803,7 @@ export function ExpectationBulkEditor({
                           >
                             Use batch choices
                           </Button>
-                        </details>
+                        </Disclosure>
                       </article>
                     ))}
                     {!selected.length ? (
@@ -849,8 +853,7 @@ export function ExpectationBulkEditor({
                       Everything already matches. There is nothing to apply.
                     </p>
                   ) : null}
-                  <details>
-                    <summary>Review reference</summary>
+                  <Disclosure title="Review reference" icon={Info}>
                     <p className="expectation-reference">{review.planId}</p>
                     <p className="expectation-reference">
                       {review.fingerprint}
@@ -858,7 +861,7 @@ export function ExpectationBulkEditor({
                     <p>
                       The page URL preserves this review for receipt recovery.
                     </p>
-                  </details>
+                  </Disclosure>
                 </>
               ) : (
                 <p role="status">

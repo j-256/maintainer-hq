@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ShieldCheck } from "lucide-react";
+import { Check, Copy, KeyRound, ShieldCheck } from "lucide-react";
 import { type Connection, type Snapshot } from "../shared/domain";
 import {
   type PublisherCredential,
@@ -10,6 +10,7 @@ import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -167,10 +168,12 @@ export function CredentialManager({
           }}
         >
           <DialogHeader>
-            <DialogTitle>Publisher credentials</DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <KeyRound size={20} aria-hidden="true" />
+              Publisher credentials
+            </DialogTitle>
             <DialogDescription>
-              {source.name} can report local checkout facts only. Credentials
-              cannot read the workspace or operate providers.
+              {source.name}: local checkout reports only.
             </DialogDescription>
           </DialogHeader>
           <div className="source-form-scroll">
@@ -194,9 +197,9 @@ export function CredentialManager({
                   <ShieldCheck size={18} /> Save this credential now
                 </h3>
                 <p>
-                  The value is shown once. Store it privately as HQ_TOKEN on the
-                  publishing client. Do not paste it into Activity, repository
-                  files, or command arguments.
+                  Shown once. Save as HQ_TOKEN in the client's protected secret
+                  storage. Keep it out of Activity, repository files, and
+                  command arguments.
                 </p>
                 <label htmlFor="publisher-value">
                   Publisher credential value
@@ -240,11 +243,11 @@ export function CredentialManager({
               </section>
             ) : (
               <form onSubmit={issue} noValidate className="credential-create">
-                <h3>Create a credential</h3>
+                <h3>Create credential</h3>
                 <p>
-                  Grant access to {reviewed.repositoryIds.length} selected
-                  repositories for a limited time. Existing credentials remain
-                  valid until expired or revoked.
+                  Allow reports for {reviewed.repositoryIds.length}{" "}
+                  repositories. Existing credentials stay valid until expiry or
+                  revocation.
                 </p>
                 <div className="credential-scope">
                   {reviewed.repositoryIds.map((id) => (
@@ -264,7 +267,7 @@ export function CredentialManager({
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     disabled={busy}
-                    placeholder="For example, scheduled checkout publisher"
+                    placeholder="e.g. Scheduled checkout publisher"
                   />
                 </div>
                 <div className="form-field">
@@ -298,7 +301,7 @@ export function CredentialManager({
                     credentials.isPending
                   }
                 >
-                  {busy ? "Creating..." : "Create publisher credential"}
+                  {busy ? "Creating..." : "Create credential"}
                 </Button>
                 {!source.enabled ? (
                   <p className="field-help">
@@ -308,6 +311,13 @@ export function CredentialManager({
                 ) : null}
               </form>
             )}
+            <Disclosure title="Credential permissions" icon={ShieldCheck}>
+              <p>
+                Credentials can submit local checkout observations for this
+                publisher's allowed repositories. They cannot read workspace
+                data or operate providers.
+              </p>
+            </Disclosure>
             <section
               className="credential-list"
               aria-label="Issued credentials"

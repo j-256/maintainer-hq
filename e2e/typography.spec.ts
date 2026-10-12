@@ -157,6 +157,10 @@ test("supporting text and forms honor a larger root font without shrinking on mo
     await expectSize(dialog.locator(".field-help").first(), 17.5);
     await dialog
       .locator("summary")
+      .filter({ hasText: /^Expectations/ })
+      .click();
+    await dialog
+      .locator("summary")
       .filter({ hasText: "About expectations" })
       .click();
     await expectSize(dialog.locator(".expectation-help dd").first(), 17.5);
@@ -170,11 +174,11 @@ test("supporting text and forms honor a larger root font without shrinking on mo
     for (const paragraph of await page.locator(".settings-card p").all())
       await expectSize(paragraph, 17.5);
     await expectNoOverflow(page);
-    await page.getByRole("link", { name: /^Automation access Manage/ }).click();
+    await page.getByRole("link", { name: "Automation", exact: true }).click();
     await expectSize(page.locator(".access-card p").first(), 18.75);
     await page
       .getByRole("button", {
-        name: "Create automation credential",
+        name: "Create credential",
         exact: true,
       })
       .click();

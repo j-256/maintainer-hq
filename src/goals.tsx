@@ -71,16 +71,14 @@ export function GoalsPanel({ goals }: { goals: Goal[] }) {
                 </div>
                 {paused ? (
                   <p>
-                    Paused at the goal source, not blocked or completed. This
-                    objective remains open; check the journal for separately
-                    reported work. HQ does not resume source goals.
+                    Paused at the source. This goal remains open; HQ cannot
+                    resume it.
                   </p>
                 ) : null}
                 {stale ? (
                   <p>
-                    The latest source report is over five minutes old. Dashboard
-                    refreshes do not confirm that the agent is still working on
-                    this goal.
+                    Source report is over five minutes old. Refreshing HQ does
+                    not confirm ongoing work.
                   </p>
                 ) : null}
               </div>
@@ -92,8 +90,8 @@ export function GoalsPanel({ goals }: { goals: Goal[] }) {
           <CheckCheck size={18} />
           <span>
             {goals.length
-              ? "No open goal has been reported. Completed and cleared goals remain in the journal."
-              : "No goal has been synced yet. Agent objectives will appear here verbatim."}
+              ? "No open goals reported. Completed and cleared goals remain in activity."
+              : "No goals reported yet."}
           </span>
         </div>
       )}

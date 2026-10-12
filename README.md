@@ -58,4 +58,6 @@ The static site reads the guides under `docs/` directly. Search stays local to t
 
 Keep provider engines independent and give each kind of configuration one authority. Separate expectations from observed evidence. Use structured Save/Cancel for metadata and expiring exact reviews with recoverable receipts for consequential operations. Preserve workspace isolation, explicit provider scope, honest freshness, and bounded CLI/MCP parity.
 
+Use concise labels and recognizable icons. Put secondary guidance and optional form fields in named disclosures. Keep missing evidence, stale reads, permission blockers, action consequences, and recovery controls visible. Collapsing a form section preserves its values; validation opens sections containing invalid fields.
+
 Related implementations are references for selective reuse, not compatibility requirements. This project is licensed under [AGPL-3.0-only](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change and [SECURITY.md](SECURITY.md) to report a vulnerability privately.

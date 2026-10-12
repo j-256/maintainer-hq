@@ -123,18 +123,34 @@ test("enroll, edit, cancel, conflict recovery, and audit without JSON editing", 
   await dialog
     .getByLabel("Description", { exact: true })
     .fill("A synthetic browser test repository");
-  await dialog
-    .getByRole("combobox", { name: "Owning project" })
-    .click();
+  await dialog.getByRole("combobox", { name: "Owning project" }).click();
   await page.getByRole("option", { name: "Development", exact: true }).click();
+  const expectations = dialog
+    .locator("details")
+    .filter({
+      has: page.locator("summary").filter({ hasText: /^Expectations/ }),
+    })
+    .first();
+  await expect(expectations).not.toHaveAttribute("open");
+  await expectations.locator(":scope > summary").focus();
+  await page.keyboard.press("Enter");
   await dialog
     .getByRole("combobox", { name: "Continuous integration" })
     .click();
   await page.getByRole("option", { name: "Optional", exact: true }).click();
+  await expectations.locator(":scope > summary").click();
+  await expectations.locator(":scope > summary").click();
+  await expect(
+    dialog.getByRole("combobox", { name: "Continuous integration" }),
+  ).toHaveText("Optional");
   await dialog
     .getByRole("button", { name: "Enroll repository", exact: true })
     .click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^Expectations/ })
+    .click();
   await expect(page.getByText("Optional", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit expectations" }).click();
   await dialog
@@ -159,7 +175,7 @@ test("enroll, edit, cancel, conflict recovery, and audit without JSON editing", 
   await page.getByRole("button", { name: "Edit expectations" }).click();
   await dialog
     .locator("summary")
-    .filter({ hasText: "Review and maintainer context" })
+    .filter({ hasText: "Review and context" })
     .click();
   await dialog
     .getByLabel("Maintainer context", { exact: true })
@@ -173,7 +189,7 @@ test("enroll, edit, cancel, conflict recovery, and audit without JSON editing", 
   await page.reload();
   await page
     .locator("summary")
-    .filter({ hasText: "Maintainer context" })
+    .filter({ hasText: /^Expectations/ })
     .click();
   await expect(
     page.getByText("A deliberate expectation exception", { exact: true }),
@@ -363,7 +379,10 @@ test("overview treats missing evidence as unverified and review reminders as act
   await expect(page.getByText("Not collected", { exact: true })).toHaveCount(0);
   await page.getByRole("link", { name, exact: true }).click();
   await expect(page.getByText("Unverified", { exact: true })).toBeVisible();
-  await expect(page.getByText("2020-01-01", { exact: true })).toBeVisible();
+  await expect(page.getByText("Review overdue", { exact: true })).toBeVisible();
+  await expect(
+    page.locator("summary").filter({ hasText: /^Expectations/ }),
+  ).toContainText("2020-01-01");
 });
 
 test("desktop and mobile views remain accessible in both themes", async ({
@@ -500,7 +519,7 @@ test("read-only workspace access explains disabled controls", async ({
   ).toBeDisabled();
   await expect(
     page.getByText(
-      "Your workspace role can view repositories but cannot change their expectations.",
+      "Read-only access. An owner or operator can edit expectations.",
     ),
   ).toBeVisible();
   await page.getByRole("textbox", { name: "Search repositories" }).fill(name);

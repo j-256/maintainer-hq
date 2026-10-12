@@ -6,13 +6,19 @@ import {
   Bot,
   FileInput,
   FolderGit2,
+  KeyRound,
   Laptop,
+  Monitor,
+  Settings2,
+  UserRound,
   Users,
+  Webhook,
 } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import type { PreferenceRecord } from "../shared/preferences";
 import { SETTINGS_SECTIONS } from "../shared/settings-navigation";
 import { Button } from "./components/ui/button";
+import { Disclosure } from "@/components/ui/disclosure";
 import "./settings.css";
 
 const MembershipSettings = lazy(() =>
@@ -57,6 +63,11 @@ const TASKS = SETTINGS_SECTIONS.filter(
   (section) => section.id !== "preferences",
 );
 const GROUPS = [...new Set(TASKS.map((section) => section.group))];
+const GROUP_LABELS = {
+  "Workspace access": "Access",
+  "Evidence sources": "Sources",
+  "Workspace data": "Data",
+};
 
 function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
   const suffix = "?workspace=" + encodeURIComponent(snapshot.workspace.id);
@@ -64,15 +75,16 @@ function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">WORKSPACE</div>
-          <h1>Settings</h1>
-          <p>Manage access, evidence sources, and your preferences.</p>
+          <h1 className="page-title">
+            <Settings2 size={26} aria-hidden="true" />
+            Settings
+          </h1>
         </div>
       </div>
       <div className="settings-index">
         {GROUPS.map((group) => (
           <section className="settings-group" key={group}>
-            <h2>{group}</h2>
+            <h2>{GROUP_LABELS[group]}</h2>
             <ul>
               {TASKS.filter((section) => section.group === group).map(
                 (section) => {
@@ -83,7 +95,9 @@ function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
                         <Icon size={20} aria-hidden="true" />
                         <span>
                           <strong>{section.label}</strong>
-                          <span>{section.description}</span>
+                          {section.id === "publishers" ? (
+                            <span>Checkout reports from your machines</span>
+                          ) : null}
                         </span>
                         <ArrowRight size={17} aria-hidden="true" />
                       </Link>
@@ -102,8 +116,14 @@ function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
       >
         <h2 id="provider-settings-title">Provider connections</h2>
         <div>
-          <Link to={"/hooks" + suffix}>Hooks</Link>
-          <Link to={"/monitoring" + suffix}>Monitoring</Link>
+          <Link to={"/hooks" + suffix}>
+            <Webhook size={17} aria-hidden="true" />
+            Hooks
+          </Link>
+          <Link to={"/monitoring" + suffix}>
+            <Monitor size={17} aria-hidden="true" />
+            Monitoring
+          </Link>
           <Link
             to={
               "/secrets" +
@@ -113,12 +133,17 @@ function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
                 : "")
             }
           >
+            <KeyRound size={17} aria-hidden="true" />
             Secrets
           </Link>
         </div>
       </section>
-      <details className="settings-access-summary">
-        <summary>Your account in this workspace</summary>
+      <Disclosure
+        className="settings-access-summary"
+        title="Your account"
+        meta={snapshot.workspace.role}
+        icon={UserRound}
+      >
         <dl>
           <div>
             <dt>Workspace</dt>
@@ -133,7 +158,7 @@ function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
             <dd>{snapshot.workspace.role}</dd>
           </div>
         </dl>
-      </details>
+      </Disclosure>
     </>
   );
 }

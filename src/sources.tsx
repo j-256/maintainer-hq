@@ -1,10 +1,18 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, KeyRound, Laptop, Plus, ShieldCheck } from "lucide-react";
+import {
+  Check,
+  Clock3,
+  KeyRound,
+  Laptop,
+  Plus,
+  ShieldCheck,
+} from "lucide-react";
 import { CAPABILITY, type Connection, type Snapshot } from "../shared/domain";
 import { sourceFreshness } from "../shared/sources";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { Disclosure } from "@/components/ui/disclosure";
 import { SourceEditor } from "./source-editor";
 import { CredentialManager } from "./publisher-credentials";
 import { useSourceTime } from "./date-time";
@@ -33,12 +41,10 @@ export function SourceSettings({ snapshot }: { snapshot: Snapshot }) {
       >
         <div className="source-section-heading">
           <div>
-            <div className="eyebrow">EVIDENCE SOURCES</div>
-            <h1 id="source-settings-heading">Local publishers</h1>
-            <p>
-              Let a machine send bounded updates. The dashboard does not need
-              that machine to stay online.
-            </p>
+            <h1 className="page-title" id="source-settings-heading">
+              <Laptop size={26} aria-hidden="true" />
+              Local publishers
+            </h1>
           </div>
           <Button
             disabled={!canAdmin}
@@ -54,13 +60,13 @@ export function SourceSettings({ snapshot }: { snapshot: Snapshot }) {
         {!canAdmin ? (
           <p className="permission-notice">
             <KeyRound size={16} />
-            Only workspace owners can enroll sources, change their scope, or
-            manage publisher credentials.
+            Only workspace owners can enroll publishers, change their scope, or
+            manage credentials.
           </p>
         ) : !snapshot.repositories.length ? (
           <p className="permission-notice">
-            You can prepare a disabled, empty publisher before enrolling or
-            transferring repositories.
+            No repositories are enrolled. Prepare an empty publisher with
+            publishing disabled.
           </p>
         ) : null}
         {notice ? (
@@ -72,12 +78,8 @@ export function SourceSettings({ snapshot }: { snapshot: Snapshot }) {
         {!sources.length ? (
           <div className="source-empty">
             <Laptop size={26} />
-            <h2>No local publishers yet</h2>
-            <p>
-              Enroll a source, choose the repositories it may report on, then
-              create its credential. Without reports, local checkout status
-              stays unobserved.
-            </p>
+            <h2>No local publishers</h2>
+            <p>Enroll a machine to report checkout state.</p>
           </div>
         ) : (
           sources.map((source) => {
@@ -123,24 +125,29 @@ export function SourceSettings({ snapshot }: { snapshot: Snapshot }) {
                     ) : null;
                   })}
                 </div>
-                <dl className="source-metadata">
-                  <div>
-                    <dt>Stale after</dt>
-                    <dd>{source.freshnessMinutes} minutes</dd>
-                  </div>
-                  <div>
-                    <dt>Last observation</dt>
-                    <dd>
-                      {displaySourceTime(evidence[0]?.observedAt ?? null)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Last received</dt>
-                    <dd>{displaySourceTime(source.lastSuccessAt)}</dd>
-                  </div>
-                </dl>
+                <Disclosure title="Report details" icon={Clock3}>
+                  <dl className="source-metadata">
+                    <div>
+                      <dt>Stale after</dt>
+                      <dd>{source.freshnessMinutes} minutes</dd>
+                    </div>
+                    <div>
+                      <dt>Last observation</dt>
+                      <dd>
+                        {displaySourceTime(evidence[0]?.observedAt ?? null)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Last received</dt>
+                      <dd>{displaySourceTime(source.lastSuccessAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Source ID</dt>
+                      <dd>{source.id}</dd>
+                    </div>
+                  </dl>
+                </Disclosure>
                 <div className="source-card-footer">
-                  <code title="Source ID">{source.id}</code>
                   <div>
                     <Button
                       variant="outline"
@@ -171,53 +178,57 @@ export function SourceSettings({ snapshot }: { snapshot: Snapshot }) {
             );
           })
         )}
-        <div className="source-provider-note">
-          <ShieldCheck size={20} />
-          <div>
-            <h2>Hosted providers are separate sources</h2>
-            <p>
-              Hosted integrations collect their own evidence. Hookrelay is
-              managed in Hooks; Endpoint Monitor is managed in Monitoring. A
-              local publisher cannot claim CI, security, delivery, or monitoring
-              results.
-            </p>
-          </div>
-        </div>
-        {snapshot.connections
-          .filter((source) => !["local", "github"].includes(source.provider))
-          .map((source) => (
-            <div className="settings-card" key={source.id}>
-              <h2>{source.name}</h2>
-              {source.provider === "hookrelay" ? (
-                <>
+        {!sources.length ? (
+          <p className="permission-notice">
+            Local checkout state is unobserved until reports arrive.
+          </p>
+        ) : null}
+        <Disclosure title="Publisher permissions" icon={ShieldCheck}>
+          <p>
+            A publisher can report local checkout observations for its allowed
+            repositories. It cannot read workspace data, edit expectations, run
+            operations, or report CI, security, delivery, or monitoring results.
+          </p>
+          <p>
+            GitHub, Hookrelay, and Endpoint Monitor collect their own evidence.
+            Manage Hookrelay in Hooks and Endpoint Monitor in Monitoring.
+          </p>
+          {snapshot.connections
+            .filter((source) => !["local", "github"].includes(source.provider))
+            .map((source) => (
+              <div className="settings-card" key={source.id}>
+                <h2>{source.name}</h2>
+                {source.provider === "hookrelay" ? (
+                  <>
+                    <p>
+                      Inspect subscriptions, deliveries, and retry receipts in
+                      Hooks. This connection does not publish repository
+                      evidence.
+                    </p>
+                    <Link
+                      className="quiet-link"
+                      to={
+                        "/hooks?workspace=" +
+                        encodeURIComponent(snapshot.workspace.id) +
+                        "&connection=" +
+                        encodeURIComponent(source.id)
+                      }
+                    >
+                      Open Hooks
+                    </Link>
+                  </>
+                ) : (
                   <p>
-                    Inspect provider-owned subscriptions, delivery state, and
-                    reviewed retry receipts in Hooks. This connection does not
-                    publish repository evidence.
+                    {source.lastSuccessAt
+                      ? "Last provider refresh: " +
+                        displaySourceTime(source.lastSuccessAt)
+                      : "Provider evidence has not been received."}{" "}
+                    Management for this provider is not available.
                   </p>
-                  <Link
-                    className="quiet-link"
-                    to={
-                      "/hooks?workspace=" +
-                      encodeURIComponent(snapshot.workspace.id) +
-                      "&connection=" +
-                      encodeURIComponent(source.id)
-                    }
-                  >
-                    Open Hooks
-                  </Link>
-                </>
-              ) : (
-                <p>
-                  {source.lastSuccessAt
-                    ? "Last provider refresh: " +
-                      displaySourceTime(source.lastSuccessAt)
-                    : "Provider evidence has not been received."}{" "}
-                  Management for this provider is not available.
-                </p>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            ))}
+        </Disclosure>
         {editor ? (
           <SourceEditor
             initial={editor === "new" ? undefined : editor}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { TriangleAlert } from "lucide-react";
+import { CircleHelp, FolderGit2, TriangleAlert } from "lucide-react";
 import type { Snapshot } from "../shared/domain";
 import {
   GITHUB_REFRESH_LIMITS as LIMITS,
@@ -13,6 +13,7 @@ import { command, RequestError } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Select,
   SelectTrigger,
@@ -205,12 +206,12 @@ export function GitHubEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <FolderGit2 size={20} aria-hidden="true" />
               {initial ? "Edit GitHub settings" : "Connect GitHub"}
             </DialogTitle>
             <DialogDescription>
-              HQ reads selected repositories online. It never writes to GitHub
-              or runs commands on a machine.
+              Read evidence from selected repositories.
             </DialogDescription>
           </DialogHeader>
           <form ref={form} onSubmit={save} noValidate>
@@ -244,7 +245,7 @@ export function GitHubEditor({
                   onChange={(event) =>
                     setDraft({ ...draft, name: event.target.value })
                   }
-                  placeholder="For example, personal repositories"
+                  placeholder="e.g. Personal repositories"
                   aria-invalid={Boolean(errors.name)}
                   aria-describedby={
                     errors.name ? "github-name-error" : undefined
@@ -297,8 +298,7 @@ export function GitHubEditor({
                   </SelectContent>
                 </Select>
                 <p id="github-credential-help" className="field-help">
-                  Only workspace-bound references appear here. Token values stay
-                  in the server's secret binding, never in this form.
+                  Workspace credentials only. Token values stay on the server.
                 </p>
                 {references.isPending ? (
                   <p className="field-help" role="status">
@@ -319,9 +319,9 @@ export function GitHubEditor({
                   </p>
                 ) : references.data?.length === 0 || missingRef ? (
                   <p className="permission-notice">
-                    A server administrator must provision a read-only GitHub
-                    credential for this workspace. You can save settings without
-                    one; evidence will remain unobserved.
+                    A server administrator must add a read-only GitHub
+                    credential for this workspace. Save without one to configure
+                    it later; evidence will remain unobserved.
                   </p>
                 ) : null}
               </div>
@@ -332,7 +332,7 @@ export function GitHubEditor({
                       <label htmlFor={"github-" + key}>
                         {key === "refreshIntervalMinutes"
                           ? "Refresh every"
-                          : "Consider evidence stale after"}
+                          : "Evidence stale after"}
                       </label>
                       <div className="source-number">
                         <Input
@@ -375,9 +375,8 @@ export function GitHubEditor({
                 )}
               </div>
               <p id="github-policy-help" className="field-help">
-                Allow at least two refresh intervals. Freshness is measured from
-                the GitHub read, not from viewing the dashboard. A longer window
-                does not revive old evidence.
+                Allow at least two refresh intervals. Freshness starts at the
+                GitHub read; a longer window does not revive old evidence.
               </p>
               <fieldset className="source-repository-picker">
                 <legend>
@@ -387,12 +386,6 @@ export function GitHubEditor({
                     selected
                   </span>
                 </legend>
-                <p className="field-help">
-                  These are repositories enrolled in HQ. Archived records may
-                  retain history for repositories removed from GitHub. Selected
-                  archived repositories remain visible while editing so you
-                  can remove them or undo a selection before saving.
-                </p>
                 <label className="source-archived-filter">
                   <Checkbox
                     checked={includeArchived}
@@ -462,12 +455,6 @@ export function GitHubEditor({
                     </p>
                   ) : null}
                 </div>
-                <p className="field-help">
-                  Review enrollment from Repositories to reconcile GitHub names
-                  and archive status. Unavailable reads alone do not prove
-                  deletion. A disabled connection can have an empty selection.
-                  Saving collection settings does not grant GitHub access.
-                </p>
               </fieldset>
               <label className="source-enabled">
                 <Checkbox
@@ -485,6 +472,21 @@ export function GitHubEditor({
                   </small>
                 </span>
               </label>
+              <Disclosure
+                title="Collection and enrollment details"
+                icon={CircleHelp}
+              >
+                <p>
+                  HQ only reads GitHub. Connection settings do not grant GitHub
+                  access or run machine commands. A disabled connection can have
+                  no selected repositories.
+                </p>
+                <p>
+                  Selected archived repositories stay visible while editing. Use
+                  Repositories to review GitHub names and archive status. An
+                  unavailable read does not prove a repository was deleted.
+                </p>
+              </Disclosure>
             </div>
             <div className="source-dialog-actions">
               <Button

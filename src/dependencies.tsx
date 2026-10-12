@@ -5,9 +5,11 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Info,
   PackageCheck,
   RefreshCw,
   Search,
+  Unplug,
 } from "lucide-react";
 import { CAPABILITY, type Repository, type Snapshot } from "../shared/domain";
 import {
@@ -32,6 +34,7 @@ import { documentationForRoute } from "../shared/documentation";
 import { StatusBadge, type StatusTone } from "./components/ui/status";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -147,7 +150,10 @@ export function DependenciesView({
     return (
       <section className="dependencies-view">
         <header className="dependency-toolbar">
-          <h1>Dependencies</h1>
+          <h1 className="page-title">
+            <PackageCheck size={24} aria-hidden="true" />
+            Dependencies
+          </h1>
           <Button
             variant="outline"
             onClick={() => {
@@ -185,8 +191,10 @@ export function DependenciesView({
     <section className="dependencies-view" aria-label="Dependency maintenance">
       <header className="dependency-toolbar">
         <div>
-          <Heading>Dependencies</Heading>
-          <p>Temporary overrides, upstream fixes, and review deadlines.</p>
+          <Heading className="page-title">
+            <PackageCheck size={24} aria-hidden="true" />
+            Dependencies
+          </Heading>
         </div>
         <Button
           variant="outline"
@@ -237,11 +245,18 @@ export function DependenciesView({
       ) : null}
       {data ? (
         <>
+          {data.rows.some((row) => !row.source) ? (
+            <div className="dependency-connection-notice">
+              <Unplug size={18} aria-hidden="true" />
+              <p>Connect GitHub to inspect committed dependency policies.</p>
+              <Link className="quiet-link" to={githubCoverageHref(workspaceId)}>
+                Connect GitHub
+              </Link>
+            </div>
+          ) : null}
           <p className="dependency-meta">
             {data.total} {data.total === 1 ? "repository" : "repositories"}
-            {projectId ? " in this project" : " in this workspace"}. Open one to
-            inspect its committed policy. Refreshing this list does not call
-            providers.
+            {projectId ? " in this project" : " in this workspace"}
           </p>
           <ul className="dependency-inventory">
             {data.rows.map(({ repository, source, summary }) => {
@@ -255,7 +270,7 @@ export function DependenciesView({
                 summary.stale ||
                 Boolean(
                   summary.observedAt &&
-                    now >= Date.parse(summary.observedAt) + LIMITS.CACHE_MS,
+                  now >= Date.parse(summary.observedAt) + LIMITS.CACHE_MS,
                 );
               return (
                 <li key={repository.id}>
@@ -274,7 +289,7 @@ export function DependenciesView({
                     >
                       {repository.fullName}
                     </Link>
-                    <span>{source?.name ?? "No GitHub source connected"}</span>
+                    <span>{source?.name ?? "Not connected"}</span>
                   </div>
                   <div className="dependency-row-status">
                     <StatusBadge
@@ -308,9 +323,7 @@ export function DependenciesView({
                       <span>
                         Inspected <DependencyTime value={summary.observedAt} />
                       </span>
-                    ) : (
-                      <span>No accepted inspection</span>
-                    )}
+                    ) : null}
                   </div>
                 </li>
               );
@@ -352,6 +365,18 @@ export function DependenciesView({
               <ChevronRight size={16} aria-hidden="true" />
             </Button>
           </nav>
+          <Disclosure
+            title="Inspection details"
+            description="Committed policy and saved evidence"
+            icon={Info}
+          >
+            <p>
+              Policies track temporary overrides, upstream fixes, and review
+              deadlines. Refresh reloads saved evidence; opening a repository
+              lets you inspect its committed policy. Inspection reads provider
+              data without running package scripts or changing the provider.
+            </p>
+          </Disclosure>
         </>
       ) : null}
     </section>
@@ -610,11 +635,10 @@ export function RepositoryDependencies({
     <section className="dependencies-view" aria-label="Repository dependencies">
       <header className="dependency-toolbar">
         <div>
-          <h2>Dependencies</h2>
-          <p>
-            Review temporary overrides against this repository's committed
-            lockfiles.
-          </p>
+          <h2 className="page-title">
+            <PackageCheck size={22} aria-hidden="true" />
+            Dependencies
+          </h2>
         </div>
         {source ? (
           <Button disabled={busy || waiting} onClick={() => refresh.mutate()}>
@@ -727,8 +751,7 @@ export function RepositoryDependencies({
         <div className="dependency-empty">
           <h3>Connect a GitHub source</h3>
           <p>
-            Dependency inspection needs read access to this repository's
-            contents.
+            Contents read permission is required to inspect committed policy.
           </p>
           {configure}
         </div>
@@ -828,9 +851,8 @@ export function RepositoryDependencies({
         <div className="dependency-empty">
           <h3>No override policy committed</h3>
           <p>
-            This commit has no Maintainer HQ dependency policy. That does not
-            establish whether dependencies are safe or whether other overrides
-            exist.
+            This commit has no HQ dependency policy. Other overrides or
+            vulnerabilities may still exist.
           </p>
           <a
             className="quiet-link"
@@ -956,8 +978,11 @@ export function RepositoryDependencies({
         </>
       ) : null}
       {evidence ? (
-        <details className="dependency-inspection-details">
-          <summary>Inspection details</summary>
+        <Disclosure
+          className="dependency-inspection-details"
+          title="Inspection details"
+          icon={Info}
+        >
           <dl className="dependency-facts">
             <div>
               <dt>Reference</dt>
@@ -976,7 +1001,7 @@ export function RepositoryDependencies({
               <dd>{evidence.elapsedMs} ms, including network waits</dd>
             </div>
           </dl>
-        </details>
+        </Disclosure>
       ) : null}
       {editing && result ? (
         <DependencyChangeEditor

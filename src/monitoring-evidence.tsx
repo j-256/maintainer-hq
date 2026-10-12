@@ -134,7 +134,7 @@ export function MonitorExecution({
             ? "Fresh completion"
             : state === "stale"
               ? "Scheduler overdue"
-              : "No completed run recorded"}
+              : "No completed run"}
         </StatusBadge>
       </div>
       <p>
@@ -156,9 +156,7 @@ export function MonitorExecution({
         </p>
       ) : null}
       {state === "unobserved" ? (
-        <p className="hook-muted">
-          Waiting for a completed scheduled run to publish evidence.
-        </p>
+        <p className="hook-notice">Probe execution is unverified.</p>
       ) : null}
       {run?.enabled &&
       data.configuration &&
@@ -169,10 +167,6 @@ export function MonitorExecution({
           {data.configuration.revision}.
         </p>
       ) : null}
-      <p className="hook-muted">
-        Expected every minute, with two minutes of grace. Target checks follow
-        their own configured interval.
-      </p>
     </section>
   );
 }

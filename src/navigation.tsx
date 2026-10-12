@@ -211,11 +211,9 @@ export function WorkspaceNavigation(props: NavigationProps) {
       <aside className="sidebar" aria-label="Workspace navigation and account">
         <Brand suffix={suffix} />
         <WorkspacePicker {...props} onChange={changeWorkspace} />
-        <div className="nav-caption">WORKSPACE</div>
         <NavigationLinks suffix={suffix} />
         <div className="sidebar-bottom">
           <DocumentationLink />
-          <p>A workspace for the work behind your projects.</p>
           <Account {...props} />
         </div>
       </aside>

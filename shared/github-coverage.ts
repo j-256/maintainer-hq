@@ -95,7 +95,7 @@ export const COVERAGE_GUIDANCE: Record<GitHubCoverageState, string> =
     disabled:
       "Enable the connection to resume collection. Old results do not become fresh when it is enabled.",
     not_collected:
-      "Choose a GitHub connection only if this repository should be collected from GitHub.",
+      "Connect GitHub if this repository needs collection.",
   });
 
 export type GitHubCoverageCheck = Pick<

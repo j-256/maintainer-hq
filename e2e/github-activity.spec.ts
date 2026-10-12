@@ -367,7 +367,7 @@ test("direct receipt URLs preserve the exact run across reload, selection and ba
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "GitHub evidence", exact: true }),
+    page.getByRole("heading", { name: "GitHub", exact: true }),
   ).toBeFocused();
   const after = new URL(page.url());
   expect(after.searchParams.get("context")).toBe("retained");

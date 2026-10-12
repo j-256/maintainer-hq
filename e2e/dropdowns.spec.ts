@@ -157,6 +157,11 @@ for (const width of [1440, 390]) {
           element.getAnimations().map((animation) => animation.finished),
         );
       });
+      await page
+        .getByRole("dialog")
+        .locator("summary")
+        .filter({ hasText: "Related project or goal" })
+        .click();
       await expectStableOpening(
         page,
         page.getByRole("combobox", { name: "Related to" }),

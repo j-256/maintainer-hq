@@ -95,6 +95,20 @@
 .project-overview-repositories {
   grid-column: 1 / -1;
 }
+.project-inventory .inventory-description {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+  font-weight: 400;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.project-summary-strip .project-evidence-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+}
 .project-overview-repositories .detail-card-heading {
   flex-wrap: wrap;
 }

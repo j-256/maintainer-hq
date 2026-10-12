@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, Info, RefreshCw } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
   HOOK_LIMITS,
@@ -9,6 +10,7 @@ import {
 } from "../shared/hooks";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -126,11 +128,10 @@ export function HookDeliveryDetail({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Delivery to {sinkName}</DialogTitle>
-          <DialogDescription>
-            Inspect provider-owned state before reviewing a retry. No raw event
-            payload is exposed.
-          </DialogDescription>
+          <DialogTitle className="page-title">
+            <Bell size={20} aria-hidden="true" /> Delivery to {sinkName}
+          </DialogTitle>
+          <DialogDescription>Provider delivery state.</DialogDescription>
         </DialogHeader>
         {detail.isPending ? <p role="status">Loading delivery...</p> : null}
         {detail.error ? <HookError error={detail.error} /> : null}
@@ -182,7 +183,13 @@ export function HookDeliveryDetail({
               {data.resolvedAt ? (
                 <div>
                   <dt>Recorded disposition</dt>
-                  <dd>{data.resolutionReason ? HOOK_RESOLUTION_LABELS[data.resolutionReason] : "Acknowledged"} at <HookTime value={data.resolvedAt} />. Delivery was not verified.</dd>
+                  <dd>
+                    {data.resolutionReason
+                      ? HOOK_RESOLUTION_LABELS[data.resolutionReason]
+                      : "Acknowledged"}{" "}
+                    at <HookTime value={data.resolvedAt} />. Delivery was not
+                    verified.
+                  </dd>
                 </div>
               ) : null}
               {data.decisionReason ? (
@@ -198,10 +205,8 @@ export function HookDeliveryDetail({
             </dl>
             {data.decisionReason === "source-record-only" ? (
               <p className="hook-notice">
-                The source adapter recorded this event without requesting a
-                notification, before subscription or sink filters were
-                evaluated. This is not a delivery failure; changing subscription
-                filters will not make this event notify.
+                Recorded without a notification request, before subscription or
+                sink filters. Changing filters will not send this event.
               </p>
             ) : null}
             {data.status !== "exhausted" ? (
@@ -211,6 +216,12 @@ export function HookDeliveryDetail({
                 recovery.
               </p>
             ) : null}
+            <Disclosure title="Read details" icon={Info}>
+              <p>
+                A retry requires a separate review bound to this exact
+                generation and update. Raw event payloads remain private.
+              </p>
+            </Disclosure>
           </>
         ) : null}
         {!canOperate ? (
@@ -335,17 +346,20 @@ export function HookRetryReview({
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>
+          <AlertDialogTitle className="page-title">
+            <RefreshCw size={20} aria-hidden="true" />
             {accepted
               ? "Retry accepted by Hookrelay"
               : data?.operation
                 ? "Retry operation receipt"
-                : "Confirm this hook retry"}
+                : "Confirm retry"}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {accepted
-              ? "The retry is durably accepted. That is not a delivery confirmation; inspect the delivery for its later outcome."
-              : "This can send a real notification to the selected sink. It does not change or resend other deliveries."}
+              ? "Hookrelay accepted the retry. This is not a delivery confirmation; inspect its later outcome."
+              : "Sends a real notification to " +
+                (data?.sinkName ?? "the selected sink") +
+                ". Duplicates are possible."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {query.isPending ? <p role="status">Loading saved review...</p> : null}
@@ -399,10 +413,9 @@ export function HookRetryReview({
               </div>
             ) : (
               <p className="hook-notice">
-                Only this exhausted delivery is eligible. The exact reviewed
-                generation must still match. Hookrelay uses its sink
-                configuration at execution time, and at-least-once delivery can
-                produce duplicates.
+                Only this exhausted delivery is eligible. Its reviewed
+                generation must still match. Hookrelay uses the sink
+                configuration at execution.
               </p>
             )}
             {!data.operation && (!data.provider || expired) ? (

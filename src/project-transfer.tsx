@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams, type Location } from "react-router-dom";
-import { ArrowRight, CheckCheck, RefreshCw } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowRightLeft,
+  CheckCheck,
+  FolderKanban,
+  RefreshCw,
+} from "lucide-react";
 import { CAPABILITY, type Project, type Snapshot } from "../shared/domain";
 import type {
   TransferDestinations,
@@ -12,6 +18,7 @@ import type {
 } from "../shared/project-transfers";
 import { command, RequestError } from "./lib/api";
 import { Button } from "./components/ui/button";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -90,15 +97,17 @@ function TransferFacts({ preview }: { preview: TransferPreview }) {
           Portfolio: {PORTFOLIO_LABELS[preview.project.portfolio.status]} /{" "}
           {preview.project.lifecycle}
         </p>
-        <details>
-          <summary>Project identity and saved description</summary>
+        <Disclosure
+          title="Project identity and description"
+          icon={FolderKanban}
+        >
           <p>{preview.project.description || "No description"}</p>
           <code>{preview.project.id}</code>
           <p>
             Revision {preview.project.revision}. Portfolio and Importance notes
             stay with the project.
           </p>
-        </details>
+        </Disclosure>
         {preview.repositories.length ? (
           <details>
             <summary>
@@ -550,19 +559,24 @@ export function ProjectTransfer({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle ref={heading} tabIndex={-1}>
+            <AlertDialogTitle
+              className="dialog-heading"
+              ref={heading}
+              tabIndex={-1}
+            >
+              <ArrowRightLeft size={20} aria-hidden="true" />
               {data?.receipt
                 ? "Project moved"
                 : reviewId
                   ? "Confirm workspace transfer"
-                  : "Move project to another workspace"}
+                  : "Move project to workspace"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {data?.receipt
                 ? "The completed move is recorded below. No provider resources or credentials were moved."
                 : reviewId
                   ? "Only this exact, expiring review can be confirmed. No provider resources or credentials will be moved."
-                  : `Review access and dependencies for ${project?.name ?? "this project"}. Choosing a destination does not move anything.`}
+                  : `Review access and dependencies for ${project?.name ?? "this project"} before moving it.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="transfer-scroll" ref={body}>

@@ -5,7 +5,7 @@ description: Choose date patterns, a 24-hour clock, and local, UTC, or named tim
 
 # Date and time preferences
 
-Open Settings > Date and time preferences. Choose a date format, a 24-hour or 12-hour clock, and Local, UTC, or a named IANA time zone. The preview uses the draft choices; Save applies them throughout the dashboard. Cancel and navigation protect unsaved edits. Failed saves preserve the draft, and revision conflicts require loading and reviewing saved preferences before retrying.
+Open Settings > Date and time. Choose a date format, a 24-hour or 12-hour clock, and Local, UTC, or a named IANA time zone. The preview uses the draft choices; Save applies them throughout the dashboard. Cancel and navigation protect unsaved edits. Failed saves preserve the draft, and revision conflicts require loading and reviewing saved preferences before retrying.
 
 Local follows the browser's detected zone on each device. A named zone follows that zone's daylight-saving rules; UTC never shifts. The local label shows the detected zone so an automation browser or device with an unexpected zone is visible. Local is stored as a mode, not converted to a fixed zone when saved. Accounts without a saved record use `yyyy-MM-dd`, a 24-hour clock, and Local.
 

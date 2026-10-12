@@ -1,6 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Clock3, Globe2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleHelp,
+  Clock3,
+  Globe2,
+} from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
   DATE_FORMATS,
@@ -11,6 +17,7 @@ import {
 import { createDateTimeFormatter } from "../shared/date-time";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -40,23 +47,22 @@ export function PreferenceSummary({ workspaceId }: { workspaceId: string }) {
   const date = useDateTime();
   return (
     <section
-      className="settings-card preferences-summary"
+      className="settings-group preferences-summary"
       aria-labelledby="preferences-title"
     >
-      <div>
-        <h2 id="preferences-title">
-          <Clock3 size={19} aria-hidden="true" /> Date and time
-        </h2>
-        <p>
-          Personal display preferences across your workspaces. Times use{" "}
-          {date.zoneLabel}.
-        </p>
-      </div>
-      <Button asChild variant="outline">
-        <Link to={"/settings/preferences" + suffix(workspaceId)}>
-          Date and time preferences
-        </Link>
-      </Button>
+      <h2 id="preferences-title">Preferences</h2>
+      <ul>
+        <li>
+          <Link to={"/settings/preferences" + suffix(workspaceId)}>
+            <Clock3 size={20} aria-hidden="true" />
+            <span>
+              <strong>Date and time</strong>
+              <span>{date.zoneLabel}</span>
+            </span>
+            <ArrowRight size={17} aria-hidden="true" />
+          </Link>
+        </li>
+      </ul>
     </section>
   );
 }
@@ -163,9 +169,10 @@ export function PreferenceSettings({
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">PERSONAL PREFERENCES</div>
-          <h1>Date and time</h1>
-          <p>Make timestamps comfortable to read, everywhere in HQ.</p>
+          <h1 className="page-title">
+            <Clock3 size={26} aria-hidden="true" />
+            Date and time
+          </h1>
         </div>
         <Button variant="ghost" onClick={guard.requestClose}>
           <ArrowLeft size={16} /> Settings
@@ -175,11 +182,10 @@ export function PreferenceSettings({
         className="settings-card preferences-editor"
         aria-labelledby="preferences-form-title"
       >
-        <h2 id="preferences-form-title">Your display preferences</h2>
-        <p>
-          Saved to your account, not this workspace or device. Other users keep
-          their own settings.
-        </p>
+        <h2 id="preferences-form-title" className="sr-only">
+          Display preferences
+        </h2>
+        <p>Saved to your account.</p>
         <form onSubmit={(event) => void save(event)}>
           <fieldset disabled={busy || !canEdit} className="preferences-fields">
             <legend className="sr-only">Date and time formats</legend>
@@ -259,8 +265,7 @@ export function PreferenceSettings({
                 </SelectContent>
               </Select>
               <p className="field-help">
-                Local follows this browser. Named zones follow their
-                daylight-saving rules. Type a zone name while the menu is open.
+                Type a zone name while the menu is open.
               </p>
             </div>
           </fieldset>
@@ -277,11 +282,6 @@ export function PreferenceSettings({
               <Globe2 size={15} aria-hidden="true" /> {preview.zoneLabel}
             </span>
           </div>
-          <p className="preferences-explanation">
-            Only display changes. Stored timestamps and collection schedules
-            remain unchanged. Calendar-only review deadlines keep their original
-            day.
-          </p>
           {!canEdit ? (
             <p className="permission-notice">
               This credential cannot change personal preferences. Use your
@@ -329,6 +329,24 @@ export function PreferenceSettings({
           </div>
         </form>
       </section>
+      <Disclosure
+        title="Where these apply"
+        icon={CircleHelp}
+        className="preferences-details"
+      >
+        <p>
+          Date and time preferences follow your account across workspaces and
+          devices. Other members keep their own settings.
+        </p>
+        <p>
+          Local time follows this browser. Named zones follow daylight-saving
+          rules. Hover a timestamp to see its time zone.
+        </p>
+        <p>
+          Stored timestamps and collection schedules stay unchanged.
+          Calendar-only review deadlines keep their original day.
+        </p>
+      </Disclosure>
       <DiscardDialog guard={guard} busy={busy} />
       <AlertDialog open={reload} onOpenChange={setReload}>
         <AlertDialogContent>

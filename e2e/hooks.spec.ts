@@ -37,7 +37,7 @@ test("enrolls connection metadata, guards drafts, and reloads saved settings aft
   const state = await mockHooks(page, { empty: true });
   await page.goto(URL);
   await expect(
-    page.getByRole("heading", { name: "Bring your hooks into view" }),
+    page.getByRole("heading", { name: "Hookrelay is not connected" }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Connect Hookrelay", exact: true })
@@ -101,9 +101,7 @@ test("shows sample coverage, bounded empty pages, addressable filters, and accou
 }) => {
   const state = await mockHooks(page);
   await page.goto(URL);
-  await expect(
-    page.getByText(/Sampled health, not a complete inventory/),
-  ).toBeVisible();
+  await expect(page.getByText(/Limited sample: latest/)).toBeVisible();
   await page
     .getByText("Recent operational signals (1)", { exact: true })
     .click();
@@ -210,7 +208,7 @@ test("identifies a complete retained count without calling it a truncated sample
       exact: true,
     }),
   ).toHaveText("1");
-  await expect(summary).toContainText("Counts cover all 1 retained deliveries");
+  await expect(summary).toContainText("All 1 retained deliveries");
   await expect(summary).not.toContainText("Older failures may be outside");
 });
 
@@ -288,10 +286,8 @@ test("reviews exact consequences, survives response loss, and reconciles once fr
   await expect(
     review.getByRole("button", { name: "Cancel", exact: true }),
   ).toBeFocused();
-  await expect(review).toContainText("This can send a real notification");
-  await expect(review).toContainText(
-    "at-least-once delivery can produce duplicates",
-  );
+  await expect(review).toContainText("Sends a real notification");
+  await expect(review).toContainText("Duplicates are possible");
   await expect(page).toHaveURL(/review=/);
   await review
     .getByRole("button", { name: "Confirm retry", exact: true })
@@ -438,10 +434,9 @@ test("shows complete unresolved summaries separately from bounded history", asyn
     ),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "Hookrelay has unresolved operational signals in its recent sample.",
-      { exact: true },
-    ),
+    page.getByText("Unresolved operational signals in the recent sample.", {
+      exact: true,
+    }),
   ).toHaveCount(0);
 });
 
@@ -524,7 +519,9 @@ test("opens operational dispositions from history and reconciles the original re
   await dialog.getByText("Reviewed records (2)", { exact: true }).click();
   await expect(dialog).toContainText(HOOK_DELIVERY.eventId);
   expect(
-    await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    await dialog.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
   ).toBe(true);
   await dialog.getByRole("button", { name: "Reconcile receipt" }).click();
   await expect(dialog.getByText("Accepted", { exact: true })).toBeVisible();

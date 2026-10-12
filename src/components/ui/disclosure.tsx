@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import "./disclosure.css";
@@ -6,6 +6,7 @@ import "./disclosure.css";
 export function Disclosure({
   title,
   description,
+  meta,
   icon: Icon,
   className,
   children,
@@ -13,6 +14,7 @@ export function Disclosure({
 }: Omit<ComponentProps<"details">, "title"> & {
   title: string;
   description?: string;
+  meta?: ReactNode;
   icon: LucideIcon;
 }) {
   return (
@@ -25,6 +27,7 @@ export function Disclosure({
             <span className="disclosure-description">{description}</span>
           ) : null}
         </span>
+        {meta ? <span className="disclosure-meta">{meta}</span> : null}
         <ChevronRight
           className="disclosure-chevron"
           size={16}

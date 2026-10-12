@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { KeyRound, Plus, X } from "lucide-react";
 import type { Snapshot } from "../shared/domain";
 import {
   SECRET_LIMITS,
@@ -129,15 +129,15 @@ export function SecretDraftEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="page-title">
+              <KeyRound size={20} aria-hidden="true" />
               {sourceValue
                 ? "Plan a supplied-value scope change"
                 : "Distribute a supplied value"}
             </DialogTitle>
             <DialogDescription>
-              Select exact destinations first. HQ will read their metadata and
-              prepare a review before asking for the value. No provider write
-              happens here.
+              Select destinations. Review their metadata before supplying a
+              value.
             </DialogDescription>
           </DialogHeader>
           <form className="secret-form" onSubmit={prepare}>
@@ -243,9 +243,8 @@ export function SecretDraftEditor({
               {destinations.length}/{SECRET_LIMITS.DESTINATIONS})
             </Button>
             <p className="hook-muted">
-              One supplied value is sent to all selected destinations, with each
-              provider's own input and activation requirements. Existing names
-              may be overwritten.
+              One supplied value goes to every destination. Provider input and
+              activation requirements differ. Existing names may be overwritten.
             </p>
             {error ? (
               <>

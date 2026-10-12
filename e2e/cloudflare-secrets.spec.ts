@@ -74,8 +74,15 @@ for (const theme of ["light", "dark"]) {
         page.getByText("MixedCaseToken", { exact: true }),
       ).toBeVisible();
       await expect(
+        page.getByText(/^Secret values cannot be read or verified by HQ\./),
+      ).toBeVisible();
+      await page
+        .locator("summary")
+        .filter({ hasText: "Inventory and access details" })
+        .click();
+      await expect(
         page.getByText(
-          /Cloudflare does not expose their values, timestamps or individual secret versions/,
+          /Cloudflare does not expose values, timestamps, or individual secret versions/,
         ),
       ).toBeVisible();
       await audit(page);
@@ -87,7 +94,7 @@ for (const theme of ["light", "dark"]) {
         page.getByText("https://api.example.test", { exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByText("Unmanaged by HQ", { exact: true }),
+        page.getByText("Provider-owned", { exact: true }),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Supply a new secret", exact: true }),

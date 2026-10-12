@@ -76,6 +76,20 @@
 .access-invitations {
   margin-top: 26px;
 }
+.access-role-details {
+  margin-top: 24px;
+}
+.access-role-definitions {
+  display: grid;
+  gap: 16px;
+}
+.access-role-definitions dt {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.access-role-definitions dd {
+  color: var(--muted-foreground);
+}
 .access-invitations > p {
   margin: 8px 0 16px;
 }

@@ -28,8 +28,7 @@ for (const width of [1440, 390, 320])
       ).toBeVisible();
       await expect(
         page.getByRole("link", {
-          name: "Date and time preferences",
-          exact: true,
+          name: /^Date and time /,
         }),
       ).toBeVisible();
       await page.waitForLoadState("networkidle");

@@ -1,7 +1,14 @@
 import { useRef, useState } from "react";
 import { PUSH_LIMITS } from "../shared/workspace-push";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, MailPlus, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import {
+  Check,
+  MailPlus,
+  RefreshCw,
+  ShieldCheck,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { CAPABILITY, ROLES, type Role, type Snapshot } from "../shared/domain";
 import {
   invitationCreateInput,
@@ -15,6 +22,7 @@ import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -33,11 +41,11 @@ import { useDateTime } from "./date-time";
 import "./membership.css";
 
 const ROLE_DESCRIPTION: Record<Role, string> = {
-  owner: "Manage workspace access, credentials, settings, and operations.",
+  owner: "Manage access, credentials, settings, and operations.",
   operator:
-    "Edit repository expectations and run permitted operations. No access or credential administration.",
+    "Edit expectations and run permitted operations. Cannot manage access or credentials.",
   viewer:
-    "Read workspace status and activity, and set personal display preferences. No workspace changes or operations.",
+    "Read status and activity, and set personal preferences. Cannot change workspace data or run operations.",
 };
 const ROLE_LABEL: Record<Role, string> = {
   owner: "Owner",
@@ -127,10 +135,7 @@ export function AccountInvitations({ development }: { development: boolean }) {
       <div className="access-heading">
         <div>
           <h2 id="account-invitations-heading">Your invitations</h2>
-          <p>
-            Only invitations addressed to your verified sign-in email appear
-            here.
-          </p>
+          <p>Invitations for your verified sign-in email.</p>
         </div>
         <MailPlus size={20} />
       </div>
@@ -215,11 +220,12 @@ export function Onboarding({
     <div className="onboarding">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">WELCOME TO MAINTAINER HQ</div>
-          <h1>Find your workspace</h1>
+          <h1 className="page-title">
+            <Users size={26} aria-hidden="true" />
+            Find your workspace
+          </h1>
           <p>
-            Signed in as {displayName}. Signing in verifies your identity; it
-            does not grant workspace access.
+            Signed in as {displayName}. A workspace owner must grant you access.
           </p>
         </div>
       </div>
@@ -472,16 +478,18 @@ export function MembershipSettings({ snapshot }: { snapshot: Snapshot }) {
       <section className="access-card" aria-labelledby="members-heading">
         <div className="access-heading">
           <div>
-            <div className="eyebrow">PEOPLE & PERMISSIONS</div>
-            <h1 id="members-heading" ref={headingRef} tabIndex={-1}>
-              Workspace members
+            <h1
+              className="page-title"
+              id="members-heading"
+              ref={headingRef}
+              tabIndex={-1}
+            >
+              <Users size={26} aria-hidden="true" />
+              Members
             </h1>
-            <p>
-              Invite people, review their roles, and keep access deliberate.
-            </p>
           </div>
           <Button disabled={!canAdmin} onClick={() => begin("invite")}>
-            <Users size={16} />
+            <MailPlus size={16} aria-hidden="true" />
             Invite member
           </Button>
         </div>
@@ -527,7 +535,6 @@ export function MembershipSettings({ snapshot }: { snapshot: Snapshot }) {
                         <small>(you)</small>
                       ) : null}
                     </h2>
-                    <p>{ROLE_DESCRIPTION[member.role]}</p>
                   </div>
                 </div>
                 <div className="access-actions">
@@ -555,10 +562,6 @@ export function MembershipSettings({ snapshot }: { snapshot: Snapshot }) {
         {canAdmin && query.data ? (
           <div className="access-invitations">
             <h2>Invitations</h2>
-            <p>
-              Pending invitations are shown first. History is bounded; email
-              addresses stay restricted to owners and the recipient.
-            </p>
             {!query.data.invitations.length ? (
               <p>No invitations yet.</p>
             ) : (
@@ -592,6 +595,24 @@ export function MembershipSettings({ snapshot }: { snapshot: Snapshot }) {
             )}
           </div>
         ) : null}
+        <Disclosure
+          title="Roles and invitation history"
+          icon={ShieldCheck}
+          className="access-role-details"
+        >
+          <dl className="access-role-definitions">
+            {ROLES.map((role) => (
+              <div key={role}>
+                <dt>{ROLE_LABEL[role]}</dt>
+                <dd>{ROLE_DESCRIPTION[role]}</dd>
+              </div>
+            ))}
+          </dl>
+          <p>
+            Pending invitations appear first. History is limited, and email
+            addresses are visible only to owners and the recipient.
+          </p>
+        </Disclosure>
       </section>
       <AccountInvitations development={snapshot.development} />
       <Dialog
@@ -613,7 +634,10 @@ export function MembershipSettings({ snapshot }: { snapshot: Snapshot }) {
           }}
         >
           <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <UserRound size={20} aria-hidden="true" />
+              {title}
+            </DialogTitle>
             <DialogDescription>
               {inviteOpen
                 ? "Invite the email the recipient uses to sign in. No email or secret invitation link is sent."

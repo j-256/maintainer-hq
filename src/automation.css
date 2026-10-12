@@ -10,15 +10,7 @@
 }
 .automation-boundary {
   max-width: 78ch;
-  margin-bottom: 20px;
-}
-.automation-boundary summary {
-  cursor: pointer;
-  font-size: var(--hq-text-ui);
-  color: var(--muted-foreground);
-}
-.automation-boundary p {
-  margin-top: 8px;
+  margin-top: 24px;
 }
 .automation-empty {
   display: flex;
@@ -40,18 +32,8 @@
   overflow-wrap: anywhere;
 }
 .automation-record details {
-  margin-top: 6px;
+  margin-top: 12px;
   font-size: var(--hq-text-support);
-  color: var(--muted-foreground);
-}
-.automation-record summary {
-  cursor: pointer;
-  width: fit-content;
-}
-.automation-record summary:focus-visible,
-.automation-boundary summary:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
 }
 .automation-card dl,
 .automation-review dl {

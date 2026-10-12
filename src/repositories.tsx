@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  CircleHelp,
   FolderGit2,
   GitPullRequest,
   KeyRound,
@@ -50,6 +51,7 @@ import { StatusBadge } from "./components/ui/status";
 import { HEALTH_TONES } from "./lib/status-tones";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -255,9 +257,9 @@ export function RepositoriesView({
   const canEdit = snapshot.capabilities.includes(CAPABILITY.EDIT);
   const hasFilters = Boolean(
     query.search ||
-      query.classification !== "all" ||
-      query.filter !== "all" ||
-      (!scopedProject && query.projectId !== "all"),
+    query.classification !== "all" ||
+    query.filter !== "all" ||
+    (!scopedProject && query.projectId !== "all"),
   );
   function changeQuery(key: string, value: string) {
     const next = new URLSearchParams(params);
@@ -289,14 +291,17 @@ export function RepositoriesView({
     <>
       <div className="page-heading repository-inventory-heading">
         <div>
-          {!scopedProject ? <div className="eyebrow">YOUR FLEET</div> : null}
-          {scopedProject ? <h2>Repositories</h2> : <h1>Repositories</h1>}
-          <p>
-            {scopedProject
-              ? "Repositories explicitly grouped in this project. Their provider permissions are unchanged."
-              : snapshot.repositories.length +
-                " repositories in this workspace."}
-          </p>
+          {scopedProject ? (
+            <h2 className="page-title">
+              <FolderGit2 size={22} aria-hidden="true" />
+              Repositories
+            </h2>
+          ) : (
+            <h1 className="page-title">
+              <FolderGit2 size={24} aria-hidden="true" />
+              Repositories
+            </h1>
+          )}
         </div>
         <div className="resource-actions">
           {additionalActions}
@@ -340,8 +345,7 @@ export function RepositoriesView({
       {!canEdit ? (
         <p className="permission-notice">
           <ShieldCheck size={15} />
-          Your workspace role can view repositories but cannot change their
-          expectations.
+          Read-only access. An owner or operator can edit expectations.
         </p>
       ) : null}
       <div className="repository-toolbar">
@@ -499,15 +503,22 @@ export function RepositoriesView({
                     role="rowheader"
                     className="repository-inventory-name"
                   >
-                    <Link
-                      to={withInventoryContext(
-                        repositoryPath(repository),
-                        inventoryParams,
-                      )}
-                    >
-                      <FolderGit2 size={17} aria-hidden="true" />
-                      <h2>{repository.fullName}</h2>
-                    </Link>
+                    <div className="inventory-identity">
+                      <Link
+                        to={withInventoryContext(
+                          repositoryPath(repository),
+                          inventoryParams,
+                        )}
+                      >
+                        <FolderGit2 size={17} aria-hidden="true" />
+                        <h2>{repository.fullName}</h2>
+                      </Link>
+                      {repository.description ? (
+                        <p className="inventory-description">
+                          {repository.description}
+                        </p>
+                      ) : null}
+                    </div>
                   </th>
                   <td role="cell" data-label="Project">
                     {projectName ? (
@@ -570,8 +581,8 @@ export function RepositoriesView({
             {snapshot.repositories.length
               ? "Try another status, tracking type, repository name, description, or project."
               : snapshot.projects.length
-                ? "Choose its owning project and expectations, then connect evidence sources to see how things are doing."
-                : "Repositories and enrolled operational resources belong to projects. Create the maintained effort first."}
+                ? "Choose its project and expectations, then connect evidence sources."
+                : "Create a project before enrolling its repositories."}
           </p>
           {!snapshot.repositories.length &&
           !snapshot.projects.length &&
@@ -614,6 +625,13 @@ export function RepositoriesView({
           </Button>
         </nav>
       ) : null}
+      <Disclosure title="Tracking and assessment" icon={CircleHelp}>
+        <p>
+          Active repositories are assessed against saved expectations. Archived
+          records remain searchable. Fresh source evidence is required for
+          passing checks.
+        </p>
+      </Disclosure>
       {bulkOpen || params.has(EXPECTATION_REVIEW_PARAM) ? (
         <Suspense fallback={<p role="status">Loading expectation editor...</p>}>
           <ExpectationBulkEditor
@@ -738,12 +756,14 @@ export function RepositoryDetail({ snapshot }: { snapshot: Snapshot }) {
       </Link>
       <div className="page-heading repository-heading">
         <div>
-          <div className="eyebrow">
-            {CLASSIFICATION_LABELS[repository.classification].toUpperCase()}{" "}
-            REPOSITORY
-          </div>
-          <h1 tabIndex={-1}>{repository.fullName}</h1>
-          <p>{repository.description || "No description added"}</p>
+          <h1 className="page-title" tabIndex={-1}>
+            <FolderGit2 size={24} aria-hidden="true" />
+            {repository.fullName}
+          </h1>
+          {repository.description ? <p>{repository.description}</p> : null}
+          <span className="repository-classification">
+            {CLASSIFICATION_LABELS[repository.classification]}
+          </span>
         </div>
         <div className="repository-heading-actions">
           <Button
@@ -771,7 +791,7 @@ export function RepositoryDetail({ snapshot }: { snapshot: Snapshot }) {
       {saved ? (
         <div className="save-success" role="status">
           <CheckCheck size={16} />
-          Expectations saved. The change is recorded in Activity.
+          Expectations saved.
         </div>
       ) : null}
       {!canEdit ? (

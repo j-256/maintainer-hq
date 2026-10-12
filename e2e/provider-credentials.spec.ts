@@ -268,7 +268,7 @@ test("provider access paging and deployment readiness are explicit", async ({
     page.getByRole("button", { name: "Add provider access", exact: true }),
   ).toBeDisabled();
   await expect(
-    page.getByText("Private credential storage is not enabled", {
+    page.getByText("Private credential storage is unavailable", {
       exact: false,
     }),
   ).toBeVisible();

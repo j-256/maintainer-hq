@@ -28,7 +28,7 @@
 }
 .repository-summary-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 .repository-preview-card {
@@ -183,7 +183,7 @@
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
-.repository-full-evidence > section {
+.repository-full-evidence > .disclosure-content > section {
   padding-top: 16px;
 }
 .repository-full-evidence h3 {

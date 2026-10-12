@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, History, Info } from "lucide-react";
 import { z } from "zod";
 import {
   DEPENDENCY_OPERATION_REASONS,
@@ -14,6 +14,7 @@ import { COORDINATED_QUERY_OPTIONS } from "./lib/workspace-query-refresh";
 import { useDateTime } from "./date-time";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
+import { Disclosure } from "./components/ui/disclosure";
 
 const PHASES: Record<DependencyOperation["phase"], string> = {
   checking: "Preflight checks",
@@ -102,8 +103,7 @@ export function DependencyOperationView({
         </div>
       </dl>
       {operation.files.length ? (
-        <details>
-          <summary>Reviewed file digests</summary>
+        <Disclosure title="Reviewed file digests" icon={Info}>
           <ul>
             {operation.files.map((file) => (
               <li key={file.path}>
@@ -116,7 +116,7 @@ export function DependencyOperationView({
               </li>
             ))}
           </ul>
-        </details>
+        </Disclosure>
       ) : null}
       <div className="dependency-change-actions">
         {operation.pullRequest ? (
@@ -219,11 +219,12 @@ export function DependencyHistory({
     ...COORDINATED_QUERY_OPTIONS,
   });
   return (
-    <details
+    <Disclosure
+      title="Dependency change history"
+      icon={History}
       className="dependency-history"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary>Dependency change history</summary>
       {query.isPending && open ? (
         <p role="status">Loading saved changes...</p>
       ) : null}
@@ -280,6 +281,6 @@ export function DependencyHistory({
           </div>
         </>
       ) : null}
-    </details>
+    </Disclosure>
   );
 }

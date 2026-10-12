@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
+import { Shield } from "lucide-react";
 import type { Snapshot } from "../shared/domain";
 import {
   providerCredentialFieldsSchema,
@@ -15,6 +16,7 @@ import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -171,12 +173,13 @@ export function ProviderCredentialEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="page-title">
+              <Shield size={20} aria-hidden="true" />
               {initial ? "Edit provider access" : "Add provider access"}
             </DialogTitle>
             <DialogDescription>
-              Choose what this credential may reach. Review its effects before
-              entering a token through the separate private input.
+              Choose the allowed resources. Enter the token privately after
+              review.
             </DialogDescription>
           </DialogHeader>
           <form ref={form} className="secret-form" onSubmit={prepare}>
@@ -336,7 +339,8 @@ export function ProviderCredentialEditor({
                   />
                 </label>
                 <p className="hook-muted">
-                  This is HQ's allowlist, not an upstream permission grant.{" "}
+                  This allowlist limits HQ access; it does not grant provider
+                  permissions.{" "}
                   {draft.providerKind !== SECRET_PROVIDER_KIND.CLOUDFLARE
                     ? "You can verify a repository before enrolling it in HQ."
                     : "Use a dedicated account-scoped token. A Worker is its own provider resource; it does not need a repository."}
@@ -357,10 +361,7 @@ export function ProviderCredentialEditor({
                     setDraft({ ...draft, writable: checked === true })
                   }
                 />
-                <span>
-                  Allow explicitly reviewed writes. Read access alone does not
-                  prove the token can write.
-                </span>
+                <span>Allow reviewed writes</span>
               </label>
               {initial ? (
                 <label className="secret-checkbox">
@@ -379,6 +380,13 @@ export function ProviderCredentialEditor({
                   </span>
                 </label>
               ) : null}
+              <Disclosure title="Credential scope" icon={Shield}>
+                <p>
+                  Read access does not verify write permission. Each operation
+                  checks the provider's permissions. Token replacement uses a
+                  separate private input after review.
+                </p>
+              </Disclosure>
             </fieldset>
             {error ? <SecretError error={error} /> : null}
             <div className="secret-actions">
