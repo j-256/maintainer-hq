@@ -158,7 +158,7 @@ test("inventory separates provider variables, effective organization entries and
   await expect(page.getByText("DEPLOY_REGION", { exact: true })).toBeVisible();
   await expect(page.getByText("us-central1", { exact: true })).toBeVisible();
   await expect(page.getByText("Text variable", { exact: true })).toBeVisible();
-  await expect(page.getByText("Unmanaged by HQ", { exact: true })).toBeVisible();
+  await expect(page.getByText("Provider-owned", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", {
       name: "Distribute supplied value",
@@ -245,7 +245,9 @@ test("adopts a provider variable, reviews exact drift, and retains one applied r
     .getByRole("button", { name: "Update variable", exact: true })
     .click();
   const confirmation = page.getByRole("alertdialog");
-  await expect(confirmation).toContainText("submit at most one provider request");
+  await expect(confirmation).toContainText(
+    "submit at most one provider request",
+  );
   await confirmation
     .getByRole("button", {
       name: "Confirm reviewed operation",
@@ -312,7 +314,9 @@ test("tracks a secret name without custody or a value write and can stop managem
     .getByRole("button", { name: "Stop management", exact: true })
     .click();
   const confirmation = page.getByRole("alertdialog");
-  await expect(confirmation).toContainText("Provider entries and values remain unchanged");
+  await expect(confirmation).toContainText(
+    "Provider entries and values remain unchanged",
+  );
   await confirmation
     .getByRole("button", { name: "Stop management only", exact: true })
     .click();
@@ -320,7 +324,7 @@ test("tracks a secret name without custody or a value write and can stop managem
     page.getByRole("heading", { name: "No HQ-managed configuration yet" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Inventory", exact: true }).click();
-  await expect(page.getByText("Unmanaged by HQ", { exact: true })).toBeVisible();
+  await expect(page.getByText("Provider-owned", { exact: true })).toBeVisible();
   expect(state.managedWrites).toBe(0);
 });
 

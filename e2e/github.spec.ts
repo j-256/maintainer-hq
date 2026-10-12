@@ -82,20 +82,18 @@ test("GitHub connection form validates, saves without credentials, and retains c
   await dialog
     .getByRole("checkbox", { name: repo.fullName, exact: true })
     .check();
-  await dialog
-    .getByLabel("Consider evidence stale after", { exact: true })
-    .fill("10");
+  await dialog.getByLabel("Evidence stale after", { exact: true }).fill("10");
   await dialog.getByRole("button", { name: "Save connection" }).click();
   await expect(
     dialog.getByText(
       "Allow at least two refresh intervals before evidence becomes stale",
     ),
   ).toBeVisible();
-  await dialog
-    .getByLabel("Consider evidence stale after", { exact: true })
-    .fill("30");
+  await dialog.getByLabel("Evidence stale after", { exact: true }).fill("30");
   await expect(
-    dialog.getByText(/A server administrator must provision/),
+    dialog.getByText(
+      /A server administrator must add a read-only GitHub credential/,
+    ),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Save connection" }).click();
   await expect(dialog).toHaveCount(0);
@@ -112,7 +110,7 @@ test("GitHub connection form validates, saves without credentials, and retains c
   await expect(
     card.getByRole("button", { name: "Refresh history" }),
   ).toBeFocused();
-  await card.getByRole("button", { name: "Edit GitHub settings" }).click();
+  await card.getByRole("button", { name: "Edit connection" }).click();
   await settle(page);
   await dialog.getByLabel("Connection name").fill("Unsaved GitHub draft");
   await page.keyboard.press("Escape");
@@ -146,7 +144,7 @@ test("GitHub connection form validates, saves without credentials, and retains c
     .click();
   await expect(dialog.getByLabel("Connection name")).toHaveValue(name);
   await expect(
-    dialog.getByLabel("Consider evidence stale after", { exact: true }),
+    dialog.getByLabel("Evidence stale after", { exact: true }),
   ).toHaveValue("60");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
 });
@@ -166,10 +164,11 @@ for (const interruption of ["network", "body"]) {
         first = false;
         await route.fetch();
         if (interruption === "network") await route.abort("failed");
-        else await route.fulfill({
-          contentType: "application/json",
-          body: "synthetic-private-response-canary",
-        });
+        else
+          await route.fulfill({
+            contentType: "application/json",
+            body: "synthetic-private-response-canary",
+          });
       } else await route.continue();
     });
     await page.goto("/settings/github?view=connections");
@@ -371,8 +370,11 @@ test("synthetic refresh receipts expose incomplete coverage, cancellation, and r
   ).toBeVisible();
   await settle(page);
   const diagnostics = dialog.locator(".github-diagnostics summary");
-  await expect(diagnostics).toHaveText(
-    "Collection diagnostics: 7 requests, 4 list pages, 2.4s elapsed",
+  await expect(
+    diagnostics.getByText("Collection diagnostics", { exact: true }),
+  ).toBeVisible();
+  await expect(diagnostics.locator(".disclosure-description")).toHaveText(
+    "7 requests / 4 pages / 2.4s",
   );
   await diagnostics.focus();
   await page.keyboard.press("Enter");
@@ -464,7 +466,7 @@ test("repository scope hides unchecked archives and preserves selected archives 
   await page.goto("/settings/github?view=connections");
   await page
     .getByRole("article", { name, exact: true })
-    .getByRole("button", { name: "Edit GitHub settings" })
+    .getByRole("button", { name: "Edit connection" })
     .click();
   const dialog = page.getByRole("dialog");
   const include = dialog.getByRole("checkbox", {
@@ -514,7 +516,7 @@ test("repository scope hides unchecked archives and preserves selected archives 
   ).toHaveLength(2);
   await page
     .getByRole("article", { name, exact: true })
-    .getByRole("button", { name: "Edit GitHub settings" })
+    .getByRole("button", { name: "Edit connection" })
     .click();
   await expect(selected).toHaveCount(0);
 });
@@ -664,7 +666,7 @@ test("GitHub settings remain accessible on mobile in both themes and explain vie
     exact: true,
   });
   await expect(
-    card.getByRole("button", { name: "Edit GitHub settings" }),
+    card.getByRole("button", { name: "Edit connection" }),
   ).toBeDisabled();
   await expect(
     card.getByRole("button", { name: "Refresh GitHub" }),

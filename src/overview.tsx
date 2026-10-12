@@ -6,7 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleX,
+  CircleHelp,
   Clock3,
+  LayoutDashboard,
   RefreshCw,
   Search,
   Unplug,
@@ -26,6 +28,7 @@ import { operationalItem } from "../shared/attention-operations";
 import { Button } from "./components/ui/button";
 import { StatusBadge } from "./components/ui/status";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import { command, RequestError } from "./lib/api";
 import { useDateTime } from "./date-time";
 import "./overview.css";
@@ -290,8 +293,10 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
     <>
       <div className="page-heading">
         <div>
-          <h1>Overview</h1>
-          <p>What needs your attention.</p>
+          <h1 className="page-title">
+            <LayoutDashboard size={24} aria-hidden="true" />
+            Overview
+          </h1>
         </div>
         <Link
           className="quiet-link"
@@ -329,13 +334,6 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
                 {ATTENTION_LABELS[value]}
               </span>
               <strong>{result.counts[value]}</strong>
-              <span>
-                {value === "problem"
-                  ? "Observed issues"
-                  : value === "review"
-                    ? "Overdue decisions"
-                    : "Missing or incomplete evidence"}
-              </span>
             </button>
           );
         })}
@@ -361,7 +359,7 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
                   operationsExpanded ? "attention-expanded" : undefined
                 }
               />
-              <span>Operational previews</span>
+              <span>Operational connections</span>
               <span
                 className="attention-read-status"
                 id="overview-operational-status"
@@ -452,13 +450,14 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
             </ul>
           ) : (
             <p>
-              No Hooks or Monitoring connections in this workspace.{" "}
+              Hooks and Monitoring are not connected; their status is
+              unobserved.{" "}
               <Link to={attentionHref("/hooks", workspaceId)}>Open Hooks</Link>{" "}
               or{" "}
               <Link to={attentionHref("/monitoring", workspaceId)}>
                 Monitoring
               </Link>{" "}
-              to review setup.
+              to connect them.
             </p>
           )}
           {connectionPages > 1 ? (
@@ -568,7 +567,7 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
           <p>
             {search
               ? "Try a project, repository or a shorter search."
-              : "This is not an all-clear. Missing evidence, provider preview limits and resources without connections still need consideration."}
+              : "No matching items does not establish an all-clear. Evidence may be missing or incomplete."}
           </p>
           <Link to={attentionHref("/settings/github", workspaceId)}>
             Inspect GitHub evidence coverage
@@ -598,6 +597,13 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
           </Button>
         </div>
       </nav>
+      <Disclosure title="About these statuses" icon={CircleHelp}>
+        <p>
+          Problems come from observed evidence. Reviews are overdue decisions.
+          Coverage gaps identify missing or incomplete evidence. Fresh evidence
+          is required to verify repository health.
+        </p>
+      </Disclosure>
     </>
   );
 }

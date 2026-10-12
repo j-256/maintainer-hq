@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBeforeUnload, type Location } from "react-router-dom";
-import { TriangleAlert } from "lucide-react";
+import { Laptop, ShieldCheck, TriangleAlert } from "lucide-react";
 import { type Connection, type Snapshot } from "../shared/domain";
 import {
   SOURCE_LIMITS,
@@ -19,6 +19,7 @@ import { command, RequestError } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -281,12 +282,12 @@ export function SourceEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <Laptop size={20} aria-hidden="true" />
               {initial ? "Edit publisher settings" : "Enroll a publisher"}
             </DialogTitle>
             <DialogDescription>
-              A publisher sends local checkout updates to HQ. It cannot read
-              workspace data, change expectations, or execute commands.
+              Choose the repositories this machine can report on.
             </DialogDescription>
           </DialogHeader>
           <form ref={form} onSubmit={save} noValidate>
@@ -324,7 +325,7 @@ export function SourceEditor({
                   aria-describedby={
                     errors.name ? "source-name-error" : undefined
                   }
-                  placeholder="For example, my development laptop"
+                  placeholder="e.g. Development laptop"
                 />
                 {errors.name ? (
                   <p
@@ -337,9 +338,7 @@ export function SourceEditor({
                 ) : null}
               </div>
               <div className="form-field">
-                <label htmlFor="source-freshness">
-                  Consider reports stale after
-                </label>
+                <label htmlFor="source-freshness">Reports stale after</label>
                 <div className="source-number">
                   <Input
                     id="source-freshness"
@@ -360,9 +359,8 @@ export function SourceEditor({
                   <span>minutes</span>
                 </div>
                 <p className="field-help" id="source-freshness-help">
-                  Measured from when the checkout was observed, not when the
-                  dashboard refreshed. Extending this window will not revive
-                  expired evidence.
+                  Measured from the checkout observation. A longer window will
+                  not revive expired evidence.
                 </p>
                 {errors.freshnessMinutes ? (
                   <p role="alert" className="field-error">
@@ -377,8 +375,7 @@ export function SourceEditor({
                 </legend>
                 <p className="field-help">
                   Reports outside this list are rejected. Changes apply to every
-                  credential for this source. A disabled source can stay empty
-                  while preparing a project transfer.
+                  credential for this publisher.
                 </p>
                 <Input
                   aria-label="Find repositories to allow"
@@ -448,6 +445,13 @@ export function SourceEditor({
                   </small>
                 </span>
               </label>
+              <Disclosure title="Publisher permissions" icon={ShieldCheck}>
+                <p>
+                  Publishers cannot read workspace data, edit expectations, or
+                  run commands. A publisher with publishing disabled can have no
+                  selected repositories.
+                </p>
+              </Disclosure>
             </div>
             <div className="source-dialog-actions">
               <Button

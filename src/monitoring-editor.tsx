@@ -404,9 +404,8 @@ function ConfigurationForm({
                   : "Add monitor target"}
             </DialogTitle>
             <DialogDescription>
-              Changes are reviewed before they affect Endpoint Monitor. Saved
-              configuration is authoritative across HQ and the provider CLI. Do
-              not include credentials in URLs or expectations.
+              Review changes before applying. Keep credentials out of URLs and
+              expectations.
             </DialogDescription>
           </DialogHeader>
           <form className="hook-form" onSubmit={review}>
@@ -419,8 +418,9 @@ function ConfigurationForm({
             ) : null}
             <p className="hook-muted">
               Editing configuration revision{" "}
-              {base.result.configuration?.revision ?? 0}. Unrelated target
-              definitions are preserved.
+              {base.result.configuration?.revision ?? 0}. HQ and the provider
+              CLI use this saved configuration. Unrelated target definitions are
+              preserved.
             </p>
             {defaults ? (
               <>
@@ -520,8 +520,8 @@ function ConfigurationForm({
                 <fieldset className="monitor-assertions">
                   <legend>Response checks</legend>
                   <p className="hook-muted">
-                    Optional assertions add an application contract. Body checks
-                    require GET; redirect checks require explicit 3xx statuses.
+                    Body checks require GET. Redirect checks require explicit
+                    3xx statuses.
                   </p>
                   <label className="hook-checkbox">
                     <Checkbox

@@ -475,8 +475,8 @@ h1 {
 }
 .activity-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 235px;
-  gap: 36px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
 }
 .journal {
   min-width: 0;
@@ -1021,7 +1021,7 @@ h1 {
   }
   .activity-layout {
     gap: 50px;
-    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 1100px) {
@@ -1223,4 +1223,21 @@ h1 {
     animation-duration: 0.01ms !important;
     transition-duration: 0s !important;
   }
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.page-title > svg {
+  flex-shrink: 0;
+  color: var(--hq-accent);
+}
+.activity-guide {
+  margin-top: 20px;
+}
+.workspace-footer {
+  justify-content: flex-end;
 }

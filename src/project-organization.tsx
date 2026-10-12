@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Location } from "react-router-dom";
+import { Info, SlidersHorizontal } from "lucide-react";
 import { restoreVisibleFocus } from "./lib/focus";
 import {
   CAPABILITY,
@@ -23,6 +24,7 @@ import {
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -850,8 +852,7 @@ export function ProjectOrganizationEditor({
                     </Select>
                   </div>
                   <p className="organization-muted">
-                    Keep separate projects or choose a shared project. Only
-                    selected assignments will change.
+                    Choose a project for each selected repository.
                   </p>
                   {changed ? (
                     <div className="organization-notice">
@@ -922,8 +923,8 @@ export function ProjectOrganizationEditor({
                     Project priorities
                   </h3>
                   <p className="organization-muted">
-                    One decision per project, shared by its repositories.
-                    Existing decisions stay unchanged unless edited.
+                    Priorities apply to every repository in a project. Existing
+                    decisions are kept unless edited.
                   </p>
                   {previewPages(
                     "Project priority",
@@ -974,14 +975,15 @@ export function ProjectOrganizationEditor({
                         )}
                         .
                       </p>
-                      <details>
-                        <summary>
-                          {IMPORTANCE_LABELS[target.importance]} importance /
-                          Portfolio: {PORTFOLIO_LABELS[target.portfolio.status]}{" "}
-                          <span className="organization-edit-label">
-                            Edit priorities
-                          </span>
-                        </summary>
+                      <Disclosure
+                        title="Edit priorities"
+                        description={
+                          IMPORTANCE_LABELS[target.importance] +
+                          " / " +
+                          PORTFOLIO_LABELS[target.portfolio.status]
+                        }
+                        icon={SlidersHorizontal}
+                      >
                         <ProjectPriorities
                           id={target.key}
                           value={target}
@@ -992,7 +994,7 @@ export function ProjectOrganizationEditor({
                             }))
                           }
                         />
-                      </details>
+                      </Disclosure>
                     </section>
                   ))}
                   {!selected.length ? (
@@ -1063,8 +1065,7 @@ export function ProjectOrganizationEditor({
                               <span>
                                 {row.before?.name ?? "Unavailable project"}
                               </span>{" "}
-                              to{" "}
-                              <strong>{row.after.name}</strong>
+                              to <strong>{row.after.name}</strong>
                             </>
                           )}
                         </p>
@@ -1119,14 +1120,13 @@ export function ProjectOrganizationEditor({
                       Everything already matches. There is nothing to apply.
                     </p>
                   ) : null}
-                  <details>
-                    <summary>Review reference</summary>
+                  <Disclosure title="Review reference" icon={Info}>
                     <p className="organization-reference">{review.planId}</p>
                     <p className="organization-reference">
                       {review.fingerprint}
                     </p>
                     <p>The page URL preserves this review and its receipt.</p>
-                  </details>
+                  </Disclosure>
                 </>
               ) : (
                 <p role="status">

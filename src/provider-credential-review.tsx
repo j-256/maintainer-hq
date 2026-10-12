@@ -6,7 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, LockKeyhole, RefreshCw } from "lucide-react";
+import { ArrowLeft, LockKeyhole, RefreshCw, Shield } from "lucide-react";
 import {
   PROVIDER_CREDENTIAL_LIMITS,
   providerCredentialReviewSchema,
@@ -138,12 +138,17 @@ export function ProviderCredentialReviewPanel({
     >
       <div className="hook-section-heading">
         <div>
-          <h2 ref={heading} tabIndex={-1} id="credential-review-heading">
-            Provider access review
+          <h2
+            className="page-title"
+            ref={heading}
+            tabIndex={-1}
+            id="credential-review-heading"
+          >
+            <Shield size={22} aria-hidden="true" /> Provider access review
           </h2>
           <p>
-            Exact scope and protected credential custody. No repository or
-            destination secret changes happen here.
+            Review access changes. Repository and destination secret values are
+            unchanged.
           </p>
         </div>
         <Button variant="outline" onClick={guard.requestClose} disabled={busy}>

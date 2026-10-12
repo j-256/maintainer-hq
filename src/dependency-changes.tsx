@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, PackageCheck } from "lucide-react";
 import {
   dependencyChangeReviewSchema,
   dependencyWriteAccessSchema,
@@ -247,8 +247,8 @@ export function DependencyChangeEditor({
                     />
                   </label>
                   <p className="dependency-meta">
-                    The review window cannot exceed 30 days. The confirmation
-                    shows the exact deadline in your preferred time zone.
+                    Maximum 30 days. The review shows the exact deadline in your
+                    preferred time zone.
                   </p>
                 </>
               ) : (
@@ -384,12 +384,13 @@ export function DependencyReviewPanel({
     >
       <div className="dependency-toolbar">
         <div>
-          <h2 ref={heading} tabIndex={-1}>
+          <h2 className="page-title" ref={heading} tabIndex={-1}>
+            <PackageCheck size={22} aria-hidden="true" />
             Dependency change review
           </h2>
           <p>
             {operation
-              ? "Saved repository operation and outcome."
+              ? "Saved operation and outcome."
               : verifiedEmpty
                 ? "Prepared change, not submitted to GitHub."
                 : "Submission state is not verified. Reload the saved outcome before taking action."}

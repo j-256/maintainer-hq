@@ -164,7 +164,7 @@ test("fixed history stays idle with live goals and explicit refresh", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Agent goals", exact: true }),
-  ).toContainText("No open goal has been reported");
+  ).toContainText("No open goals");
   expect(counts.get("/api/commands/activity_feed")).toBe(feedReads);
   const historyUrl = page.url();
   await visibility(page, "hidden");
@@ -237,7 +237,7 @@ test("Settings push shares visibility handling and catches up on return", async 
   const counts = requests(page);
   await page.goto("/settings/members?workspace=" + WORKSPACE_ID);
   await expect(
-    page.getByRole("heading", { name: "Workspace members", exact: true }),
+    page.getByRole("heading", { name: "Members", exact: true }),
   ).toBeVisible();
   await pauseClock(page);
   await visibility(page, "hidden");

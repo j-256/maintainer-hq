@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, type Location } from "react-router-dom";
+import { ScanSearch, SlidersHorizontal } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
   FLEET_DISCOVERY_LIMITS as LIMITS,
@@ -26,6 +27,7 @@ import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -182,10 +184,12 @@ function EnrollmentDiff({
               </dd>
             </div>
           </dl>
-          <details>
-            <summary>
-              {change.before ? "Preserved settings" : "New repository settings"}
-            </summary>
+          <Disclosure
+            title={
+              change.before ? "Preserved settings" : "New repository settings"
+            }
+            icon={SlidersHorizontal}
+          >
             <dl className="fleet-diff">
               <div>
                 <dt>Description</dt>
@@ -228,7 +232,7 @@ function EnrollmentDiff({
                 </dd>
               </div>
             </dl>
-          </details>
+          </Disclosure>
         </li>
       ))}
     </ul>
@@ -310,8 +314,8 @@ export function FleetEnrollment({
     ).length ?? 0;
   const partialCoverage = Boolean(
     result?.evidence &&
-      result.evidence.read.state !== "observed" &&
-      verifiedCandidates > 0,
+    result.evidence.read.state !== "observed" &&
+    verifiedCandidates > 0,
   );
   const receipt = review?.receipt;
   const expired = Boolean(review && Date.parse(review.expiresAt) <= now);
@@ -666,13 +670,14 @@ export function FleetEnrollment({
           }}
         >
           <DialogHeader>
-            <DialogTitle ref={heading} tabIndex={-1}>
+            <DialogTitle className="dialog-heading" ref={heading} tabIndex={-1}>
+              <ScanSearch size={20} aria-hidden="true" />
               Review enrollment
             </DialogTitle>
             <DialogDescription>
               {receipt
-                ? "The reviewed changes are saved in HQ."
-                : "Discover repositories and review changes to your HQ inventory. GitHub is not changed."}
+                ? "Enrollment saved in HQ."
+                : "Review GitHub repositories for enrollment in HQ. GitHub is unchanged."}
             </DialogDescription>
           </DialogHeader>
           <div className="fleet-scroll" ref={scroll}>
@@ -899,7 +904,7 @@ export function FleetEnrollment({
                             {result.candidates.map((candidate) => {
                               const selected = Boolean(
                                 candidate.provider &&
-                                  selection[candidate.provider.githubId],
+                                selection[candidate.provider.githubId],
                               );
                               const blocked =
                                 !candidate.provider ||
@@ -1057,7 +1062,8 @@ export function FleetEnrollment({
                           disabled={
                             busy ||
                             Boolean(attempt) ||
-                            missingRepository || missingProject
+                            missingRepository ||
+                            missingProject
                           }
                           onClick={() => {
                             setSelection((previous) =>
@@ -1070,13 +1076,12 @@ export function FleetEnrollment({
                                       ? (snapshot.repositories.find(
                                           (item) =>
                                             item.id === row.repositoryId,
-                                          )?.revision ?? row.revision)
+                                        )?.revision ?? row.revision)
                                       : null,
                                     projectRevision:
                                       !row.repositoryId && row.projectId
                                         ? (snapshot.projects.find(
-                                            (item) =>
-                                              item.id === row.projectId,
+                                            (item) => item.id === row.projectId,
                                           )?.revision ?? row.projectRevision)
                                         : null,
                                   },
@@ -1221,10 +1226,9 @@ export function FleetEnrollment({
                       </ul>
                     )}
                     <p className="fleet-muted">
-                      New records belong to the selected project, require CI
-                      and security evidence, and leave hooks and monitoring
-                      unmanaged. These are expectations, not proof of health or
-                      provider administration rights.
+                      New records require CI and security evidence. Hooks and
+                      monitoring start unmanaged. Enrollment does not verify
+                      health or grant GitHub access.
                     </p>
                     {!snapshot.projects.length ? (
                       <p className="fleet-notice">

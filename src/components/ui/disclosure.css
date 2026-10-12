@@ -45,6 +45,8 @@
 }
 .disclosure-content {
   display: grid;
+  /* Keep long selected labels from widening the disclosure */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding: 16px;
   border-top: 1px solid var(--border);
@@ -74,4 +76,23 @@
   font-size: var(--hq-text-heading);
   font-weight: 600;
   line-height: 1.35;
+}
+
+.hq-disclosure p {
+  margin: 0;
+}
+.hq-disclosure + .hq-disclosure,
+.hq-disclosure + .editor-section {
+  margin-top: 16px;
+}
+
+.disclosure-meta {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-meta);
+  font-weight: 400;
+  text-align: right;
+}
+.disclosure-meta + .disclosure-chevron {
+  margin-left: 0;
 }

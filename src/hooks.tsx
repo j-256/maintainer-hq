@@ -8,9 +8,12 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
+  Info,
   Plus,
   RefreshCw,
   Settings2,
+  Shield,
+  TriangleAlert,
   Webhook,
 } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
@@ -29,6 +32,7 @@ import {
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { Disclosure } from "./components/ui/disclosure";
 import { Input } from "./components/ui/input";
 import {
   Select,
@@ -48,7 +52,6 @@ import {
   HookTime,
   HOOK_STATUS_LABELS,
 } from "./hook-components";
-import { useDateTime } from "./date-time";
 import type { ResourceLinks } from "../shared/resource-links";
 import {
   RelatedRepositoryLinks,
@@ -145,14 +148,14 @@ function HookSummary({
           <dd>{totals.filtered}</dd>
         </div>
       </dl>
-      <p className="hook-muted">
+      <p className={data.deliveries.truncated ? "hook-notice" : "hook-muted"}>
         {data.deliveries.truncated
-          ? "Sampled health, not a complete inventory: the latest " +
+          ? "Limited sample: latest " +
             data.deliveries.sampled +
-            " updated deliveries. Older failures may be outside this sample."
-          : "Counts cover all " +
+            " updated deliveries. Older failures may be excluded."
+          : "All " +
             data.deliveries.sampled +
-            " retained deliveries at the time of this read."}{" "}
+            " retained deliveries at this read."}{" "}
         Read <HookTime value={data.observedAt} />.
         {data.deliveries.acknowledgedExhausted
           ? " Acknowledged failures remain in delivery history and are excluded from the attention count."
@@ -165,20 +168,24 @@ function HookSummary({
       ) ? (
         <p className="hook-notice">
           {unresolved
-            ? "Hookrelay has unresolved operational signals in retained history."
-            : "Hookrelay has unresolved operational signals in its recent sample."}{" "}
+            ? "Unresolved operational signals in retained history."
+            : "Unresolved operational signals in the recent sample."}{" "}
           Delivery status alone does not cover ingress or retention health.
         </p>
       ) : null}
       {unresolved ? (
-        <details className="hook-signals">
-          <summary>
-            Unresolved operational signals (
-            {unresolved.reduce((sum, group) => sum + group.records, 0)})
-          </summary>
+        <Disclosure
+          title={
+            "Unresolved operational signals (" +
+            unresolved.reduce((sum, group) => sum + group.records, 0) +
+            ")"
+          }
+          icon={TriangleAlert}
+          open={unresolved.length > 0}
+        >
           <p className="hook-muted">
-            Includes all retained warning, error, and critical signal records,
-            including records outside the recent history sample.
+            All retained warning, error, and critical records, including older
+            records outside the recent sample.
           </p>
           {unresolved.length ? (
             <ul>
@@ -195,12 +202,12 @@ function HookSummary({
           ) : (
             <p>No unresolved warning signals were retained at this read.</p>
           )}
-        </details>
+        </Disclosure>
       ) : null}
-      <details className="hook-signals">
-        <summary>
-          Recent operational signals ({data.signals.items.length})
-        </summary>
+      <Disclosure
+        title={"Recent operational signals (" + data.signals.items.length + ")"}
+        icon={History}
+      >
         <p className="hook-muted">
           Last successful retention pass:{" "}
           <HookTime value={data.lastRetentionAt} />.
@@ -238,7 +245,7 @@ function HookSummary({
               : "Older operational signals are not included. This sample does not establish their absence."}
           </p>
         ) : null}
-      </details>
+      </Disclosure>
     </section>
   );
 }
@@ -317,7 +324,6 @@ function Deliveries({
       <div className="hook-section-heading">
         <div>
           <h2 id="hook-deliveries-title">Deliveries</h2>
-          <p>Live provider state. Inspect a delivery to review recovery.</p>
         </div>
         <Button variant="outline" disabled={query.isFetching} onClick={refresh}>
           <RefreshCw size={16} aria-hidden="true" /> Refresh
@@ -450,14 +456,16 @@ function Deliveries({
               </p>
             </div>
           ) : null}
-          <p className="hook-muted">
-            Read <HookTime value={data.observedAt} />. Updates can move
-            deliveries between live pages; refresh to start from the newest
-            state.
-            {subscription
-              ? " Subscription filtering examines a bounded candidate page at a time."
-              : ""}
-          </p>
+          <Disclosure title="Sample and read details" icon={Info}>
+            <p className="hook-muted">
+              Read <HookTime value={data.observedAt} />. Updates can move
+              deliveries between live pages; refresh to start from the newest
+              state.
+              {subscription
+                ? " Subscription filtering examines a bounded candidate page at a time."
+                : ""}
+            </p>
+          </Disclosure>
           <HookPagination
             page={cursors.length}
             previous={
@@ -921,7 +929,6 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
   const [notice, setNotice] = useState("");
   const focus = useRef<HTMLElement | null>(null);
   const workspaceId = snapshot.workspace.id;
-  const date = useDateTime();
   const canAdmin = snapshot.capabilities.includes(CAPABILITY.ADMIN);
   const connections = useQuery({
     queryKey: ["hooks", workspaceId, "connections"],
@@ -980,14 +987,11 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
       <RepositoryContext snapshot={snapshot} section="hooks" />
       <div className="page-heading">
         <div>
-          <div className="eyebrow">DELIVERY OPERATIONS</div>
-          <h1 tabIndex={-1}>Hooks</h1>
-          <p>
-            Subscriptions, delivery state, and deliberate recovery. Times use{" "}
-            {date.zoneLabel}.
-          </p>
+          <h1 className="page-title" tabIndex={-1}>
+            <Webhook size={28} aria-hidden="true" /> Hooks
+          </h1>
         </div>
-        {canAdmin ? (
+        {canAdmin && connections.data?.length ? (
           <Button
             onClick={() => {
               rememberFocus();
@@ -1012,18 +1016,37 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
       {connections.data?.length === 0 ? (
         <div className="hook-empty">
           <Webhook size={32} aria-hidden="true" />
-          <h2>Bring your hooks into view</h2>
-          <p>
-            Connect Hookrelay to view subscriptions, inspect deliveries, and
-            review retries.
-          </p>
+          <h2>Hookrelay is not connected</h2>
+          <p>Connect a provider to inspect deliveries and review retries.</p>
           {!canAdmin ? <p>Ask a workspace owner to add a connection.</p> : null}
-          <Button asChild variant="outline">
-            <Link to={"/settings?workspace=" + encodeURIComponent(workspaceId)}>
-              Workspace settings
-            </Link>
-          </Button>
+          {canAdmin ? (
+            <Button
+              onClick={() => {
+                rememberFocus();
+                setEditing(":new");
+              }}
+            >
+              <Plus size={16} aria-hidden="true" /> Connect Hookrelay
+            </Button>
+          ) : (
+            <Button asChild variant="outline">
+              <Link
+                to={"/settings?workspace=" + encodeURIComponent(workspaceId)}
+              >
+                Workspace settings
+              </Link>
+            </Button>
+          )}
         </div>
+      ) : null}
+      {connections.data?.length === 0 ? (
+        <Disclosure title="Connection requirements" icon={Shield}>
+          <p>
+            The deployment owner provisions a workspace-scoped credential and
+            private binding. Connecting Hookrelay enables HQ reads and reviewed
+            operations; routes, sinks, and notifications stay provider-owned.
+          </p>
+        </Disclosure>
       ) : null}
       {connections.data?.length ? (
         <div className="hook-connection-bar">

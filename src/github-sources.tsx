@@ -1,7 +1,16 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { Check, FolderGit2 as Github, Plus, RefreshCw } from "lucide-react";
+import {
+  Check,
+  CircleHelp,
+  Clock3,
+  FolderGit2 as Github,
+  Link2,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 import { CAPABILITY, idSchema, type Snapshot } from "../shared/domain";
 import {
   GITHUB_REFRESH_LIMITS,
@@ -20,6 +29,7 @@ import {
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Badge } from "./components/ui/badge";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Select,
   SelectTrigger,
@@ -167,12 +177,12 @@ function GitHubSourceCard({
         </div>
         <Badge variant="outline">{evidenceLabel(source, snapshot)}</Badge>
       </div>
-      <p>
-        Read-only GitHub evidence. Freshness and collection success do not mean
-        that CI passed or that no findings exist.
-      </p>
-      <details className="source-scope-summary">
-        <summary>{source.repositoryIds.length} repositories in scope</summary>
+      <Disclosure
+        className="source-scope-summary"
+        title="Repositories in scope"
+        meta={source.repositoryIds.length}
+        icon={Github}
+      >
         <div className="source-scope-links">
           {source.repositoryIds.map((id) => {
             const repository = snapshot.repositories.find(
@@ -190,41 +200,47 @@ function GitHubSourceCard({
             ) : null;
           })}
         </div>
-      </details>
-      <dl className="source-metadata github-metadata">
-        <div>
-          <dt>Refresh policy</dt>
-          <dd>Every {source.github.refreshIntervalMinutes} minutes</dd>
-        </div>
-        <div>
-          <dt>Stale after</dt>
-          <dd>{source.freshnessMinutes} minutes</dd>
-        </div>
-        <div>
-          <dt>Last attempted</dt>
-          <dd>{displaySourceTime(source.lastAttemptAt)}</dd>
-        </div>
-        <div>
-          <dt>Last complete collection</dt>
-          <dd>{displaySourceTime(source.lastSuccessAt)}</dd>
-        </div>
-        <div>
-          <dt>Next scheduled eligibility</dt>
-          <dd>
-            {source.enabled && source.credentialConfigured
-              ? displaySourceTime(source.github.nextRefreshAt)
-              : "Not configured or disabled"}
-          </dd>
-        </div>
-        <div>
-          <dt>Latest refresh</dt>
-          <dd>{source.github.lastRefreshStatus ?? "Not started"}</dd>
-        </div>
-      </dl>
+      </Disclosure>
+      <Disclosure title="Refresh details" icon={Clock3}>
+        <dl className="source-metadata github-metadata">
+          <div>
+            <dt>Refresh policy</dt>
+            <dd>Every {source.github.refreshIntervalMinutes} minutes</dd>
+          </div>
+          <div>
+            <dt>Stale after</dt>
+            <dd>{source.freshnessMinutes} minutes</dd>
+          </div>
+          <div>
+            <dt>Last attempted</dt>
+            <dd>{displaySourceTime(source.lastAttemptAt)}</dd>
+          </div>
+          <div>
+            <dt>Last complete collection</dt>
+            <dd>{displaySourceTime(source.lastSuccessAt)}</dd>
+          </div>
+          <div>
+            <dt>Next scheduled eligibility</dt>
+            <dd>
+              {source.enabled && source.credentialConfigured
+                ? displaySourceTime(source.github.nextRefreshAt)
+                : "Not configured or disabled"}
+            </dd>
+          </div>
+          <div>
+            <dt>Latest refresh</dt>
+            <dd>{source.github.lastRefreshStatus ?? "Not started"}</dd>
+          </div>
+          <div>
+            <dt>Source ID</dt>
+            <dd>{source.id}</dd>
+          </div>
+        </dl>
+      </Disclosure>
       {!source.credentialConfigured ? (
         <p className="permission-notice">
-          No workspace-bound GitHub credential is available. An owner can choose
-          a provisioned reference in settings.
+          No GitHub credential is available for this workspace. An owner can
+          choose one in connection settings.
         </p>
       ) : null}
       {!source.github.configurationValid ? (
@@ -262,7 +278,6 @@ function GitHubSourceCard({
         </p>
       ) : null}
       <div className="source-card-footer">
-        <code title="Source ID">{source.id}</code>
         <div>
           <Button size="sm" variant="outline" asChild>
             <Link
@@ -281,7 +296,7 @@ function GitHubSourceCard({
             disabled={!canAdmin}
             onClick={edit}
           >
-            Edit GitHub settings
+            Edit connection
           </Button>
           <Button
             ref={historyButton}
@@ -301,8 +316,8 @@ function GitHubSourceCard({
               !source.github.configurationValid ||
               Boolean(
                 source.github.activeRefreshId ||
-                  cooldown ||
-                  (tooSoon && !request.current),
+                cooldown ||
+                (tooSoon && !request.current),
               )
             }
             onClick={() => void refresh()}
@@ -469,10 +484,12 @@ export function GitHubRefreshDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>GitHub refresh history</DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <RefreshCw size={20} aria-hidden="true" />
+              GitHub refresh history
+            </DialogTitle>
             <DialogDescription>
-              {source.name}. Collection receipts show what was read, what
-              remains unknown, and what can be retried.
+              {source.name}. Inspect collection results and retries.
             </DialogDescription>
           </DialogHeader>
           <div className="source-form-scroll">
@@ -494,8 +511,8 @@ export function GitHubRefreshDialog({
                 <Github size={24} />
                 <h3>No refreshes yet</h3>
                 <p>
-                  Connect a server-side credential, then refresh to collect
-                  evidence. Enrollment alone is not verification.
+                  Choose a server-side credential, then refresh to collect
+                  evidence.
                 </p>
               </div>
             ) : null}
@@ -697,17 +714,15 @@ export function GitHubRefreshDialog({
                         Collection attempts: {item.attempts}.
                       </p>
                       {item.diagnostics ? (
-                        <details className="github-diagnostics">
-                          <summary>
-                            Collection diagnostics: {item.diagnostics.requests}{" "}
-                            requests, {item.diagnostics.pages} list pages,{" "}
-                            {(item.diagnostics.elapsedMs / 1000).toFixed(1)}s
-                            elapsed
-                          </summary>
+                        <Disclosure
+                          className="github-diagnostics"
+                          title="Collection diagnostics"
+                          description={`${item.diagnostics.requests} requests / ${item.diagnostics.pages} pages / ${(item.diagnostics.elapsedMs / 1000).toFixed(1)}s`}
+                          icon={Clock3}
+                        >
                           <p>
-                            Elapsed time includes waiting for GitHub; it is not
-                            CPU time. These counters describe this collection
-                            attempt, not earlier retries.
+                            Counters cover this attempt. Elapsed time includes
+                            waiting for GitHub.
                           </p>
                           <dl className="github-checks">
                             {item.diagnostics.endpoints.map((endpoint) => (
@@ -724,7 +739,7 @@ export function GitHubRefreshDialog({
                               </div>
                             ))}
                           </dl>
-                        </details>
+                        </Disclosure>
                       ) : item.observedAt ? (
                         <p className="field-help">
                           Counters were not recorded for this older receipt.
@@ -864,8 +879,9 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
     >
       <div className="source-section-heading">
         <div>
-          <h1 id="github-sources-heading" tabIndex={-1}>
-            GitHub evidence
+          <h1 className="page-title" id="github-sources-heading" tabIndex={-1}>
+            <Github size={26} aria-hidden="true" />
+            GitHub
           </h1>
         </div>
         <Button
@@ -897,6 +913,11 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
               })
             }
           >
+            {value === "coverage" ? (
+              <ShieldCheck size={16} aria-hidden="true" />
+            ) : (
+              <Link2 size={16} aria-hidden="true" />
+            )}
             {value === "coverage" ? "Coverage" : "Connections"}
           </Button>
         ))}
@@ -932,11 +953,9 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
       {view === "connections" && !sources.length ? (
         <div className="source-empty">
           <Github size={26} />
-          <h2>Bring GitHub evidence into view</h2>
+          <h2>No GitHub connections</h2>
           <p>
-            Choose the repositories to read and a workspace-bound credential.
-            Missing permissions stay visible as unknown, never as a clean bill
-            of health.
+            Choose repositories and a workspace credential to collect evidence.
           </p>
         </div>
       ) : null}
@@ -973,6 +992,15 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
           />
         ))
       )}
+      {view === "connections" ? (
+        <Disclosure title="About GitHub collection" icon={CircleHelp}>
+          <p>
+            Collection is read-only. Current evidence or a successful collection
+            does not mean CI passed or that no security findings exist.
+          </p>
+          <p>Missing permissions leave checks unknown.</p>
+        </Disclosure>
+      ) : null}
       {editor ? (
         <GitHubEditor
           initial={editor === "new" ? undefined : editor}

@@ -20,6 +20,22 @@
 .import-actions {
   margin-top: 18px;
 }
+.import-details {
+  margin-top: 24px;
+}
+.import-file-summary {
+  margin-top: 24px;
+}
+.import-details dl {
+  display: grid;
+  gap: 8px;
+}
+.import-details dt {
+  font-weight: 600;
+}
+.import-details dd {
+  color: var(--muted-foreground);
+}
 .import-review dl {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

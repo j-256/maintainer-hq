@@ -119,11 +119,9 @@ test("route aliases render the same repository data, titles, and scoped subscrip
   );
   await page.goto("/Settings/GitHub/?workspace=development");
   await expect(
-    page.getByRole("heading", { name: "GitHub evidence", exact: true }),
+    page.getByRole("heading", { name: "GitHub", exact: true }),
   ).toBeVisible();
-  await expect(page).toHaveTitle(
-    "GitHub evidence | Development | Maintainer HQ",
-  );
+  await expect(page).toHaveTitle("GitHub | Development | Maintainer HQ");
 });
 
 for (const theme of ["light", "dark"])

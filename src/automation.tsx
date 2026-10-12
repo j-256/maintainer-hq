@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, KeyRound, RefreshCw } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Copy,
+  KeyRound,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
   AUTOMATION_DURATIONS,
@@ -17,6 +24,7 @@ import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +51,10 @@ const PROFILE_DESCRIPTION = {
     "Publish progress and verbatim goals for one reporter. No workspace reads, expectation edits, provider operations, or access management.",
   reader:
     "Read workspace status, repository metadata, and activity. No updates, operations, access management, or secret values.",
+} as const;
+const PROFILE_SUMMARY = {
+  reporter: "Publish progress and goals for one reporter ID.",
+  reader: "Read workspace data.",
 } as const;
 const timeout = () => AbortSignal.timeout(AUTOMATION_LIMITS.REQUEST_TIMEOUT_MS);
 
@@ -101,8 +113,10 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
     >
       <div className="access-heading">
         <div>
-          <h1 id="automation-heading">Automation access</h1>
-          <p>Manage workspace credentials for agents and scripts.</p>
+          <h1 className="page-title" id="automation-heading">
+            <Bot size={26} aria-hidden="true" />
+            Automation
+          </h1>
         </div>
       </div>
       {!canManage ? (
@@ -113,20 +127,12 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
         <>
           <div className="access-actions automation-toolbar">
             <Button ref={createButton} onClick={() => setCreating(true)}>
-              <KeyRound size={15} /> Create automation credential
+              <KeyRound size={15} aria-hidden="true" /> Create credential
             </Button>
             <Button variant="outline" size="sm" onClick={refresh}>
               <RefreshCw size={14} /> Refresh credentials
             </Button>
           </div>
-          <details className="automation-boundary">
-            <summary>Connecting to a protected dashboard</summary>
-            <p>
-              Access service credentials get a machine through the hosted
-              sign-in gate. These workspace credentials decide what it may do.
-              Neither replaces the other.
-            </p>
-          </details>
           {query.isPending ? (
             <p role="status">Loading automation credentials...</p>
           ) : null}
@@ -140,10 +146,7 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
               <KeyRound size={22} aria-hidden="true" />
               <div>
                 <h2>No automation credentials</h2>
-                <p>
-                  Start with a Reporter to publish work without granting access
-                  to fleet data.
-                </p>
+                <p>Use a Reporter to publish progress with minimal access.</p>
               </div>
             </div>
           ) : null}
@@ -168,8 +171,7 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
                         : (expired ? "Expired " : "Expires ") +
                           time(credential.expiresAt)}
                   </p>
-                  <details>
-                    <summary>Credential details</summary>
+                  <Disclosure title="Credential details" icon={KeyRound}>
                     <dl>
                       <dt>ID</dt>
                       <dd>{credential.id}</dd>
@@ -178,7 +180,7 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
                       <dt>Created</dt>
                       <dd>{time(credential.createdAt)}</dd>
                     </dl>
-                  </details>
+                  </Disclosure>
                 </div>
                 <div className="access-actions">
                   <Badge variant="outline">
@@ -204,11 +206,19 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
             );
           })}
           {query.data && query.data.length >= AUTOMATION_LIMITS.HISTORY ? (
-            <p>
-              Showing the bounded credential history, with active credentials
-              first.
-            </p>
+            <p>Limited credential history. Active credentials appear first.</p>
           ) : null}
+          <Disclosure
+            className="automation-boundary"
+            title="Protected dashboard access"
+            icon={ShieldCheck}
+          >
+            <p>
+              A machine may also need an Access service credential to pass the
+              hosted sign-in gate. Workspace credentials control what it can do
+              after signing in.
+            </p>
+          </Disclosure>
         </>
       )}
       {creating && canManage ? (
@@ -233,7 +243,10 @@ export function AutomationSettings({ snapshot }: { snapshot: Snapshot }) {
           }}
         >
           <DialogHeader>
-            <DialogTitle>Revoke automation access?</DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <KeyRound size={20} aria-hidden="true" />
+              Revoke automation access?
+            </DialogTitle>
             <DialogDescription>
               {revoke?.name} will stop authenticating immediately. Published
               goals and activity remain. Revocation cannot be undone.
@@ -397,17 +410,18 @@ function CreateAutomation({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <Bot size={20} aria-hidden="true" />
               {issued
                 ? "Save this credential"
                 : plan
                   ? "Review automation access"
-                  : "Create automation credential"}
+                  : "Create credential"}
             </DialogTitle>
             <DialogDescription>
               {issued
                 ? "This value is shown once. It cannot be retrieved after you close this view."
-                : "Grant only the access this client needs. Expiry and revocation are enforced by the workspace."}
+                : "Choose the minimum access this client needs."}
             </DialogDescription>
           </DialogHeader>
           {error ? (
@@ -454,11 +468,12 @@ function CreateAutomation({
                   {copied ? "Copied" : "Copy credential"}
                 </Button>
               </div>
-              <p>
-                For a protected hosted workspace, also configure the paired
-                Access service credentials. This view does not create or grant
-                those.
-              </p>
+              <Disclosure title="Protected dashboard access" icon={ShieldCheck}>
+                <p>
+                  A hosted workspace may also require paired Access service
+                  credentials. Configure those separately.
+                </p>
+              </Disclosure>
               <Button
                 onClick={() => {
                   setIssued(null);
@@ -537,7 +552,7 @@ function CreateAutomation({
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   disabled={busy}
-                  placeholder="For example, maintainer agent"
+                  placeholder="e.g. Release reporter"
                 />
               </div>
               <div className="form-field">
@@ -567,7 +582,7 @@ function CreateAutomation({
                   </SelectContent>
                 </Select>
                 <p id="automation-profile-help" className="field-help">
-                  {PROFILE_DESCRIPTION[profile]}
+                  {PROFILE_SUMMARY[profile]}
                 </p>
               </div>
               {profile === AUTOMATION_PROFILE.REPORTER ? (
@@ -584,9 +599,7 @@ function CreateAutomation({
                     aria-describedby="automation-reporter-help"
                   />
                   <p id="automation-reporter-help" className="field-help">
-                    Use this exact ID as sourceId in goal reports. Keep it when
-                    replacing this reporter's credential. Different reporters
-                    should use different IDs.
+                    Reuse this ID when replacing this reporter's credential.
                   </p>
                 </div>
               ) : null}
@@ -598,7 +611,7 @@ function CreateAutomation({
                     setDays(
                       value === NO_EXPIRY_VALUE
                         ? null
-                        : Number(value) as 7 | 30 | 90,
+                        : (Number(value) as 7 | 30 | 90),
                     )
                   }
                   disabled={busy}
@@ -619,12 +632,21 @@ function CreateAutomation({
                 </Select>
                 {days === null ? (
                   <p className="field-help">
-                    Read-only access lasts until revoked or the owning member
-                    is removed. The separate Access sign-in credential can
-                    still expire.
+                    Access lasts until revoked or the owner is removed. The
+                    separate sign-in credential may expire.
                   </p>
                 ) : null}
               </div>
+              <Disclosure title="Exact permissions" icon={ShieldCheck}>
+                <p>{PROFILE_DESCRIPTION[profile]}</p>
+                {profile === AUTOMATION_PROFILE.REPORTER ? (
+                  <p>
+                    Use the Reporter ID as sourceId in goal reports. Give each
+                    reporter its own ID.
+                  </p>
+                ) : null}
+                <p>The workspace enforces expiry and revocation.</p>
+              </Disclosure>
               <div className="access-actions">
                 <Button
                   type="button"

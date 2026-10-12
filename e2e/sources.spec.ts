@@ -104,9 +104,7 @@ test("publisher enrollment, one-time credential, stale reports, refresh, and rev
   await dialog
     .getByLabel("Credential name", { exact: true })
     .fill("Browser test credential");
-  await dialog
-    .getByRole("button", { name: "Create publisher credential" })
-    .click();
+  await dialog.getByRole("button", { name: "Create credential" }).click();
   await expect(
     dialog.getByRole("heading", { name: "Save this credential now" }),
   ).toBeVisible();
@@ -350,7 +348,7 @@ test("source forms are keyboard-accessible and fit mobile and desktop in both th
         .getByRole("button", { name: "Credentials", exact: true })
         .click();
       await expect(
-        page.getByRole("button", { name: "Create publisher credential" }),
+        page.getByRole("button", { name: "Create credential" }),
       ).toBeEnabled();
       await settleDialog(page);
       await expect(
@@ -391,7 +389,7 @@ test("non-owners see the source controls with a permission explanation", async (
   ).toBeDisabled();
   await expect(
     page.getByText(
-      "Only workspace owners can enroll sources, change their scope, or manage publisher credentials.",
+      "Only workspace owners can enroll publishers, change their scope, or manage credentials.",
     ),
   ).toBeVisible();
   for (const button of await page

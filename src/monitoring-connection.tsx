@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Monitor, Shield } from "lucide-react";
 import type { Snapshot } from "../shared/domain";
 import {
   monitorConnectionFields,
@@ -10,6 +11,7 @@ import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -160,20 +162,25 @@ export function MonitoringConnectionEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="page-title">
+              <Monitor size={20} aria-hidden="true" />
               {initial
                 ? "Monitoring connection settings"
                 : "Connect Endpoint Monitor"}
             </DialogTitle>
             <DialogDescription>
-              Enroll a deployment-approved provider in this workspace.
-              Credentials stay on the server. Connecting it does not add targets
-              or enable probes.
+              Choose a provider for this workspace.
             </DialogDescription>
           </DialogHeader>
           <form className="hook-form" onSubmit={save}>
             {error || providers.error ? (
               <MonitorError error={error ?? providers.error} />
+            ) : null}
+            {providers.data?.length === 0 ? (
+              <p className="hook-notice">
+                <strong>No approved provider.</strong> Ask the deployment owner
+                to provision a scoped credential and private binding.
+              </p>
             ) : null}
             <label htmlFor="monitor-connection-name">
               Connection name
@@ -224,13 +231,6 @@ export function MonitoringConnectionEditor({
                   ))}
                 </SelectContent>
               </Select>
-              {providers.data?.length === 0 ? (
-                <p>
-                  No approved monitoring references are installed for this
-                  workspace. The deployment owner must enroll a scoped
-                  credential and private binding.
-                </p>
-              ) : null}
               {missing ? (
                 <p className="permission-notice">
                   The saved reference is unavailable. Keep it for recovery or
@@ -240,7 +240,7 @@ export function MonitoringConnectionEditor({
             </div>
             <div className="hook-field">
               <label htmlFor="monitor-project">
-                Connection project context
+                Project context (optional)
               </label>
               <Select
                 value={draft.projectId ?? NO_PROJECT}
@@ -264,10 +264,6 @@ export function MonitoringConnectionEditor({
                   ))}
                 </SelectContent>
               </Select>
-              <p>
-                This labels the connection, not its targets. Associate
-                individual targets explicitly; repository links remain separate.
-              </p>
             </div>
             <label className="hook-checkbox">
               <Checkbox
@@ -280,10 +276,21 @@ export function MonitoringConnectionEditor({
               Enabled in HQ
             </label>
             <p className="hook-muted">
-              Disabling this connection stops new HQ reads and actions, not
-              Endpoint Monitor's probes or notifications. Original operation
-              receipts remain available for recovery.
+              Disabling stops new HQ reads and actions. Probes and notifications
+              keep running.
             </p>
+            <Disclosure title="Connection scope" icon={Shield}>
+              <p>
+                Credentials stay server-side. Connecting a provider does not add
+                targets or enable probes. Project context labels the connection;
+                associate targets and repository links separately.
+              </p>
+              <p>
+                Disabling stops new HQ reads and actions. Endpoint Monitor's
+                probes and notifications continue. Existing receipts remain
+                available for recovery.
+              </p>
+            </Disclosure>
             <div className="hook-actions">
               {initial ? (
                 <Button

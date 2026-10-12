@@ -18,10 +18,7 @@ import {
   type ManagedConfigurationReview,
   type ManagedConfigurationStatus,
 } from "../shared/managed-configurations";
-import {
-  SECRET_ENTRY_KIND,
-  type SecretConnection,
-} from "../shared/secrets";
+import { SECRET_ENTRY_KIND, type SecretConnection } from "../shared/secrets";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -95,12 +92,7 @@ function ManagedHistory({
   onReview: (planId: string) => void;
 }) {
   const query = useQuery({
-    queryKey: [
-      "secrets",
-      workspaceId,
-      "managed-history",
-      repositoryId ?? null,
-    ],
+    queryKey: ["secrets", workspaceId, "managed-history", repositoryId ?? null],
     queryFn: ({ signal }) =>
       command<ManagedHistoryItem[]>(
         "secrets_configuration_history",
@@ -114,7 +106,7 @@ function ManagedHistory({
       <div className="hook-section-heading">
         <div>
           <h2>Managed operation history</h2>
-          <p>Retained reviews and receipts for provider variable changes.</p>
+          <p>Reviews and receipts for variable changes.</p>
         </div>
         <Button
           variant="outline"
@@ -147,7 +139,7 @@ function ManagedHistory({
         <div className="empty-state">
           <History size={28} aria-hidden="true" />
           <h3>No managed provider operations</h3>
-          <p>Saved definitions appear above before any provider write occurs.</p>
+          <p>Saving a definition does not write to the provider.</p>
         </div>
       ) : null}
     </section>
@@ -224,7 +216,8 @@ function ManagedStatusDetails({
       <div className="hook-section-heading">
         <div>
           <Button variant="ghost" onClick={onBack}>
-            <ArrowLeft size={16} aria-hidden="true" /> All managed configurations
+            <ArrowLeft size={16} aria-hidden="true" /> All managed
+            configurations
           </Button>
           <h2 id="managed-status-title">{current.label}</h2>
           <p>
@@ -387,7 +380,9 @@ export function ManagedConfigurationsView({
       !repositoryId ||
       configuration.destinations.some((item) =>
         resourceIds.has(
-          item.destination.connectionId + ":" + item.destination.target.resourceId,
+          item.destination.connectionId +
+            ":" +
+            item.destination.target.resourceId,
         ),
       ),
   );
@@ -474,7 +469,8 @@ export function ManagedConfigurationsView({
                     {configuration.destinations
                       .map((item) => item.destination.name)
                       .filter(
-                        (value, index, values) => values.indexOf(value) === index,
+                        (value, index, values) =>
+                          values.indexOf(value) === index,
                       )
                       .join(", ")}
                   </span>
@@ -499,7 +495,8 @@ export function ManagedConfigurationsView({
                     variant="outline"
                     onClick={() => onSelect(configuration.id)}
                   >
-                    <ShieldCheck size={16} aria-hidden="true" /> View live status
+                    <ShieldCheck size={16} aria-hidden="true" /> View live
+                    status
                   </Button>
                   {canWrite ? (
                     <>
@@ -565,7 +562,9 @@ export function ManagedConfigurationsView({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Keep management</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>
+              Keep management
+            </AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={busy}
@@ -667,7 +666,7 @@ export function ManagedConfigurationReviewPanel({
           <h2 id="managed-review-title" ref={heading} tabIndex={-1}>
             Managed configuration review
           </h2>
-          <p>Exact desired state, live baseline, actor, and retained receipt.</p>
+          <p>Desired state, live baseline, actor, and receipt.</p>
         </div>
         <Button variant="outline" disabled={busy} onClick={onClose}>
           Back to managed configuration
@@ -694,15 +693,15 @@ export function ManagedConfigurationReviewPanel({
         <div className="secret-form managed-review">
           <div className="secret-target-facts">
             <strong>{review.configurationLabel}</strong>
-            <span className="secret-name">{review.desired.destination.name}</span>
+            <span className="secret-name">
+              {review.desired.destination.name}
+            </span>
             <span>
               {review.resource.label} / {review.connectionName} /{" "}
               {secretScopeLabel(review.desired.destination.target.scope)}
             </span>
             <div className="secret-actions">
-              <Badge variant="secondary">
-                {ACTION_LABELS[review.action]}
-              </Badge>
+              <Badge variant="secondary">{ACTION_LABELS[review.action]}</Badge>
               <Badge variant="outline">HQ managed</Badge>
               <Badge variant="outline">No secret custody</Badge>
             </div>
@@ -758,8 +757,8 @@ export function ManagedConfigurationReviewPanel({
           ) : null}
           {!review.writable ? (
             <p className="hook-notice">
-              This provider credential is read only. Applying records a
-              rejected receipt and does not change provider configuration.
+              This provider credential is read only. Applying records a rejected
+              receipt and does not change provider configuration.
             </p>
           ) : null}
           {expired && !review.operation ? (
@@ -824,7 +823,9 @@ export function ManagedConfigurationReviewPanel({
               ) ? (
               <Button
                 variant="outline"
-                disabled={busy || !snapshot.capabilities.includes(CAPABILITY.SECRETS)}
+                disabled={
+                  busy || !snapshot.capabilities.includes(CAPABILITY.SECRETS)
+                }
                 onClick={() => void reconcile()}
               >
                 <RefreshCw size={16} aria-hidden="true" />
@@ -841,9 +842,9 @@ export function ManagedConfigurationReviewPanel({
               Apply this exact {review?.action}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              HQ will persist operation intent, check the reviewed live
-              baseline again, and submit at most one provider request. An
-              interrupted request is never automatically replayed.
+              HQ will persist operation intent, check the reviewed live baseline
+              again, and submit at most one provider request. An interrupted
+              request is never automatically replayed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {review ? (
@@ -858,7 +859,9 @@ export function ManagedConfigurationReviewPanel({
             </div>
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Keep reviewing</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>
+              Keep reviewing
+            </AlertDialogCancel>
             <Button
               variant={
                 review?.action === MANAGED_CONFIGURATION_ACTION.DELETE

@@ -5,9 +5,11 @@ import {
   Activity,
   ArrowUpRight,
   GitBranch,
+  Info,
   KeyRound,
   Monitor,
   ShieldCheck,
+  SlidersHorizontal,
   Webhook,
 } from "lucide-react";
 import {
@@ -32,6 +34,7 @@ import { command } from "./lib/api";
 import { StatusBadge, StatusIcon } from "./components/ui/status";
 import { HEALTH_TONES } from "./lib/status-tones";
 import { Button } from "./components/ui/button";
+import { Disclosure } from "./components/ui/disclosure";
 import { useDateTime } from "./date-time";
 import { GitHubEvidenceList } from "./github-evidence";
 import { githubCoverageHref } from "../shared/github-coverage";
@@ -67,8 +70,8 @@ function ReadFailure({
   return (
     <div className="repository-read-error" role="alert">
       <span>
-        {label} could not be refreshed. Any preview below is from the last
-        successful read.
+        {label} could not be refreshed. The preview is from the last successful
+        read.
       </span>
       <Button variant="outline" size="sm" onClick={retry} disabled={fetching}>
         Retry {label.toLowerCase()}
@@ -226,6 +229,9 @@ export function RepositoryOverview({
             ? "Archived"
             : HEALTH_LABELS[assessment.health]}
         </StatusBadge>
+        {reviewIsDue(repository, now) ? (
+          <StatusBadge tone="warning">Review overdue</StatusBadge>
+        ) : null}
         {project ? (
           <>
             <Link
@@ -256,21 +262,16 @@ export function RepositoryOverview({
           </a>
         ) : null}
       </div>
-      <Link className="quiet-link" to={sectionHref("work")}>
-        Review open pull requests, checks and issues{" "}
-        <ArrowUpRight size={14} aria-hidden="true" />
-      </Link>
-      <Link className="quiet-link" to={sectionHref("releases")}>
-        Review releases, deployments and changes since release{" "}
-        <ArrowUpRight size={15} aria-hidden="true" />
-      </Link>
       <div className="repository-summary-grid">
         <section
           className="repository-preview-card"
           aria-label="Observed evidence"
         >
           <div className="detail-card-heading">
-            <h2>Observed evidence</h2>
+            <h2>
+              <ShieldCheck size={17} aria-hidden="true" />
+              Observed evidence
+            </h2>
             <Link className="quiet-link" to={sourceHref}>
               Sources
             </Link>
@@ -334,68 +335,72 @@ export function RepositoryOverview({
               " / No accepted result"
             )}
           </p>
-          <details className="repository-assessment">
-            <summary>
-              Expectation check
-              {assessment.reasons.length
-                ? `: ${assessment.reasons.length} item${assessment.reasons.length === 1 ? "" : "s"} to review`
-                : ": met by fresh observations"}
-            </summary>
+          <Disclosure
+            className="repository-assessment"
+            title="Expectation check"
+            icon={ShieldCheck}
+            description={
+              assessment.reasons.length
+                ? `${assessment.reasons.length} item${assessment.reasons.length === 1 ? "" : "s"} to review`
+                : "Met by fresh observations"
+            }
+          >
             <ul>
               {assessment.reasons.map((reason) => (
                 <li key={reason}>{reason}</li>
               ))}
             </ul>
-            <p>
-              Requirements describe what you expect; they do not establish
-              provider health.
-            </p>
-          </details>
+            <p>Requirements need fresh provider evidence to pass.</p>
+          </Disclosure>
         </section>
-        <section
-          className="repository-preview-card"
-          aria-label="Expectations summary"
-        >
-          <div className="detail-card-heading">
-            <h2>Expectations</h2>
-            <span className="revision-label">
-              Revision {repository.revision}
-            </span>
-          </div>
-          <dl className="repository-expectations">
-            {(
-              Object.keys(
-                EXPECTATION_LABELS,
-              ) as (keyof typeof EXPECTATION_LABELS)[]
-            ).map((key) => (
-              <div key={key}>
-                <dt>{EXPECTATION_LABELS[key]}</dt>
-                <dd>{REQUIREMENT_LABELS[repository.expectations[key]]}</dd>
+        <section aria-label="Expectations summary">
+          <Disclosure
+            title="Expectations"
+            icon={SlidersHorizontal}
+            description={
+              repository.expectations.reviewDate
+                ? "Review by " +
+                  dates.calendarDate(repository.expectations.reviewDate)
+                : "No review scheduled"
+            }
+          >
+            <dl className="repository-expectations">
+              {(
+                Object.keys(
+                  EXPECTATION_LABELS,
+                ) as (keyof typeof EXPECTATION_LABELS)[]
+              ).map((key) => (
+                <div key={key}>
+                  <dt>{EXPECTATION_LABELS[key]}</dt>
+                  <dd>{REQUIREMENT_LABELS[repository.expectations[key]]}</dd>
+                </div>
+              ))}
+              <div>
+                <dt>Visibility</dt>
+                <dd>
+                  {repository.expectations.visibility === "any"
+                    ? "Public or private"
+                    : repository.expectations.visibility}
+                </dd>
               </div>
-            ))}
-            <div>
-              <dt>Visibility</dt>
-              <dd>
-                {repository.expectations.visibility === "any"
-                  ? "Public or private"
-                  : repository.expectations.visibility}
-              </dd>
-            </div>
-            <div>
-              <dt>Review by</dt>
-              <dd className={reviewIsDue(repository, now) ? "review-due" : ""}>
-                {repository.expectations.reviewDate
-                  ? dates.calendarDate(repository.expectations.reviewDate)
-                  : "Not scheduled"}
-              </dd>
-            </div>
-          </dl>
-          {repository.expectations.note ? (
-            <details className="repository-note">
-              <summary>Maintainer context</summary>
-              <p>{repository.expectations.note}</p>
-            </details>
-          ) : null}
+              <div>
+                <dt>Review by</dt>
+                <dd
+                  className={reviewIsDue(repository, now) ? "review-due" : ""}
+                >
+                  {repository.expectations.reviewDate
+                    ? dates.calendarDate(repository.expectations.reviewDate)
+                    : "Not scheduled"}
+                </dd>
+              </div>
+            </dl>
+            {repository.expectations.note ? (
+              <div className="repository-note">
+                <h3>Maintainer context</h3>
+                <p>{repository.expectations.note}</p>
+              </div>
+            ) : null}
+          </Disclosure>
         </section>
       </div>
       <RepositoryOperationalChecks
@@ -411,13 +416,16 @@ export function RepositoryOverview({
           fetching={context.isFetching}
         />
       ) : null}
-      <details className="repository-linked-details">
-        <summary>
-          Linked resources
-          {context.data
+      <Disclosure
+        className="repository-linked-details"
+        title="Linked resources"
+        icon={Webhook}
+        description={
+          context.data
             ? ` / ${context.data.hooks.total} hooks, ${context.data.monitoring.total} monitors, ${context.data.secrets.total} Secrets resources`
-            : ""}
-        </summary>
+            : undefined
+        }
+      >
         <div
           className="repository-linked-previews"
           aria-busy={context.isPending}
@@ -534,86 +542,94 @@ export function RepositoryOverview({
           </PreviewCard>
         </div>
         <p className="repository-preview-note">
-          Links describe configuration, not resource health. Open a resource for
-          its latest status.
+          Open a resource to inspect health evidence. Links may outlive removed
+          resources.
           {context.data ? (
             <> Links read {dates.dateTime(context.data.generatedAt)}.</>
           ) : null}
         </p>
-      </details>
-      <section
-        className="repository-preview-card repository-recent-activity"
-        aria-label="Recent repository activity"
-      >
-        <div className="detail-card-heading">
-          <h2>
-            <Activity size={17} aria-hidden="true" />
-            Recent activity
-          </h2>
-          <Link className="quiet-link" to={sectionHref("activity")}>
-            View journal <ArrowUpRight size={15} aria-hidden="true" />
-          </Link>
-        </div>
-        {activity.error ? (
-          <ReadFailure
-            label="Activity"
-            retry={() => void activity.refetch()}
-            fetching={activity.isFetching}
-          />
-        ) : null}
-        {activity.isPending ? (
-          <p role="status">Loading recent activity...</p>
-        ) : null}
-        {activity.data?.groups.length ? (
-          <ol className="repository-preview-list">
-            {activity.data.groups.map((group) => {
-              const goal = group.kind === "goal" ? group.goal : null;
-              const event = group.kind === "event" ? group.event : null;
-              const time =
-                group.kind === "goal" ? group.latestAt : group.event.createdAt;
-              return (
-                <li key={goal?.id ?? event!.id}>
-                  <div className="repository-preview-event-heading">
-                    <strong>
-                      {goal
-                        ? "Goal / " + GOAL_STATUS_LABELS[goal.status]
-                        : event!.title}
-                    </strong>
-                    <time dateTime={time} title={dates.tooltip(time)}>
-                      {dates.dateTime(time)}
-                    </time>
-                  </div>
-                  <p className="repository-preview-description">
-                    {goal?.objective ?? event!.summary}
-                  </p>
-                  {event?.githubSourceId && event.githubRefreshId ? (
-                    <Link
-                      className="quiet-link"
-                      to={githubReceiptHref(
-                        workspaceId,
-                        event.githubSourceId,
-                        event.githubRefreshId,
-                      )}
-                    >
-                      View refresh receipt
-                    </Link>
-                  ) : (
-                    <Link className="quiet-link" to={sectionHref("activity")}>
-                      {goal
-                        ? `View goal and ${group.kind === "goal" ? group.eventCount : 0} updates`
-                        : "View in journal"}
-                    </Link>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        ) : activity.data ? (
-          <p>No activity has been attributed to this repository.</p>
-        ) : null}
+      </Disclosure>
+      {activity.error ? (
+        <ReadFailure
+          label="Activity"
+          retry={() => void activity.refetch()}
+          fetching={activity.isFetching}
+        />
+      ) : null}
+      <section aria-label="Recent repository activity">
+        <Disclosure
+          title="Recent activity"
+          icon={Activity}
+          className="repository-recent-activity"
+        >
+          <div className="detail-card-heading">
+            <Link className="quiet-link" to={sectionHref("activity")}>
+              View journal <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
+          {activity.isPending ? (
+            <p role="status">Loading recent activity...</p>
+          ) : null}
+          {activity.data?.groups.length ? (
+            <ol className="repository-preview-list">
+              {activity.data.groups.map((group) => {
+                const goal = group.kind === "goal" ? group.goal : null;
+                const event = group.kind === "event" ? group.event : null;
+                const time =
+                  group.kind === "goal"
+                    ? group.latestAt
+                    : group.event.createdAt;
+                return (
+                  <li key={goal?.id ?? event!.id}>
+                    <div className="repository-preview-event-heading">
+                      <strong>
+                        {goal
+                          ? "Goal / " + GOAL_STATUS_LABELS[goal.status]
+                          : event!.title}
+                      </strong>
+                      <time dateTime={time} title={dates.tooltip(time)}>
+                        {dates.dateTime(time)}
+                      </time>
+                    </div>
+                    <p className="repository-preview-description">
+                      {goal?.objective ?? event!.summary}
+                    </p>
+                    {event?.githubSourceId && event.githubRefreshId ? (
+                      <Link
+                        className="quiet-link"
+                        to={githubReceiptHref(
+                          workspaceId,
+                          event.githubSourceId,
+                          event.githubRefreshId,
+                        )}
+                      >
+                        View refresh receipt
+                      </Link>
+                    ) : (
+                      <Link className="quiet-link" to={sectionHref("activity")}>
+                        {goal
+                          ? `View goal and ${group.kind === "goal" ? group.eventCount : 0} updates`
+                          : "View in journal"}
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : activity.data ? (
+            <p>No activity has been attributed to this repository.</p>
+          ) : null}
+        </Disclosure>
       </section>
-      <details className="repository-preview-card repository-full-evidence">
-        <summary>GitHub evidence details</summary>
+      <Disclosure
+        className="repository-full-evidence"
+        title="Evidence and record details"
+        icon={Info}
+      >
+        <p>
+          Repository ID <code>{repository.id}</code> / Revision{" "}
+          {repository.revision}
+        </p>
         {github.observations.length ? (
           github.observations.map((item) => (
             <section key={item.sourceId}>
@@ -647,7 +663,7 @@ export function RepositoryOverview({
         ) : (
           <p>No GitHub evidence has been collected for this repository.</p>
         )}
-      </details>
+      </Disclosure>
     </div>
   );
 }

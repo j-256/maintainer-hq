@@ -15,12 +15,14 @@ import {
   ChevronRight,
   FolderKanban,
   FolderGit2,
+  Info,
   KeyRound,
   Monitor,
   Pencil,
   PackageCheck,
   Plus,
   Search,
+  SlidersHorizontal,
   Tag,
   Webhook,
 } from "lucide-react";
@@ -29,6 +31,7 @@ import { PROJECT_ORGANIZATION_PARAM } from "../shared/project-organization";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -76,7 +79,9 @@ const ProjectReleases = lazy(() =>
   import("./releases").then((module) => ({ default: module.ProjectReleases })),
 );
 const ProjectDependencies = lazy(() =>
-  import("./dependencies").then((module) => ({ default: module.DependenciesView })),
+  import("./dependencies").then((module) => ({
+    default: module.DependenciesView,
+  })),
 );
 const ProjectOrganizationEditor = lazy(() =>
   import("./project-organization").then((module) => ({
@@ -197,12 +202,10 @@ export function ProjectsView({
     <>
       <div className="page-heading repository-inventory-heading">
         <div>
-          <div className="eyebrow">YOUR WORKSPACE</div>
-          <h1>Projects</h1>
-          <p>
-            {snapshot.projects.length} projects, each with its own repositories
-            and operational resources.
-          </p>
+          <h1 className="page-title">
+            <FolderKanban size={24} aria-hidden="true" />
+            Projects
+          </h1>
         </div>
         <div className="resource-actions">
           <Button
@@ -374,6 +377,11 @@ export function ProjectsView({
                     <FolderKanban size={17} aria-hidden="true" />
                     <h2>{row.project.name}</h2>
                   </Link>
+                  {row.project.description ? (
+                    <p className="inventory-description">
+                      {row.project.description}
+                    </p>
+                  ) : null}
                 </th>
                 <td role="cell" data-label="Importance">
                   {IMPORTANCE_LABELS[row.project.importance]}
@@ -395,14 +403,12 @@ export function ProjectsView({
         <div className="empty-state">
           <FolderKanban size={28} />
           <h2>
-            {snapshot.projects.length
-              ? "No projects match"
-              : "Bring your work together"}
+            {snapshot.projects.length ? "No projects match" : "No projects"}
           </h2>
           <p>
             {snapshot.projects.length
               ? "Try another name, importance, inclusion decision, or project status."
-              : "Create a project on its own or enroll its first repository in the same step."}
+              : "Create a project, with an optional first repository."}
           </p>
         </div>
       )}
@@ -429,9 +435,12 @@ export function ProjectsView({
           </Button>
         </nav>
       ) : null}
-      <p className="project-footnote">
-        Importance orders your work; it does not change observed health.
-      </p>
+      <Disclosure title="Priorities and portfolio" icon={SlidersHorizontal}>
+        <p>
+          Importance sets attention priority. Portfolio inclusion records your
+          publishing decision. Neither establishes health or permissions.
+        </p>
+      </Disclosure>
       {organizing || params.has(PROJECT_ORGANIZATION_PARAM) ? (
         <Suspense fallback={<p role="status">Loading project organizer...</p>}>
           <ProjectOrganizationEditor
@@ -568,10 +577,13 @@ export function ProjectDetail({
       </Link>
       <div className="page-heading repository-heading">
         <div>
-          <div className="eyebrow">
-            {project.lifecycle === "archived" ? "ARCHIVED PROJECT" : "PROJECT"}
-          </div>
-          <h1 tabIndex={-1}>{project.name}</h1>
+          <h1 className="page-title" tabIndex={-1}>
+            <FolderKanban size={24} aria-hidden="true" />
+            {project.name}
+          </h1>
+          {project.lifecycle === "archived" ? (
+            <Badge variant="outline">Archived project</Badge>
+          ) : null}
           {project.description ? <p>{project.description}</p> : null}
         </div>
         <div className="project-heading-actions">
@@ -599,7 +611,7 @@ export function ProjectDetail({
       </div>
       {saved ? (
         <p role="status" className="save-success">
-          Project saved. The change is recorded in Activity.
+          Project saved.
         </p>
       ) : null}
       {!snapshot.capabilities.includes(CAPABILITY.ADMIN) ? (
@@ -643,6 +655,7 @@ export function ProjectDetail({
               {row.repositoryCount}{" "}
               {row.repositoryCount === 1 ? "repository" : "repositories"}
             </span>
+            <EvidenceSummary row={row} />
           </div>
           <div className="detail-grid">
             <section
@@ -693,10 +706,15 @@ export function ProjectDetail({
                 <p>No repositories are linked to this project.</p>
               )}
             </section>
-            <section className="detail-card">
-              <div className="detail-card-heading">
-                <h2>Priorities and visibility</h2>
-              </div>
+            <Disclosure
+              title="Priorities and visibility"
+              description={
+                IMPORTANCE_LABELS[project.importance] +
+                " / " +
+                PORTFOLIO_LABELS[project.portfolio.status]
+              }
+              icon={SlidersHorizontal}
+            >
               <dl className="project-metadata">
                 <div>
                   <dt>Importance</dt>
@@ -741,47 +759,26 @@ export function ProjectDetail({
                 ) : null}
               </dl>
               <p>
-                Importance sets attention priority, not health or permissions.
-                Listed is your inclusion decision, not a verified publication.
+                Importance sets attention priority. Portfolio inclusion records
+                your decision; it does not publish a page.
               </p>
-            </section>
-            <section className="detail-card">
-              <div className="detail-card-heading">
-                <h2>Repository evidence</h2>
-              </div>
-              <EvidenceSummary row={row} />
-              <p>
-                This summarizes repository expectations only. Hooks and
-                monitoring have their own provider evidence and checks.
-              </p>
-              <div className="project-section-links">
-                {PROJECT_SECTIONS.slice(1).map(({ id, label, Icon }) => (
-                  <Button key={id} asChild variant="outline">
-                    <Link
-                      to={projectHref(
-                        snapshot.workspace.id,
-                        project.id,
-                        id,
-                        params,
-                      )}
-                    >
-                      <Icon size={16} />
-                      {label}
-                    </Link>
-                  </Button>
-                ))}
-              </div>
-            </section>
+            </Disclosure>
           </div>
+          <Disclosure title="Record details" icon={Info}>
+            <p>
+              Project ID <code>{project.id}</code> / Revision {project.revision}{" "}
+              / Updated{" "}
+              <time
+                dateTime={project.updatedAt}
+                title={dates.tooltip(project.updatedAt)}
+              >
+                {dates.dateTime(project.updatedAt)}
+              </time>
+            </p>
+          </Disclosure>
           <p className="project-footnote">
-            Project ID <code>{project.id}</code> / Revision {project.revision} /
-            Updated{" "}
-            <time
-              dateTime={project.updatedAt}
-              title={dates.tooltip(project.updatedAt)}
-            >
-              {dates.dateTime(project.updatedAt)}
-            </time>
+            Repository expectations are summarized above. Hooks and monitoring
+            have separate provider evidence.
           </p>
         </>
       ) : section === "repositories" ? (
@@ -804,7 +801,9 @@ export function ProjectDetail({
           }
         />
       ) : section === "dependencies" ? (
-        <Suspense fallback={<p role="status">Loading dependency maintenance...</p>}>
+        <Suspense
+          fallback={<p role="status">Loading dependency maintenance...</p>}
+        >
           <ProjectDependencies snapshot={snapshot} projectId={project.id} />
         </Suspense>
       ) : section === "releases" ? (
@@ -851,8 +850,7 @@ export function ProjectDetail({
             <DialogHeader>
               <DialogTitle>Link an existing repository</DialogTitle>
               <DialogDescription>
-                Choose one repository to review its project assignment. Nothing
-                changes until you save the repository.
+                Choose a repository, then save its project assignment.
               </DialogDescription>
             </DialogHeader>
             <Input

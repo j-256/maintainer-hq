@@ -390,7 +390,7 @@ test("records a review and reconciles its date into an unsaved expectation draft
     .fill("Unrelated draft kept");
   await page
     .locator("summary")
-    .filter({ hasText: "Review and maintainer context" })
+    .filter({ hasText: "Review and context" })
     .click();
   await page
     .getByRole("button", {

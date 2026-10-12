@@ -56,9 +56,7 @@ test("saves account preferences, applies them across routes and workspaces, and 
     resourceId: null,
   });
   await page.goto("/settings?workspace=development");
-  await page
-    .getByRole("link", { name: "Date and time preferences", exact: true })
-    .click();
+  await page.getByRole("link", { name: /^Date and time / }).click();
   await expect(
     page.getByRole("combobox", { name: "Time zone", exact: true }),
   ).toHaveText("Local time (America/New_York)");

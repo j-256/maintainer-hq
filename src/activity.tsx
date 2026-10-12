@@ -1,12 +1,23 @@
 import { useDeferredValue, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, CircleDot, Plus, Search, X } from "lucide-react";
+import {
+  Activity as ActivityIcon,
+  CheckCheck,
+  CircleDot,
+  CircleHelp,
+  Link2,
+  Plus,
+  Search,
+  StickyNote,
+  X,
+} from "lucide-react";
 import { CAPABILITY, type Activity, type Snapshot } from "../shared/domain";
 import { command } from "./lib/api";
 import { ACTIVITY_LIMITS, type ActivityFilters } from "../shared/activity";
 import { PaginatedActivity } from "./activity-feed";
 import { Button } from "./components/ui/button";
 import { GoalsPanel } from "./goals";
+import { Disclosure } from "./components/ui/disclosure";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import {
@@ -98,10 +109,12 @@ function NoteComposer({
       </DialogTrigger>
       <DialogContent className="note-dialog">
         <DialogHeader>
-          <DialogTitle>Add a note</DialogTitle>
+          <DialogTitle className="dialog-heading">
+            <StickyNote size={20} aria-hidden="true" />
+            Add a note
+          </DialogTitle>
           <DialogDescription>
-            Capture a decision, question, or update. Notes are visible to
-            workspace members. Do not include secrets or private endpoint URLs.
+            Visible to workspace members. Keep secrets and private URLs out.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="note-form">
@@ -116,7 +129,7 @@ function NoteComposer({
               }}
               maxLength={160}
               required
-              placeholder="What should we know?"
+              placeholder="Note title"
               disabled={mutation.isPending}
             />
           </label>
@@ -131,70 +144,76 @@ function NoteComposer({
               }}
               maxLength={2000}
               rows={5}
-              placeholder="A little context goes a long way."
+              placeholder="Details (optional)"
               disabled={mutation.isPending}
             />
           </label>
-          <div>
-            <label id="note-repo-label">Related to</label>
-            <Select
-              value={repositoryId}
-              onValueChange={(value) => {
-                setRepositoryId(value);
-                setEventId(crypto.randomUUID());
-              }}
-              disabled={
-                mutation.isPending ||
-                Boolean(scopedRepositoryId || scopedProjectId)
-              }
-            >
-              <SelectTrigger
-                aria-labelledby="note-repo-label"
-                className="w-full"
+          <Disclosure
+            title="Related project or goal"
+            icon={Link2}
+            open={Boolean(scopedRepositoryId || scopedProjectId) || undefined}
+          >
+            <div>
+              <label id="note-repo-label">Related to</label>
+              <Select
+                value={repositoryId}
+                onValueChange={(value) => {
+                  setRepositoryId(value);
+                  setEventId(crypto.randomUUID());
+                }}
+                disabled={
+                  mutation.isPending ||
+                  Boolean(scopedRepositoryId || scopedProjectId)
+                }
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="workspace">Entire workspace</SelectItem>
-                {snapshot.projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    Project: {project.name}
-                  </SelectItem>
-                ))}
-                {snapshot.repositories.map((repo) => (
-                  <SelectItem key={repo.id} value={repo.id}>
-                    {repo.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label id="note-goal-label">Goal (optional)</label>
-            <Select
-              value={goalId}
-              onValueChange={(value) => {
-                setGoalId(value);
-                setEventId(crypto.randomUUID());
-              }}
-              disabled={mutation.isPending}
-            >
-              <SelectTrigger
-                aria-labelledby="note-goal-label"
-                className="w-full"
+                <SelectTrigger
+                  aria-labelledby="note-repo-label"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="workspace">Entire workspace</SelectItem>
+                  {snapshot.projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      Project: {project.name}
+                    </SelectItem>
+                  ))}
+                  {snapshot.repositories.map((repo) => (
+                    <SelectItem key={repo.id} value={repo.id}>
+                      {repo.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label id="note-goal-label">Goal (optional)</label>
+              <Select
+                value={goalId}
+                onValueChange={(value) => {
+                  setGoalId(value);
+                  setEventId(crypto.randomUUID());
+                }}
+                disabled={mutation.isPending}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No goal association</SelectItem>
-                {snapshot.goals.map((goal) => (
-                  <SelectItem key={goal.id} value={goal.id}>
-                    {goal.objective}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                <SelectTrigger
+                  aria-labelledby="note-goal-label"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No goal association</SelectItem>
+                  {snapshot.goals.map((goal) => (
+                    <SelectItem key={goal.id} value={goal.id}>
+                      {goal.objective}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </Disclosure>
           {mutation.error ? (
             <p role="alert" className="form-error">
               {mutation.error.message}
@@ -255,20 +274,16 @@ export function ActivityView({
       <div className="page-heading">
         <div>
           {scopedRepositoryId || scopedProjectId ? (
-            <h2>Activity</h2>
+            <h2 className="page-title">
+              <ActivityIcon size={22} aria-hidden="true" />
+              Activity
+            </h2>
           ) : (
-            <>
-              <div className="eyebrow">WORKSPACE JOURNAL</div>
-              <h1>Activity</h1>
-            </>
+            <h1 className="page-title">
+              <ActivityIcon size={26} aria-hidden="true" />
+              Activity
+            </h1>
           )}
-          <p>
-            {scopedProjectId
-              ? "Related goals, project notes, and operations captured for this project. Regrouping repositories does not rewrite historical activity."
-              : scopedRepositoryId
-                ? "Related goals, reported updates, and operations affecting this repository. Historical operations retain their original repository links."
-                : "The work, the decisions, and what happens next."}
-          </p>
         </div>
         {!readOnly ? (
           <NoteComposer
@@ -354,47 +369,33 @@ export function ActivityView({
           />
         </section>
         {!scopedRepositoryId && !scopedProjectId ? (
-          <aside className="context-rail" aria-label="Activity context">
-            <section>
-              <div className="eyebrow">IN THIS WORKSPACE</div>
-              <h2>The work behind your projects.</h2>
-              <p>
-                This journal combines reported work updates with recorded
-                workspace changes.
-              </p>
-              <div className="context-stat">
-                <span>Repositories</span>
-                <strong>{snapshot.repositories.length}</strong>
+          <Disclosure
+            title="How to read activity"
+            icon={CircleHelp}
+            className="activity-guide"
+          >
+            <div className="legend-item">
+              <CircleDot size={16} aria-hidden="true" />
+              <div>
+                <strong>Reported updates</strong>
+                <p>
+                  Notes, checkpoints, and checks posted by members or clients.
+                </p>
               </div>
-              <div className="context-stat">
-                <span>Reported goals</span>
-                <strong>{snapshot.goals.length}</strong>
+            </div>
+            <div className="legend-item">
+              <CheckCheck size={16} aria-hidden="true" />
+              <div>
+                <strong>Recorded changes</strong>
+                <p>Workspace changes recorded after a successful save.</p>
               </div>
-            </section>
-            <section>
-              <div className="eyebrow">HOW TO READ THIS</div>
-              <div className="legend-item">
-                <CircleDot size={16} />
-                <div>
-                  <strong>Reported updates</strong>
-                  <p>
-                    Notes, checkpoints, and check results posted by a workspace
-                    member or client.
-                  </p>
-                </div>
-              </div>
-              <div className="legend-item">
-                <CheckCheck size={16} />
-                <div>
-                  <strong>Recorded changes</strong>
-                  <p>Repository edits recorded by HQ when the save succeeds.</p>
-                </div>
-              </div>
-              <p className="context-footnote">
-                A reported check is not an independent provider health check.
-              </p>
-            </section>
-          </aside>
+            </div>
+            <p>
+              A reported check does not independently verify provider health.
+              Historical activity keeps its original project and repository
+              links.
+            </p>
+          </Disclosure>
         ) : null}
       </div>
     </>

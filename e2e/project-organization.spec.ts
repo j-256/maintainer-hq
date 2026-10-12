@@ -609,7 +609,7 @@ test("a concurrent project edit rejects Apply and rebaselines only unselected me
   ).toContainText("High");
   await expect(
     page.getByRole("textbox", {
-      name: "Why this importance? (optional)",
+      name: "Importance note (optional)",
       exact: true,
     }),
   ).toHaveValue("Concurrent saved note");

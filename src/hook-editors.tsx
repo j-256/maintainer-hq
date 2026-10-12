@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
+import { Shield, Webhook } from "lucide-react";
 import { ResourceProjectEditor } from "./resource-project";
 import type { Snapshot } from "../shared/domain";
 import {
@@ -13,6 +14,7 @@ import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "./components/ui/disclosure";
 import {
   Select,
   SelectContent,
@@ -205,17 +207,23 @@ export function HookConnectionEditor({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="page-title">
+              <Webhook size={20} aria-hidden="true" />
               {initial ? "Edit Hookrelay connection" : "Connect Hookrelay"}
             </DialogTitle>
             <DialogDescription>
-              Manage how this workspace reaches Hookrelay. Routes, sinks, and
-              notification delivery remain provider-owned.
+              Choose a provider for this workspace.
             </DialogDescription>
           </DialogHeader>
           <form ref={form} onSubmit={save} className="hook-form">
             {error ? <HookError error={error} /> : null}
             {references.error ? <HookError error={references.error} /> : null}
+            {references.data?.length === 0 ? (
+              <p className="hook-notice">
+                <strong>No approved provider.</strong> Ask the deployment owner
+                to provision a scoped credential and private binding.
+              </p>
+            ) : null}
             <label htmlFor="hook-connection-name">
               Connection name
               <Input
@@ -269,30 +277,15 @@ export function HookConnectionEditor({
                   ))}
                 </SelectContent>
               </Select>
-              <p>
-                Only deployment-approved, workspace-scoped providers appear.
-                Credential values never enter this form.
-              </p>
             </div>
-            {references.data?.length === 0 ? (
-              <p className="hook-notice">
-                No provider is provisioned for this workspace. The deployment
-                owner must add a scoped credential and private service binding
-                before enrollment.
-              </p>
-            ) : null}
             <div className="hook-field">
-              <label htmlFor="hook-project">Connection project context</label>
+              <label htmlFor="hook-project">Project context (optional)</label>
               <ProjectSelect
                 value={draft.projectId}
                 onChange={(projectId) => setDraft({ ...draft, projectId })}
                 snapshot={snapshot}
                 disabled={busy}
               />
-              <p>
-                Group this connection without requiring a repository. This does
-                not associate its subscriptions; link each resource explicitly.
-              </p>
             </div>
             <label className="hook-checkbox">
               <Checkbox
@@ -302,13 +295,23 @@ export function HookConnectionEditor({
                   setDraft({ ...draft, enabled: enabled === true })
                 }
               />{" "}
-              Enable this HQ connection
+              Enabled in HQ
             </label>
             <p className="hook-muted">
-              Disabling this connection stops HQ reads and new operations
-              through it. It does not pause Hookrelay or its notifications.
-              Existing receipts can still be reconciled.
+              Disabling stops new HQ reads and actions. Hookrelay keeps running.
             </p>
+            <Disclosure title="Connection scope" icon={Shield}>
+              <p>
+                Only deployment-approved, workspace-scoped providers appear.
+                Credentials stay server-side. Project context labels the
+                connection; associate subscriptions separately.
+              </p>
+              <p>
+                Disabling stops new HQ reads and operations. Hookrelay routes,
+                sinks, and notifications stay provider-owned and continue
+                running. Existing receipts remain available for recovery.
+              </p>
+            </Disclosure>
             {initial && base && initial.revision > base.revision ? (
               <p className="hook-notice" role="status">
                 Settings changed elsewhere. Your draft is preserved; load the

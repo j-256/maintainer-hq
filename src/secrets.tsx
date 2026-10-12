@@ -5,9 +5,11 @@ import {
   ArrowRight,
   History,
   KeyRound,
+  LockKeyhole,
   Plus,
   RefreshCw,
   Settings2,
+  Shield,
 } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import {
@@ -27,6 +29,7 @@ import type { ManagedConfiguration } from "../shared/managed-configurations";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
+import { Disclosure } from "./components/ui/disclosure";
 import { Input } from "./components/ui/input";
 import { SecretConnectionEditor } from "./secret-connection";
 import { ProviderAccessView } from "./provider-access";
@@ -328,9 +331,9 @@ function SecretInventoryView({
             <Button
               disabled={Boolean(
                 selected?.capabilities &&
-                  !selected.capabilities.entryKinds.includes(
-                    SECRET_ENTRY_KIND.SECRET,
-                  ),
+                !selected.capabilities.entryKinds.includes(
+                  SECRET_ENTRY_KIND.SECRET,
+                ),
               )}
               variant={
                 entryKind === SECRET_ENTRY_KIND.SECRET ? "default" : "outline"
@@ -347,14 +350,12 @@ function SecretInventoryView({
             <Button
               disabled={Boolean(
                 selected?.capabilities &&
-                  !selected.capabilities.entryKinds.includes(
-                    SECRET_ENTRY_KIND.VARIABLE,
-                  ),
+                !selected.capabilities.entryKinds.includes(
+                  SECRET_ENTRY_KIND.VARIABLE,
+                ),
               )}
               variant={
-                entryKind === SECRET_ENTRY_KIND.VARIABLE
-                  ? "default"
-                  : "outline"
+                entryKind === SECRET_ENTRY_KIND.VARIABLE ? "default" : "outline"
               }
               aria-pressed={entryKind === SECRET_ENTRY_KIND.VARIABLE}
               onClick={() => {
@@ -440,10 +441,8 @@ function SecretInventoryView({
           </div>
           {entryKind === SECRET_ENTRY_KIND.VARIABLE ? (
             <p className="hook-notice">
-              These values are live provider-declared non-secret configuration.
-              HQ-managed variables retain an explicit desired value; unmanaged
-              values stay provider-owned. Do not use variables for credentials
-              or other sensitive values.
+              Variables are non-secret configuration. Do not store credentials
+              or sensitive values here.
               {query.data.excludedBindings
                 ? " Other provider binding kinds are excluded from this inventory."
                 : ""}
@@ -452,19 +451,18 @@ function SecretInventoryView({
                 ? " A gradual deployment is active: this list does not prove that every serving version has the same variable values."
                 : ""}
             </p>
-          ) : query.data.providerKind === "cloudflare-workers" ? (
+          ) : (
             <p className="hook-notice">
-              Text secret names are case-sensitive. Cloudflare does not expose
-              their values, timestamps or individual secret versions. HQ
-              compares serving Worker deployments, not values.
+              Secret values cannot be read or verified by HQ.
               {query.data.excludedBindings
                 ? " Cryptographic key bindings are excluded from this text-secret workspace."
                 : ""}
-              {query.data.workerDeployment === null
+              {query.data.providerKind === "cloudflare-workers" &&
+              query.data.workerDeployment === null
                 ? " A gradual deployment is active: this list does not prove that every serving version has the same bindings. Changes require one fully serving version."
                 : ""}
             </p>
-          ) : null}
+          )}
           {query.data.target.scope.kind === "organization" ? (
             <p className="hook-notice">
               GitHub reports these organization entries as available to the
@@ -519,7 +517,7 @@ function SecretInventoryView({
                     <Badge variant="outline">
                       {item.management === SECRET_MANAGEMENT.HQ
                         ? "HQ managed"
-                        : "Unmanaged by HQ"}
+                        : "Provider-owned"}
                     </Badge>
                     {item.management === SECRET_MANAGEMENT.HQ &&
                     item.managedConfigurationId ? (
@@ -568,19 +566,22 @@ function SecretInventoryView({
               page.
             </p>
           ) : null}
-          {entryKind === SECRET_ENTRY_KIND.SECRET ? (
+          <Disclosure title="Inventory and access details" icon={Shield}>
             <p className="hook-muted">
-              Names and timestamps are metadata only. HQ cannot read stored
-              secret values or confirm whether they work in an application.
-              Refresh explicitly after external provider changes.
+              {entryKind === SECRET_ENTRY_KIND.SECRET
+                ? "Names and timestamps are metadata. Stored values stay hidden. Distributing a supplied value requires an exact reviewed operation; inventory does not show whether a secret works in an application."
+                : "Provider-owned values are read live and not persisted by HQ. Managed variables retain a desired non-secret value for comparison. Presence does not confirm that an application uses them."}{" "}
+              Refresh after outside provider changes.
             </p>
-          ) : (
-            <p className="hook-muted">
-              Unmanaged values are read live and not persisted by HQ. Managed
-              variables retain a desired non-secret value for comparison.
-              Presence does not confirm that an application uses them.
-            </p>
-          )}
+            {entryKind === SECRET_ENTRY_KIND.SECRET &&
+            query.data.providerKind === "cloudflare-workers" ? (
+              <p className="hook-muted">
+                Text secret names are case-sensitive. Cloudflare does not expose
+                values, timestamps, or individual secret versions. HQ compares
+                serving Worker deployments.
+              </p>
+            ) : null}
+          </Disclosure>
           {query.data.truncated ? (
             <p className="hook-notice">
               The provider page limit was reached. More names may exist beyond
@@ -751,34 +752,28 @@ export function SecretsView({
       ) : null}
       <div className="page-heading">
         <div>
-          <div className="eyebrow">
-            {repositoryId ? "REPOSITORY CONTEXT" : "WORKSPACE"}
-          </div>
           {repositoryId ? (
-            <h2 ref={heading} tabIndex={-1}>
-              Secrets
+            <h2 className="page-title" ref={heading} tabIndex={-1}>
+              <KeyRound size={28} aria-hidden="true" /> Secrets
             </h2>
           ) : (
-            <h1 ref={heading} tabIndex={-1}>
-              Secrets
+            <h1 className="page-title" ref={heading} tabIndex={-1}>
+              <KeyRound size={28} aria-hidden="true" /> Secrets
             </h1>
           )}
-          <p>
-            Provider inventory, managed desired configuration, and reviewed
-            supplied-secret changes.
-          </p>
         </div>
         {!reviewId &&
         !configurationReviewId &&
         (view !== "providers" || isOwner) &&
         !(view === "providers" && params.get("credentialReview")) ? (
           <div className="secret-actions">
-            {snapshot.capabilities.includes(CAPABILITY.ADMIN) ? (
+            {snapshot.capabilities.includes(CAPABILITY.ADMIN) &&
+            (relevant.length > 0 || view !== "inventory") ? (
               <Button variant="outline" onClick={() => edit("new")}>
                 <Plus size={16} aria-hidden="true" /> Connect provider
               </Button>
             ) : null}
-            {canWrite ? (
+            {canWrite && relevant.length > 0 ? (
               <Button
                 disabled={
                   !connections.some(
@@ -865,8 +860,7 @@ export function SecretsView({
               <h2>Provider access requires an Owner</h2>
               <p>
                 Only workspace Owners can manage provider credentials. Use
-                Inventory to browse the provider configuration available to
-                you.
+                Inventory to browse the provider configuration available to you.
               </p>
               <Button
                 variant="outline"
@@ -881,7 +875,8 @@ export function SecretsView({
             <ProviderAccessView
               snapshot={snapshot}
               onConnect={(reference, kind) => {
-                if (kind !== "github-repositories") edit("new", reference, kind);
+                if (kind !== "github-repositories")
+                  edit("new", reference, kind);
               }}
             />
           ) : view === "operations" ? (
@@ -935,23 +930,35 @@ export function SecretsView({
                 <h2>
                   {repositoryId
                     ? "No Secrets resources linked here"
-                    : "Connect your first Secrets provider"}
+                    : "No provider connected"}
                 </h2>
                 <p>
                   {repositoryId
                     ? "Enroll this repository in a Secrets connection to browse its configuration here. Historical operations remain available in Operations."
-                    : "Set up provider access to browse secret names and non-secret variables, then distribute secret values you supply."}
+                    : "Connect a provider to browse secret names and variables."}
                 </p>
-                {isOwner ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate({ view: "providers" })}
-                  >
-                    Set up provider access
+                {snapshot.capabilities.includes(CAPABILITY.ADMIN) ? (
+                  <Button onClick={() => edit("new")}>
+                    <Plus size={16} aria-hidden="true" /> Connect provider
                   </Button>
-                ) : null}
+                ) : (
+                  <p>Ask a workspace owner to set up provider access.</p>
+                )}
               </section>
             )
+          ) : null}
+          {view === "inventory" && query.data && !relevant.length ? (
+            <Disclosure
+              title="Secret values and provider access"
+              icon={LockKeyhole}
+            >
+              <p>
+                Stored secret values cannot be read or verified by HQ.
+                Distributing a supplied value requires an exact reviewed
+                operation. Add credentials through the separate privileged
+                Provider access form.
+              </p>
+            </Disclosure>
           ) : null}
         </>
       )}

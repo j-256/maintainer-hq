@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { Shield } from "lucide-react";
 import {
   HOOK_POLICY_LIMITS,
   HOOK_SEVERITIES,
@@ -7,6 +8,7 @@ import {
 } from "../shared/hooks";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Disclosure } from "./components/ui/disclosure";
 import { toggleHookValue, type HookFilterDraft } from "./lib/hook-policy-draft";
 
 const PATTERN_DRAFT_MAX_LENGTH =
@@ -155,8 +157,7 @@ export function HookPolicyIdentity({
   authorityId: string;
 }) {
   return (
-    <details className="hook-policy-identity">
-      <summary>Provider identity</summary>
+    <Disclosure title="Provider identity" icon={Shield}>
       <dl className="hook-detail-grid">
         <div>
           <dt>Subscription ID</dt>
@@ -171,6 +172,6 @@ export function HookPolicyIdentity({
           </dd>
         </div>
       </dl>
-    </details>
+    </Disclosure>
   );
 }

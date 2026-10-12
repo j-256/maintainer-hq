@@ -75,7 +75,7 @@ async function inspect(page: Page, project: Project) {
     .click();
   await expect(
     page.getByRole("heading", {
-      name: "Move project to another workspace",
+      name: "Move project to workspace",
       exact: true,
     }),
   ).toBeFocused();
@@ -147,7 +147,7 @@ test("moves a reviewed project with explicit source mapping and retains original
   page.on("pageerror", (error) => errors.push(error.message));
   await inspect(page, project);
   const dialog = page.getByRole("alertdialog", {
-    name: "Move project to another workspace",
+    name: "Move project to workspace",
     exact: true,
   });
   await expect(
@@ -381,7 +381,7 @@ test("prepares disabled empty local and GitHub sources through Settings", async 
     .click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole("link", { name: "All settings", exact: true }).click();
-  await page.getByRole("link", { name: /^GitHub evidence / }).click();
+  await page.getByRole("link", { name: "GitHub", exact: true }).click();
   await page
     .getByRole("button", { name: "Connect GitHub", exact: true })
     .click();

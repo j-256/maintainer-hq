@@ -56,15 +56,7 @@
 }
 .settings-index .preferences-summary {
   margin: 0;
-  align-self: end;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.settings-index .preferences-summary [data-slot="button"] {
-  white-space: normal;
-  height: auto;
-  min-height: 40px;
 }
 .settings-provider-links,
 .settings-access-summary {
@@ -82,23 +74,18 @@
 .settings-provider-links a {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   min-height: 40px;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 .settings-access-summary {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
   font-size: var(--hq-text-ui);
-}
-.settings-access-summary summary {
-  color: var(--muted-foreground);
-  cursor: pointer;
 }
 .settings-access-summary dl {
   display: grid;
   gap: 8px;
-  margin-top: 16px;
+  margin: 0;
 }
 .settings-access-summary dl > div {
   display: flex;

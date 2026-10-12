@@ -25,7 +25,7 @@ export function ProjectPriorities({
       />
       <div className="form-field">
         <label htmlFor={id + "-importance-note"}>
-          Why this importance? (optional)
+          Importance note (optional)
         </label>
         <Textarea
           id={id + "-importance-note"}
@@ -98,7 +98,7 @@ export function ProjectPriorities({
         />
       </div>
       <p className="field-help">
-        Importance sets priority, not health. Listed records your decision; it
+        Importance sets attention priority. Listed records your decision; it
         does not publish a page.
       </p>
     </div>

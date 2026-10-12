@@ -311,8 +311,8 @@ export function ProjectEditor({
             </DialogTitle>
             <DialogDescription>
               {initial
-                ? "Update this project's identity and priorities."
-                : "Name your project and optionally enroll its first repository."}
+                ? "Edit identity and priorities."
+                : "Create a project, with an optional first repository."}
             </DialogDescription>
           </DialogHeader>
           <form ref={form} onSubmit={save} noValidate>
@@ -434,7 +434,7 @@ export function ProjectEditor({
                     options={PORTFOLIO_LABELS}
                     onChange={(value) => portfolio("status", value)}
                     disabled={busy || !canEdit}
-                    help="A saved Listed decision does not publish or verify a portfolio page."
+                    help="Listed records your decision; it does not publish a page."
                   />
                   <div className="form-field">
                     <label htmlFor="project-portfolio-reason">
@@ -508,8 +508,8 @@ export function ProjectEditor({
                     {includeRepository ? (
                       <>
                         <p className="field-help">
-                          Both records are saved together. This does not create
-                          a GitHub repository or connect a provider.
+                          Saves both HQ records together. GitHub access is
+                          separate.
                         </p>
                         <div className="form-field">
                           <label htmlFor="project-repository-name">
@@ -570,9 +570,8 @@ export function ProjectEditor({
                           ))}
                         </div>
                         <p className="field-help">
-                          Monitoring and hooks start unmanaged.
-                          Repository-specific expectations can be adjusted after
-                          enrollment.
+                          Hooks and monitoring start unmanaged. Edit
+                          expectations after enrollment.
                         </p>
                       </>
                     ) : null}

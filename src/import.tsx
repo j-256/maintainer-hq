@@ -14,6 +14,7 @@ import { command, RequestError } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Input } from "./components/ui/input";
+import { Disclosure } from "@/components/ui/disclosure";
 import {
   Dialog,
   DialogContent,
@@ -55,21 +56,12 @@ export function ImportSettings({ snapshot }: { snapshot: Snapshot }) {
     >
       <div className="access-heading">
         <div>
-          <h1 id="import-heading" tabIndex={-1}>
-            Bring your project metadata
+          <h1 className="page-title" id="import-heading" tabIndex={-1}>
+            <FileInput size={26} aria-hidden="true" />
+            Import metadata
           </h1>
-          <p>
-            A one-time starting point for an empty workspace. Review the exact
-            intent before importing.
-          </p>
         </div>
-        <FileInput size={20} aria-hidden="true" />
       </div>
-      <p>
-        Projects plus their repository names, descriptions, classifications,
-        and expectations only. No credentials, members, connected sources, or
-        health evidence. This does not change GitHub or any other provider.
-      </p>
       {!allowed ? (
         <p className="import-notice">
           A workspace owner with metadata access can prepare an import.
@@ -95,31 +87,55 @@ export function ImportSettings({ snapshot }: { snapshot: Snapshot }) {
                 {query.data.receipt.sourceLabel}. Applied{" "}
                 {time(query.data.receipt.appliedAt)}.
               </p>
-              <p>Live health still depends on separately connected sources.</p>
+              <p>Connect sources separately to collect health evidence.</p>
             </div>
           ) : query.data &&
             (query.data.projectCount > 0 || query.data.repositoryCount > 0) ? (
-            <p className="import-notice">
-              This workspace already has projects or repositories. Import is
-              available only in an empty workspace and never merges or
-              overwrites existing records.
-            </p>
+            <div className="import-notice">
+              <strong>Import requires an empty workspace.</strong>
+              <p>This workspace already contains projects or repositories.</p>
+            </div>
           ) : null}
+          <div className="import-file-summary">
+            <h2>Project and repository metadata</h2>
+            <p>Review a file before importing.</p>
+          </div>
           <div className="access-actions import-actions">
             {query.data &&
             !query.data.receipt &&
             query.data.projectCount === 0 &&
             query.data.repositoryCount === 0 ? (
               <Button ref={trigger} onClick={() => setOpen(true)}>
-                <FileInput size={15} /> Review metadata file
+                <FileInput size={15} /> Choose file
               </Button>
             ) : null}
             <Button variant="outline" size="sm" onClick={refresh}>
-              <RefreshCw size={14} /> Refresh import status
+              <RefreshCw size={14} /> Refresh status
             </Button>
           </div>
         </>
       )}
+      <Disclosure
+        title="What gets imported"
+        icon={FileInput}
+        className="import-details"
+      >
+        <dl>
+          <dt>Included</dt>
+          <dd>
+            Project names, descriptions, classifications, and repository
+            expectations
+          </dd>
+          <dt>Excluded</dt>
+          <dd>
+            Credentials, members, source connections, goals, and health evidence
+          </dd>
+        </dl>
+        <p>
+          Existing records are never merged or overwritten. Provider
+          configuration stays unchanged.
+        </p>
+      </Disclosure>
       {open ? (
         <ImportDialog
           snapshot={snapshot}
@@ -272,7 +288,8 @@ function ImportDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="dialog-heading">
+              <FileInput size={20} aria-hidden="true" />
               {receipt
                 ? "Metadata imported"
                 : plan
@@ -389,7 +406,9 @@ function ImportDialog({
                       <dt>Visibility</dt>
                       <dd>{repository.expectations.visibility}</dd>
                       <dt>Review date</dt>
-                      <dd>{calendarDate(repository.expectations.reviewDate)}</dd>
+                      <dd>
+                        {calendarDate(repository.expectations.reviewDate)}
+                      </dd>
                       <dt>Note</dt>
                       <dd className="import-note">
                         {repository.expectations.note || "No note"}
@@ -440,9 +459,8 @@ function ImportDialog({
                   }}
                 />
                 <p className="field-help">
-                  A reviewed, metadata-only JSON file, up to 60 KiB. The file is
-                  validated locally before a review is sent to this workspace.
-                  It is not stored in browser storage.
+                  Metadata-only JSON, up to 60 KiB. Validated locally before
+                  review and never stored in browser storage.
                 </p>
               </div>
               {manifest ? (

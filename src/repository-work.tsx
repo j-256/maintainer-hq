@@ -333,11 +333,10 @@ export function RepositoryWork({
     <section className="repository-work" aria-label="Pull requests and issues">
       <div className="work-toolbar">
         <div>
-          <h2>Pull requests and issues</h2>
-          <p>
-            Recent changes and aging open work, with review and head-check
-            evidence.
-          </p>
+          <h2 className="page-title">
+            <GitPullRequest size={22} aria-hidden="true" />
+            Pull requests and issues
+          </h2>
         </div>
         {source ? (
           <Button
@@ -380,10 +379,7 @@ export function RepositoryWork({
         <Card>
           <CardContent className="work-empty">
             <h3>No GitHub source for this repository</h3>
-            <p>
-              Connect a read-only source to inspect open pull requests and
-              issues.
-            </p>
+            <p>Connect GitHub to inspect open pull requests and issues.</p>
             {configure}
           </CardContent>
         </Card>
@@ -398,9 +394,7 @@ export function RepositoryWork({
               ? query.error.message
               : "Work evidence could not be verified. Retry the read."}
           </p>
-          {evidence ? (
-            <p>Any evidence below belongs to the previous read.</p>
-          ) : null}
+          {evidence ? <p>Evidence below is from the previous read.</p> : null}
           <Button
             variant="outline"
             disabled={query.isFetching}

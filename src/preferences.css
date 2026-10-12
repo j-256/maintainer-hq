@@ -1,16 +1,9 @@
-.preferences-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-}
-.preferences-summary h2 {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.preferences-editor {
+.preferences-editor,
+.preferences-details {
   max-width: 58rem;
+}
+.preferences-details {
+  margin-top: 24px;
 }
 .preferences-fields {
   display: grid;
@@ -51,17 +44,13 @@
   align-items: center;
   gap: 0.5rem;
 }
-.preferences-editor .preferences-explanation {
-  margin: 1rem 0 1.5rem;
+.preferences-editor .form-actions {
+  margin-top: 24px;
 }
 .preferences-saved {
   color: var(--primary);
 }
 @media (max-width: 640px) {
-  .preferences-summary {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .preferences-fields {
     grid-template-columns: 1fr;
   }

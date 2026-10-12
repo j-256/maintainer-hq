@@ -144,13 +144,11 @@ export function ProjectResourcesView({
     >
       <div className="resource-section-heading">
         <div>
-          <h2 ref={heading} tabIndex={-1}>
+          <h2 className="page-title" ref={heading} tabIndex={-1}>
+            <Icon size={22} aria-hidden="true" />
             {label}
           </h2>
-          <p>
-            Resources linked directly to this project or through its
-            repositories. Connection context alone does not include resources.
-          </p>
+          <p>Linked directly or through this project's repositories.</p>
         </div>
         <div className="resource-actions">
           <Button
@@ -225,11 +223,6 @@ export function ProjectResourcesView({
                     : ""}
                   .
                 </p>
-                <p className="hook-muted">
-                  {kind === "secret"
-                    ? "Enrolled resource metadata only. Open Secrets to inspect provider inventory; values are never shown."
-                    : "This link is not a health check. Open the provider view to inspect evidence; a removed resource may still be linked."}
-                </p>
                 <div className="resource-actions">
                   <Button asChild variant="outline">
                     <Link
@@ -257,6 +250,13 @@ export function ProjectResourcesView({
               </article>
             ))}
           </div>
+          {query.data.items.length ? (
+            <p className="hook-muted">
+              {kind === "secret"
+                ? "Enrolled metadata only. Open Secrets to inspect provider inventory; values are never shown."
+                : "Open a resource to inspect health evidence. Links may outlive removed resources."}
+            </p>
+          ) : null}
           {!query.data.items.length ? (
             <div className="empty-state">
               <Icon size={28} />
@@ -266,8 +266,7 @@ export function ProjectResourcesView({
                   : "No " + label.toLowerCase() + " linked"}
               </h3>
               <p>
-                Browse existing connections to associate a resource with this
-                project. Nothing is linked automatically.
+                Browse connections and choose resources to link to this project.
               </p>
             </div>
           ) : null}

@@ -61,7 +61,7 @@ test("metadata review validates files, preserves drafts, and recovers a lost app
       errors.push(message.text());
   });
   await page.goto("/settings/import?workspace=" + workspaceId);
-  await page.getByRole("button", { name: "Review metadata file" }).click();
+  await page.getByRole("button", { name: "Choose file" }).click();
   const dialog = page.getByRole("dialog");
   const input = dialog.getByLabel("Project metadata file", { exact: true });
   await expect(input).toBeFocused();
@@ -141,15 +141,15 @@ test("metadata review validates files, preserves drafts, and recovers a lost app
   await dialog.getByRole("button", { name: "Done", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByRole("heading", { name: "Bring your project metadata" }),
+    page.getByRole("heading", { name: "Import metadata" }),
   ).toBeFocused();
   await page.reload();
   const section = page.locator("section", {
-    has: page.getByRole("heading", { name: "Bring your project metadata" }),
+    has: page.getByRole("heading", { name: "Import metadata" }),
   });
   await expect(section.getByRole("status")).toContainText("Import complete");
   await expect(
-    section.getByRole("button", { name: "Review metadata file" }),
+    section.getByRole("button", { name: "Choose file" }),
   ).toHaveCount(0);
   const response = await request.post("/api/commands/repositories_list", {
     headers: { "X-HQ-Client": "cli" },
@@ -196,10 +196,19 @@ test("populated workspaces explain why import cannot overwrite their inventory",
   expect(enrolled.status()).toBe(200);
   await page.goto("/settings/import?workspace=development");
   const section = page.locator("section", {
-    has: page.getByRole("heading", { name: "Bring your project metadata" }),
+    has: page.getByRole("heading", { name: "Import metadata" }),
   });
-  await expect(section).toContainText("never merges or overwrites");
   await expect(
-    section.getByRole("button", { name: "Review metadata file" }),
+    section.getByText("Import requires an empty workspace.", { exact: true }),
+  ).toBeVisible();
+  await section
+    .locator("summary")
+    .filter({ hasText: "What gets imported" })
+    .click();
+  await expect(
+    section.getByText(/Existing records are never merged or overwritten/),
+  ).toBeVisible();
+  await expect(
+    section.getByRole("button", { name: "Choose file" }),
   ).toHaveCount(0);
 });
