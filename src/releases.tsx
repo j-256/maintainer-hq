@@ -111,6 +111,12 @@ export function RepositoryReleases({
     .filter((source) => source.repositoryIds.includes(repository.id));
   const source =
     sources.find((item) => item.id === params.get("releaseSource")) ??
+    sources.find(
+      (item) =>
+        item.enabled &&
+        item.credentialConfigured &&
+        item.github.configurationValid,
+    ) ??
     sources[0];
   const workspaceId = snapshot.workspace.id;
   const query = useQuery({
@@ -482,9 +488,28 @@ export function ProjectReleases({
   const [params, setParams] = useSearchParams();
   const repositories = snapshot.repositories
     .filter((item) => item.projectId === projectId)
-    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+    .sort(
+      (a, b) =>
+        Number(a.lifecycle === "archived") -
+          Number(b.lifecycle === "archived") ||
+        a.fullName.localeCompare(b.fullName),
+    );
+  const readySources = snapshot.connections
+    .filter(isGitHubSource)
+    .filter(
+      (source) =>
+        source.enabled &&
+        source.credentialConfigured &&
+        source.github.configurationValid,
+    );
   const selected =
     repositories.find((item) => item.id === params.get("releaseRepository")) ??
+    repositories.find(
+      (item) =>
+        item.lifecycle === "active" &&
+        readySources.some((source) => source.repositoryIds.includes(item.id)),
+    ) ??
+    repositories.find((item) => item.lifecycle === "active") ??
     repositories[0];
   return (
     <div className="project-release-workspace">
@@ -507,6 +532,7 @@ export function ProjectReleases({
               {repositories.map((item) => (
                 <SelectItem value={item.id} key={item.id}>
                   {item.fullName}
+                  {item.lifecycle === "archived" ? " (Archived)" : ""}
                 </SelectItem>
               ))}
             </SelectContent>

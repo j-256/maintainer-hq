@@ -11,6 +11,51 @@ import { mockHooks, HOOK_DELIVERY } from "./hooks-fixture";
 
 const URL = "/monitoring?workspace=development";
 test.use({ timezoneId: "America/New_York" });
+test("target search resets paging and evidence filters distinguish no matches from an empty configuration", async ({
+  page,
+}) => {
+  const state = await mockMonitoring(page);
+  state.configuration.targets.push({
+    ...MONITOR_TARGET,
+    id: "other-target",
+    url: "https://example.com/other",
+  });
+  await page.goto(URL);
+  await page
+    .getByRole("navigation", { name: "Targets pagination" })
+    .getByRole("button", { name: "Next", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "second-page", exact: true }),
+  ).toBeVisible();
+  const search = page.getByRole("textbox", { name: "Search monitor targets" });
+  await search.fill("synthetic-health");
+  await expect(
+    page.getByRole("heading", { name: MONITOR_TARGET.id, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "other-target", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    state.calls.filter((call) => call.name === "monitoring_targets").at(-1)!
+      .input,
+  ).toMatchObject({ cursor: null, search: "synthetic-health" });
+  await page.getByRole("combobox", { name: "Target evidence" }).click();
+  await page.getByRole("option", { name: "Check passed", exact: true }).click();
+  await expect(
+    page.getByText("No matching targets in this scan.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No targets configured", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Target evidence" }).click();
+  await page
+    .getByRole("option", { name: "No retained evidence", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: MONITOR_TARGET.id, exact: true }),
+  ).toBeVisible();
+});
 test("scheduler and target evidence age when provider reads fail and recover only from new evidence", async ({
   page,
 }) => {

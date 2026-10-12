@@ -1,4 +1,8 @@
-import type { MonitorObservedTarget, MonitorResult } from "./monitoring";
+import type {
+  MonitorObservedTarget,
+  MonitorResult,
+  MonitorTargetStatus,
+} from "./monitoring";
 
 function withinEvidenceWindow(
   observedAt: string | null,
@@ -56,4 +60,18 @@ export function monitorCheckState(
     return "stale";
   if (check.configurationMatches !== true) return "unobserved";
   return check.state;
+}
+
+export function monitorTargetStatusMatches(
+  evidence: MonitorObservedTarget["evidence"],
+  status: MonitorTargetStatus,
+  now: number,
+) {
+  if (status === "all") return true;
+  const state = monitorCheckState(evidence, now);
+  // A recovery probe does not resolve the provider's retained incident
+  if (evidence.incidentId) return status === "attention";
+  if (status === "attention")
+    return state !== "passed" && state !== "unobserved";
+  return state === status;
 }

@@ -13,6 +13,8 @@ Requests count calls actually started, including failed calls. List pages count 
 
 New refresh receipts also record bounded change categories against the previous accepted source observation. Comparison happens in the accepting database batch before that observation is replaced. A first observation, unchanged evidence, and a missing legacy comparison are different states. Completion summaries distinguish access/feature coverage gaps from credential rejection, runtime failures, and collection bounds; a fully collected result can still contain failing CI or security findings. Activity entries retain source attribution when the linked receipt expires. The receipt and Activity read contracts share workspace authorization across browser, CLI, and MCP.
 
+Search repository names within a receipt and choose **Changed**, **Needs attention**, or **All** results. Needs attention includes collection failures, access gaps, and cancellations; it does not turn failed CI into a collection failure. The initial filter prioritizes attention results, then changed results. Repository buttons in the summary clear the filters and move keyboard focus to that result. All retained results remain available through **All** or the same `github_refresh_get` read.
+
 API failures include a server-generated support reference. Browser and CLI messages preserve it; hosted MCP command failures include `error.reference`. HTTP API errors also carry `X-HQ-Support-Reference`. A reference identifies a failed request, not proof that a write was rolled back. Inspect durable receipts or saved revisions before retrying an interrupted operation, and reuse the same refresh/event ID when its acceptance is uncertain.
 
 Disabled sources, missing credentials, provider cooldowns, stale evidence, and overdue scheduling are distinct states. Schedule warnings use the workspace snapshot's server time and allow for bounded queue draining. A delay warning is a prompt to inspect progress, not proof that the collector is stuck. Browser closure does not stop hosted collection.
@@ -24,6 +26,7 @@ Inspect the exact serving Worker with Cloudflare Fleet first. In Workers Observa
 | Application event | Correlation and interpretation |
 | --- | --- |
 | `hq.request.failed` | `reference`, bounded `operation`, HTTP `status`, safe `classification`, and elapsed time |
+| `hq.monitoring.targets.limited` | `reference`, `workspaceId`, `connectionId`, inspected page and target counts, elapsed time, and the stopping reason identify a bounded search that can continue; target URLs and search text are excluded |
 | `hq.github.repository.started` | `refreshId`, `repositoryId`, `sourceId`, `workspaceId`, and server-generated `runId` identify the claimed attempt |
 | `hq.github.repository.completed` | The same identities plus collection status, `receiptRecorded`, `evidenceStored`, `capacityLimited`, and diagnostic counters; incomplete collection can occur inside an otherwise successful Worker invocation |
 | `hq.github.batch.completed` | `runId`, scheduled/background trigger, processed count, elapsed time, and stop reason |

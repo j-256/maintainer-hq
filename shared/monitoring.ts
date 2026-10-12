@@ -6,6 +6,9 @@ export const MONITOR_LIMITS = Object.freeze({
   PROVIDERS: 20,
   PAGE_SIZE: 50,
   TARGETS: 1000,
+  TARGET_SCAN_PAGES: 3,
+  TARGET_SCAN_MS: 15000,
+  TARGET_SEARCH_LENGTH: 160,
   PENDING_REVIEWS: 25,
   RESPONSE_BYTES: 2 * 1024 * 1024,
   PROVIDER_TIMEOUT_MS: 15000,
@@ -211,19 +214,56 @@ export const monitorConnectionFields = z
 export const monitorConnectionSaveInput = monitorConnectionInput
   .extend({ revision, connection: monitorConnectionFields })
   .strict();
-export const monitorTargetsInput = monitorConnectionInput
+const monitorPageInput = monitorConnectionInput
   .extend({ cursor: cursor.default(null) })
   .strict();
+export const MONITOR_TARGET_STATUS_LABELS = Object.freeze({
+  all: "All evidence",
+  attention: "Needs attention",
+  passed: "Check passed",
+  unobserved: "No retained evidence",
+});
+export const monitorTargetStatusSchema = z.enum([
+  "all",
+  "attention",
+  "passed",
+  "unobserved",
+]);
+export type MonitorTargetStatus = z.infer<typeof monitorTargetStatusSchema>;
+export const monitorTargetsInput = monitorPageInput
+  .extend({
+    search: z
+      .string()
+      .trim()
+      .max(MONITOR_LIMITS.TARGET_SEARCH_LENGTH)
+      .default(""),
+    status: monitorTargetStatusSchema.default("all"),
+    repositoryId: idSchema.nullable().default(null),
+  })
+  .strict();
+export const monitorTargetScanSchema = z
+  .object({
+    reference: z.uuid(),
+    pages: z.number().int().min(1).max(MONITOR_LIMITS.TARGET_SCAN_PAGES),
+    targets: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(MONITOR_LIMITS.PAGE_SIZE * MONITOR_LIMITS.TARGET_SCAN_PAGES),
+    stopReason: z.enum(["complete", "page", "page_limit", "time_limit"]),
+  })
+  .strict();
+export type MonitorTargetScan = z.infer<typeof monitorTargetScanSchema>;
 export const monitorTargetInput = monitorConnectionInput
   .extend({ targetId: monitorTargetId })
   .strict();
-export const monitorIncidentsInput = monitorTargetsInput
+export const monitorIncidentsInput = monitorPageInput
   .extend({
     status: z.enum(["open", "resolved", "all"]).default("open"),
     targetId: monitorTargetId.nullable().default(null),
   })
   .strict();
-export const monitorIncidentInput = monitorTargetsInput
+export const monitorIncidentInput = monitorPageInput
   .extend({ incidentId: monitorIdentity })
   .strict();
 export const monitorChangeSchema = z.discriminatedUnion("kind", [

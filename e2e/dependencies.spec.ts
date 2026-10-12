@@ -311,6 +311,36 @@ async function populated(
   );
   return { repository, state };
 }
+
+test("policy diagnostics identify the rule and resolution before linking to its override", async ({
+  page,
+  request,
+}) => {
+  const { repository, state } = await populated(page, request);
+  const f = dependencyFixture();
+  f.lock.packages["node_modules/decoder"]!.version = "1.0.2";
+  state.result.evidence!.report!.analysis = analyzeDependencyPolicy(
+    f.policy,
+    f.documents,
+    Date.parse("2026-09-10T00:00:00.000Z"),
+  );
+  await page.goto(
+    `/repositories/${repository.id}?workspace=${WORKSPACE}&section=dependencies`,
+  );
+  const notice = page.locator(".dependency-notice");
+  await expect(
+    notice.getByText("node_modules/runner", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    notice.getByText(/Expected reviewed replacement: 1.0.1/).first(),
+  ).toBeVisible();
+  await expect(notice.getByText(/Resolved: 1.0.2/).first()).toBeVisible();
+  await notice
+    .getByRole("link", { name: "View override decoder-advisory", exact: true })
+    .first()
+    .click();
+  await expect(page.locator(".dependency-finding")).toBeFocused();
+});
 const href = (repository: Repository) =>
   "/repositories/" +
   repository.id +

@@ -31,7 +31,11 @@ async function api<T>(
   expect(response.ok(), await response.text()).toBeTruthy();
   return response.json();
 }
-async function populated(page: Page, request: APIRequestContext) {
+async function populated(
+  page: Page,
+  request: APIRequestContext,
+  archivedFirst = false,
+) {
   const project = await api<Project>(request, "project_create", {
     name: "Release fixtures " + crypto.randomUUID(),
     description: "Synthetic release context",
@@ -45,7 +49,7 @@ async function populated(page: Page, request: APIRequestContext) {
           description: "Synthetic repository release context",
           projectId: project.id,
           classification: "watchlist",
-          lifecycle: "active",
+          lifecycle: archivedFirst && name === "first" ? "archived" : "active",
           expectations: DEFAULT_EXPECTATIONS,
         },
       }),
@@ -170,6 +174,73 @@ async function populated(page: Page, request: APIRequestContext) {
 }
 const href = (repo: Repository, section = "releases") =>
   `/repositories/${repo.id}?workspace=${WORKSPACE}&section=${section}`;
+test("project releases prefer an active repository and retain an explicit archived choice", async ({
+  page,
+  request,
+}) => {
+  const { project, repositories } = await populated(page, request, true);
+  await page.goto(
+    `/projects/${project.id}?workspace=${WORKSPACE}&section=releases`,
+  );
+  const selector = page.getByRole("combobox", {
+    name: "Project release repository",
+  });
+  await expect(selector).toContainText(repositories[1]!.fullName);
+  await selector.click();
+  await page
+    .getByRole("option", {
+      name: repositories[0]!.fullName + " (Archived)",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(
+    new RegExp("releaseRepository=" + repositories[0]!.id),
+  );
+  await page
+    .getByRole("navigation", { name: "Project sections" })
+    .getByRole("link", { name: "Overview", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Project sections" })
+    .getByRole("link", { name: "Releases", exact: true })
+    .click();
+  await expect(selector).toContainText(repositories[0]!.fullName);
+  await expect(page).toHaveURL(
+    new RegExp("releaseRepository=" + repositories[0]!.id),
+  );
+});
+test("release defaults prefer a ready source while retaining an explicit disabled source", async ({
+  page,
+  request,
+}) => {
+  const { state, project } = await populated(page, request);
+  state.sources.unshift({
+    ...state.sources[0]!,
+    id: "disabled-source",
+    name: "Disabled release source",
+    enabled: false,
+  });
+  await page.goto(
+    `/projects/${project.id}?workspace=${WORKSPACE}&section=releases`,
+  );
+  await expect
+    .poll(
+      () =>
+        state.calls.filter((call) => call.name === "repository_releases").at(-1)
+          ?.input.sourceId,
+    )
+    .toBe("release-fixture");
+  await page.goto(
+    `/projects/${project.id}?workspace=${WORKSPACE}&section=releases&releaseSource=disabled-source`,
+  );
+  await expect
+    .poll(
+      () =>
+        state.calls.filter((call) => call.name === "repository_releases").at(-1)
+          ?.input.sourceId,
+    )
+    .toBe("disabled-source");
+});
 for (const width of [1440, 390])
   for (const theme of ["light", "dark"]) {
     test(`release evidence is readable and bounded at ${width} ${theme}`, async ({

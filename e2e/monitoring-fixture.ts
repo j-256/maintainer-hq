@@ -17,6 +17,8 @@ import {
   type MonitorResult,
 } from "../shared/monitoring";
 import type { ResourceLinks } from "../shared/resource-links";
+import { monitorTargetStatusMatches } from "../shared/monitoring-freshness";
+import type { MonitorTargetStatus } from "../shared/monitoring";
 import { HOOK_CONNECTION, HOOK_DELIVERY } from "./hooks-fixture";
 
 export const MONITOR_TIME = "2026-09-06T10:00:00.000Z";
@@ -171,7 +173,7 @@ export async function mockMonitoring(
           status,
           json: { error: { code: "revision_conflict", message } },
         });
-      const envelope = (result: unknown) => ({
+      const envelope = <T>(result: T) => ({
         result,
         capabilities: options.viewer
           ? ["read"]
@@ -185,7 +187,7 @@ export async function mockMonitoring(
           items: items.map((target) => ({
             ...target,
             evidence: {
-              state: "unobserved",
+              state: "unobserved" as const,
               observedAt: null,
               incidentId: null,
               configurationMatches: null,
@@ -254,6 +256,36 @@ export async function mockMonitoring(
         case "monitoring_targets":
           if (state.failEvidenceRead)
             return fail("Synthetic evidence read failure", 503);
+          if (
+            input.search ||
+            input.repositoryId ||
+            (input.status && input.status !== "all")
+          ) {
+            const response = targets(state.configuration.targets, null);
+            const search = String(input.search ?? "").toLowerCase();
+            response.result.items = response.result.items.filter((item) => {
+              const ids = links("monitor", item.id).repositoryIds;
+              return (
+                (!input.repositoryId ||
+                  ids.includes(String(input.repositoryId))) &&
+                (!search ||
+                  item.id.includes(search) ||
+                  item.url.includes(search) ||
+                  MONITOR_REPOSITORIES.some(
+                    (repository) =>
+                      ids.includes(repository.id) &&
+                      repository.fullName.includes(search),
+                  )) &&
+                monitorTargetStatusMatches(
+                  item.evidence,
+                  (input.status ?? "all") as MonitorTargetStatus,
+                  Date.now(),
+                )
+              );
+            });
+            result = response;
+            break;
+          }
           result = input.cursor
             ? targets([{ ...MONITOR_TARGET, id: "second-page" }], null)
             : targets(state.configuration.targets, "synthetic-next-page");

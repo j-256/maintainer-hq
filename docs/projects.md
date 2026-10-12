@@ -54,6 +54,8 @@ The Projects inventory has search, lifecycle and Portfolio filters, Importance o
 
 Project metadata forms retain their drafts during pushed updates and failed saves. A changed revision requires deliberate recovery before another save. Project-list filters remain separate from embedded repository controls, so opening a repository and returning does not replace the project search. Read-only roles can inspect metadata but cannot save it.
 
+The Releases section defaults to an active repository with a configured GitHub source, then another active repository if no source is ready. Archived repositories remain available and are labeled in the picker. An explicit repository and source choice stays selected when navigating between sections of that project.
+
 Project sections subscribe only to their relevant app-view topics and record collections. The project inventory and repository section do not request Activity. Resource sections page through stored associations without provider fan-out; their links open the exact connection and target in the provider workspace. Project descriptors and repository grouping remain workspace-scoped so regrouping can remove an item from the previous project without relying on inferred tombstones. Provider controls disclose project context and can still affect resources shared outside that project.
 
 Importance orders the Overview attention list and is available as a repository inventory sort. Repository health continues to use evidence and expectations only. Portfolio review dates become overdue after the selected UTC calendar date; a due review adds an attention item, not a failed provider check.

@@ -35,6 +35,27 @@ const healthy: Observation = {
 };
 
 describe("Evidence-aware repository assessment", () => {
+  it("counts a punctuation-only source repetition once without hiding distinct failures", () => {
+    const observations = [
+      {
+        ...healthy,
+        health: "warning" as const,
+        summary: " CI is failing. ",
+        details: { ...healthy.details, ci: "failing" as const },
+      },
+      {
+        ...healthy,
+        sourceId: "other",
+        health: "warning" as const,
+        summary: "CI is failing on the release branch.",
+      },
+    ];
+    expect(assessRepository(repository, observations, NOW).reasons).toEqual([
+      "CI is failing",
+      "CI is failing on the release branch.",
+    ]);
+    expect(observations[0]!.summary).toBe(" CI is failing. ");
+  });
   it("never treats missing, unrelated, expired, or archived evidence as healthy", () => {
     expect(assessRepository(repository, [], NOW)).toMatchObject({
       health: "unknown",
