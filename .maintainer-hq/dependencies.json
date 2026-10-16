@@ -33,21 +33,6 @@
           "reviewedAt": "2026-09-29T15:34:50.000Z",
           "reviewBy": "2026-10-29T15:34:50.000Z",
           "removeWhen": "Remove the override after every installed Miniflare release stops requesting Undici 7.29.0, and the regenerated lockfile contains no Undici version affected by this advisory."
-        },
-        {
-          "id": "sharp-librsvg",
-          "lifecycle": "active",
-          "parent": "miniflare",
-          "package": "sharp",
-          "requested": "0.35.4",
-          "replacement": "0.35.5",
-          "advisory": "GHSA-wq5f-xc86-pv6w",
-          "vulnerable": "<0.35.5",
-          "reason": "Miniflare's local image tooling pins a Sharp release containing vulnerable native decoders. The replacement includes patched libheif and librsvg dependencies; the development and test toolchains must use it.",
-          "owner": "HQ maintainers",
-          "reviewedAt": "2026-10-08T16:00:00.000Z",
-          "reviewBy": "2026-11-07T16:00:00.000Z",
-          "removeWhen": "Remove the override after every installed Miniflare release stops requesting Sharp 0.35.4, and the regenerated lockfile contains no Sharp version affected by the librsvg advisory."
         }
       ]
     },
