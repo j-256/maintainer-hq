@@ -212,6 +212,7 @@ export function verifyGeneratedConfig(
     "dispatch_namespaces",
     "mtls_certificates",
     "pipelines",
+    "k2",
     "analytics_engine_datasets",
     "vectorize",
     "vpc_services",

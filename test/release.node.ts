@@ -60,6 +60,9 @@ test("generated config rejects merged databases, inherited schedules and unrevie
     rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
   };
   assert.doesNotThrow(() => verifyGeneratedConfig(config, fixture));
+  assert.doesNotThrow(() =>
+    verifyGeneratedConfig({ ...config, k2: [] }, fixture),
+  );
   assert.deepEqual(config.limits, {
     cpu_ms: 2000,
     subrequests: 1000,
@@ -73,6 +76,7 @@ test("generated config rejects merged databases, inherited schedules and unrevie
     { limits: { cpu_ms: 30_000, subrequests: 10_000 } },
     { vars: { ...config.vars, EXTRA: "unreviewed" } },
     { services: [{ binding: "UNREVIEWED", service: "other" }] },
+    { k2: [{ binding: "K2_STREAM", stream: "unexpected-stream" }] },
     { future_binding: {} },
     { env: { production: {} } },
     { assets: { ...config.assets, run_worker_first: false } },
