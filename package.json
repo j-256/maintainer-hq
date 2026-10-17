@@ -61,9 +61,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@cloudflare/vite-plugin": "1.62.5",
-    "@cloudflare/vitest-pool-workers": "0.22.0",
-    "@cloudflare/workers-types": "5.20261005.1",
+    "@cloudflare/vite-plugin": "1.63.1",
+    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@cloudflare/workers-types": "5.20261012.1",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.2",
@@ -77,13 +77,12 @@
     "typescript": "7.0.2",
     "vite": "8.3.0",
     "vitest": "4.1.11",
-    "wrangler": "4.147.0"
+    "wrangler": "4.149.0"
   },
   "overrides": {
     "miniflare": {
       "sharp@0.35.2": "0.35.5",
-      "undici@7.29.0": "7.29.1",
-      "sharp@0.35.4": "0.35.5"
+      "undici@7.29.0": "7.29.1"
     }
   }
 }
