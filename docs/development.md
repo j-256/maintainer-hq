@@ -39,6 +39,8 @@ Install a compatible test browser with `npx playwright install chromium`, or sel
 
 ## Build documentation
 
+The documentation site requires Node.js 22.22 or newer.
+
 ```bash
 npm --prefix site ci
 npm run docs:check
