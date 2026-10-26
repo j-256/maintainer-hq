@@ -118,6 +118,7 @@ import {
   githubRefreshListInput,
 } from "./github";
 import { githubCoverageInput } from "./github-coverage";
+import { repositoryCredentialCoverageInput } from "./repository-credential-coverage";
 import { releaseInput } from "./releases";
 import { workInput } from "./repository-work";
 import {
@@ -1155,6 +1156,13 @@ export const commands = {
     method: "repositoryAccess",
     title:
       "Explain live HQ operation gates and enrolled GitHub access without provider requests",
+    readOnly: true,
+  },
+  repository_credential_coverage: {
+    schema: repositoryCredentialCoverageInput,
+    method: "repositoryCredentialCoverage",
+    title:
+      "Read bounded aggregate repository credential availability without private values, provider requests or grants",
     readOnly: true,
   },
   workspace_attention: {

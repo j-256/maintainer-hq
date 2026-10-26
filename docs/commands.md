@@ -34,6 +34,7 @@ Discovery works without a running dashboard. The schema command is authoritative
 | Goal and progress reports | [Activity](activity.md) |
 | Saved repository coverage and latest collection results | [GitHub coverage](github.md) |
 | Read-only GitHub collection | [GitHub evidence](github-evidence.md) |
+| Inspect configured collection and repository-write credential coverage without credential values or provider calls | [Credential coverage](dependencies.md#inspect-repository-credential-coverage), `repository_credential_coverage` |
 | Override lifecycle, PR-head inspections, reviewed maintenance PRs and recovery | [Dependency maintenance](dependencies.md) |
 | Local observations | [Publishing](publishing.md) |
 | Invites, roles, and first-owner setup | [Access](access.md) |
