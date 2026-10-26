@@ -61,6 +61,7 @@ import { ResourceLinksService } from "./resource-links";
 import { repositoryContext } from "./repository-context";
 import { RepositoryCoverageService } from "./repository-coverage";
 import { repositoryAccess } from "./repository-access";
+import { repositoryCredentialCoverage } from "./repository-credential-coverage";
 import { MonitoringService } from "./monitoring";
 import { MonitoringOperations } from "./monitoring-operations";
 import { hookProviderReferences } from "./hook-client";
@@ -359,6 +360,9 @@ export class WorkspaceService {
 
   repositoryAccess(input: unknown) {
     return repositoryAccess(this, input);
+  }
+  repositoryCredentialCoverage(input: unknown) {
+    return repositoryCredentialCoverage(this, input);
   }
   resourceProject(input: unknown) {
     return new ProjectResourcesService(this).get(input);

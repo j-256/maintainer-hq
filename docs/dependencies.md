@@ -29,6 +29,16 @@ If an update makes an override unused, the lifecycle check can fail before that 
 
 PR evidence has a separate, bounded cache and does not replace the default-branch summary used by the fleet. One candidate is retained per source/repository enrollment, subject to the same read cooldown and shared credential budget. Changing the selected PR may require waiting for that cooldown. Reviews keep the PR number and target branch. A cleanup PR targets the upstream-update PR's head branch, so it proposes only the cleanup into that update; it does not independently propose the entire upstream update to the default branch.
 
+### Inspect repository credential coverage
+
+Use `repository_credential_coverage` through HTTP, CLI, or MCP to inspect configured access across enrolled repositories. Ordinary workspace readers and read-scoped automation clients can use this command. Obtain repository IDs with `repositories_list`, inspect the exact request with `npm run cli -- schema repository_credential_coverage`, then supply a workspace and unique repository IDs in a JSON input file. Larger inventories require separate bounded selections; a result covers only the requested repositories.
+
+Each result retains request order, a generation time, and safe repository identity. `collection` counts configured sources, disabled sources, sources with invalid configuration, and sources whose server credential is unavailable. Each source is counted once, with disabled taking precedence over invalid configuration and unavailable credentials. All-zero collection counts mean no enrolled GitHub source. `maintenance` counts matching active credentials as `configuredForWrites`, `readOnly`, `expired`, or `keyUnavailable`. Expiry takes precedence over missing keys, and a missing key takes precedence over a read-only setting. Retired credentials provide no active coverage. All-zero maintenance counts mean no active matching repository-maintenance credential.
+
+Both sections return `grant: "not_verified"`. Configuration and available encryption keys do not prove that GitHub grants Contents access or would accept a write. The command makes no provider requests, decrypts no tokens, exposes no credential names, IDs, references, values, keys, or other repositories' allowlists, and grants no permission. It requires live read authority before and after the metadata read; changed membership or configuration requires a fresh request. Unknown or inaccessible repository IDs fail the whole selection rather than returning partial coverage.
+
+The named limits in `shared/repository-credential-coverage.ts` cap selection, internal metadata, and response size. Reads batch metadata independently of the selected repository count and do not poll or schedule background work. See the [resource compatibility record](diagnostics.md#cloudflare-free-plan-compatibility) for independent platform costs. Credential management remains owner-only, and preparing or submitting reviewed changes still requires the existing operator and scoped provider-write authority.
+
 ### Configure repository write access
 
 A workspace owner opens **Dependencies > Manage write access > Add provider access**. Choose a name, exact repository allowlist, an HQ cutoff no later than the token's expiry, and whether reviewed writes are allowed. Use a dedicated fine-grained GitHub credential with Contents and Pull requests write permissions for those repositories. Review the scope before entering the token through the separate private-input form. HQ's allowlist and cutoff restrict its use; they do not grant GitHub permissions, extend token lifetime, or revoke the upstream token.
@@ -122,6 +132,10 @@ Repository writes require `0034_repository_credentials.sql`, which widens the cr
 HQ's development and test Miniflare dependencies request Sharp `0.35.2` and `0.35.4`. The lifecycle policy replaces both requests with `0.35.5`, which includes patched native decoders for [the libheif advisory](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c) and [the librsvg advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w). HQ does not invoke the affected local image-transformation paths, and the native tooling is absent from its deployed Worker bundle. This reduces production exposure but does not justify leaving the development toolchain vulnerable.
 
 Do not use a forceful audit fix that downgrades the Cloudflare toolchain. The policy and matching native lock packages must change together. Regenerate and verify the lockfile through npm, then exercise the complete application checks before integrating a toolchain update.
+
+## Cloudflare toolchain parsing
+
+Miniflare's Undici requests are scoped to `7.30.1` to address the [response content-encoding crash](https://github.com/advisories/GHSA-xjj6-f33q-929c). The Workers test adapter's Zod request is scoped to `4.6.7` for the [collection-validation memory exhaustion advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). These temporary overrides retain the selected Cloudflare toolchain versions. Keep their exact selectors and lifecycle records aligned, regenerate the lockfile through npm, and verify the audit, application tests, release build, and cover capture before integration. Remove each override only when its installed parent adopts a patched dependency and the lockfile verifies adoption.
 
 ## Documentation selector parsing
 
