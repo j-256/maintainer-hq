@@ -133,6 +133,10 @@ HQ's development and test Miniflare dependencies request Sharp `0.35.2` and `0.3
 
 Do not use a forceful audit fix that downgrades the Cloudflare toolchain. The policy and matching native lock packages must change together. Regenerate and verify the lockfile through npm, then exercise the complete application checks before integrating a toolchain update.
 
+## Cloudflare toolchain parsing
+
+Miniflare's Undici requests are scoped to `7.30.1` to address the [response content-encoding crash](https://github.com/advisories/GHSA-xjj6-f33q-929c). The Workers test adapter's Zod request is scoped to `4.6.7` for the [collection-validation memory exhaustion advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). These temporary overrides retain the selected Cloudflare toolchain versions. Keep their exact selectors and lifecycle records aligned, regenerate the lockfile through npm, and verify the audit, application tests, release build, and cover capture before integration. Remove each override only when its installed parent adopts a patched dependency and the lockfile verifies adoption.
+
 ## Documentation selector parsing
 
 The documentation toolchain overrides `postcss-nested`'s `postcss-selector-parser` request with `7.1.6` for [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf). The parser's [version 7 change](https://github.com/postcss/postcss-selector-parser/releases/tag/v7.0.0) makes insertion during iteration safe. Keep the scoped override and its lifecycle record aligned, and verify nested CSS processing and the documentation checks when changing it.
