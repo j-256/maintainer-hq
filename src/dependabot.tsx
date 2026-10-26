@@ -1,3 +1,18 @@
+import {
+  useDependabotDrag,
+  DependabotDragPreview,
+  type DependabotMoveSelection,
+} from "./dependabot-drag";
+import {
+  DependabotWeekOverview,
+  DependabotDayTimeline,
+} from "./dependabot-timeline";
+import {
+  type DependabotDraft as Draft,
+  entryKey,
+  stale,
+  draftMatches,
+} from "./lib/dependabot-view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -14,18 +29,14 @@ import {
   DEPENDABOT_LIMITS as LIMITS,
   dependabotPageSchema,
   dependabotResultSchema,
-  dependabotScheduleLabel,
   validDependabotTimezone,
-  type DependabotEdit,
   type DependabotEntry,
   type DependabotInventoryRow,
 } from "../shared/dependabot";
 import {
-  DEPENDABOT_NOTICE_LABELS,
   projectDependabotSchedules,
   type DependabotOccurrence,
 } from "../shared/dependabot-projection";
-import { githubRepositoryUrl } from "../shared/github-context";
 import type { DependabotChangeReview } from "../shared/dependabot-changes";
 import { command, RequestError } from "./lib/api";
 import { COORDINATED_QUERY_OPTIONS } from "./lib/workspace-query-refresh";
@@ -34,11 +45,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { DiscardDialog, useCloseGuard } from "./source-editor";
 import { DependabotEditor, scheduleMembers } from "./dependabot-editor";
-import {
-  DependabotPrepare,
-  DependabotSavedReview,
-  DependabotHistory,
-} from "./dependabot-review";
+import { DependabotPrepare, DependabotSavedReview } from "./dependabot-review";
 import "./dependabot.css";
 
 type Inventory = {
@@ -48,47 +55,6 @@ type Inventory = {
   issue: string;
 };
 const EMPTY_ROWS: DependabotInventoryRow[] = [];
-type Draft = { head: string; digest: string; edits: DependabotEdit[] };
-const entryKey = (row: DependabotInventoryRow, entry: DependabotEntry) =>
-  row.repository.id + ":" + entry.id;
-function stale(row: DependabotInventoryRow, now: number) {
-  const observed = row.result?.evidence?.observedAt;
-  return (
-    !observed ||
-    Date.parse(observed) > now ||
-    now - Date.parse(observed) >= LIMITS.CACHE_MS
-  );
-}
-function draftMatches(row: DependabotInventoryRow, draft: Draft | undefined) {
-  return Boolean(
-    draft &&
-    row.result?.evidence?.headSha === draft.head &&
-    row.result?.evidence?.file?.digest === draft.digest,
-  );
-}
-function rowState(row: DependabotInventoryRow, now: number) {
-  if (!row.source) return "No GitHub source";
-  const result = row.result,
-    e = result?.evidence;
-  if (!e)
-    return result?.state === "disabled"
-      ? "Source disabled"
-      : result?.state === "not_configured"
-        ? "Read access unavailable"
-        : "Not inspected";
-  if (e.read.state !== "observed")
-    return "Read unavailable: " + e.read.reason.replaceAll("_", " ");
-  if (e.configuration !== "present")
-    return {
-      missing: "No Dependabot file",
-      ambiguous: "Both YAML filenames exist",
-      malformed: "Malformed YAML",
-      unsupported: "Unsupported configuration",
-      limited: "Inspection limit reached",
-      unknown: "Configuration unknown",
-    }[e.configuration];
-  return stale(row, now) ? "Stale observation" : "Observed";
-}
 function byKey<T extends { key: string }>(items: T[]) {
   const grouped = new Map<string, T[]>();
   for (const item of items) {
@@ -347,6 +313,70 @@ export function DependabotView({
     next.set(name, value);
     setParams(next, { preventScrollReset: true });
   }
+  function saveSchedule(
+    row: DependabotInventoryRow,
+    entry: DependabotEntry,
+    schedule: NonNullable<DependabotEntry["schedule"]>,
+  ) {
+    setDrafts((old) => {
+      const edits = (
+        draftMatches(row, old[row.repository.id])
+          ? old[row.repository.id]!.edits
+          : []
+      ).filter((edit) => edit.entryId !== entry.id);
+      if (JSON.stringify(schedule) !== JSON.stringify(entry.schedule))
+        edits.push({ entryId: entry.id, schedule });
+      const next = { ...old };
+      if (edits.length)
+        next[row.repository.id] = {
+          head: row.result!.evidence!.headSha!,
+          digest: row.result!.evidence!.file!.digest,
+          edits,
+        };
+      else delete next[row.repository.id];
+      return next;
+    });
+  }
+  const dragContext = useMemo(
+    () => ({ window, data, search, onlyOverlaps, planId }),
+    [window, data, search, onlyOverlaps, planId],
+  );
+  const drag = useDependabotDrag({
+    timeZone: zone,
+    context: dragContext,
+    onCommit: (selection, result) => {
+      saveSchedule(selection.row, selection.entry, result.schedule);
+      if (mode === "day" && result.date !== date)
+        change("scheduleDate", result.date);
+    },
+    onOpen: (selection, target) => show(selection.row, selection.entry, target),
+  });
+  const liveInputs = useMemo(() => {
+    const candidate = drag.preview;
+    if (!candidate?.result.ok) return draftInputs;
+    const { schedule } = candidate.result;
+    return draftInputs.map((input) =>
+      input.key === candidate.selection.key ? { ...input, schedule } : input,
+    );
+  }, [draftInputs, drag.preview]);
+  const live = useMemo(
+    () =>
+      drag.preview?.result.ok
+        ? projectDependabotSchedules(liveInputs, {
+            date: drag.preview.result.date,
+            mode: "day",
+            timeZone: zone,
+          })
+        : null,
+    [liveInputs, drag.preview?.result, zone],
+  );
+  const liveOverlap =
+    live?.occurrences.find(
+      (item) =>
+        item.key === drag.preview?.selection.key &&
+        item.instant ===
+          (drag.preview?.result.ok ? drag.preview.result.instant : null),
+    )?.overlap ?? 0;
   function show(
     row: DependabotInventoryRow,
     entry: DependabotEntry,
@@ -491,34 +521,74 @@ export function DependabotView({
     entry: DependabotEntry,
     item: DependabotOccurrence,
     draft = false,
+    card = false,
   ) {
     const label = `${draft ? "Draft" : "Observed"} ${scheduleMembers(entry)} ${Temporal.Instant.from(item.instant).toZonedDateTimeISO(zone).toPlainDate().toString()} ${clock.format(new Date(item.instant))} ${zone}${item.overlap > 1 ? `, ${item.overlap} starts at the same UTC minute` : ""}${item.stale ? ", stale observation" : ""}`;
+    const schedule =
+      (draft
+        ? drafts[row.repository.id]?.edits.find(
+            (edit) => edit.entryId === entry.id,
+          )?.schedule
+        : undefined) ?? entry.schedule;
+    const selection: DependabotMoveSelection = {
+      key: entryKey(row, entry),
+      row,
+      entry,
+      occurrence: item,
+      schedule,
+      draft,
+    };
     return (
       <button
         key={item.instant}
         type="button"
-        className={`schedule-marker${draft ? " is-draft" : ""}${item.overlap > 1 ? " has-overlap" : ""}${item.stale ? " is-stale" : ""}`}
-        style={{ left: `${item.position * 100}%` }}
+        className={`schedule-marker${card ? " schedule-week-marker" : " schedule-time-block"}${draft ? " is-draft" : ""}${item.overlap > 1 ? " has-overlap" : ""}${item.stale ? " is-stale" : ""}`}
+        style={card ? undefined : { left: `${item.position * 100}%` }}
         aria-label={label}
         title={label}
-        onClick={(event) => show(row, entry, event.currentTarget)}
+        {...drag.handlers(selection)}
       >
-        <span className="schedule-desktop-symbol" aria-hidden="true">
-          {draft ? "D" : item.overlap > 1 ? item.overlap : ""}
+        <span className="schedule-block-time">
+          {clock.format(new Date(item.instant))}
         </span>
-        <span className="schedule-mobile-label">
-          {mode === "week"
-            ? Temporal.PlainDate.from(date)
-                .add({ days: item.day })
-                .toLocaleString("en", { weekday: "short", day: "numeric" }) +
-              " "
-            : ""}
-          {clock.format(new Date(item.instant))} {draft ? "Draft" : "Observed"}
-          {item.overlap > 1 ? ` / ${item.overlap} starts` : ""}
+        {card ? (
+          <span className="schedule-block-member">
+            {scheduleMembers(entry)}
+          </span>
+        ) : null}
+        <span className="schedule-block-kind">
+          {draft ? "Draft" : "Observed"}
         </span>
+        {item.overlap > 1 ? (
+          <span className="schedule-block-overlap">{item.overlap} starts</span>
+        ) : null}
       </button>
     );
   }
+  function selectDay(value: string) {
+    const next = new URLSearchParams(params);
+    next.set("scheduleDate", value);
+    next.set("scheduleMode", "day");
+    setParams(next, { preventScrollReset: true });
+  }
+  const timelineProps = {
+    workspaceId,
+    rows: visible,
+    drafts,
+    now,
+    operator,
+    date,
+    timeZone: zone,
+    observed: observedByKey,
+    activeDate: drag.preview?.result.ok ? drag.preview.result.date : undefined,
+    preview: previewByKey,
+    notices: noticeByKey,
+    onDay: selectDay,
+    onPrepare: setPreparing,
+    onDiscard: removeDraft,
+    onShow: show,
+    block: marker,
+  };
   return (
     <section
       className="dependencies-view schedule-view"
@@ -731,222 +801,20 @@ export function DependabotView({
               Nominal starts; execution may vary. Drafts stay in this tab.
             </span>
           </div>
-          <div
-            className="schedule-timeline"
-            role="region"
-            aria-label="Repository schedule timeline"
-          >
-            <div className="schedule-axis">
-              <span>Repository / ecosystem</span>
-              <div>
-                {Array.from({ length: mode === "week" ? 7 : 4 }, (_, index) => (
-                  <span key={index}>
-                    {mode === "week" ? (
-                      <button
-                        type="button"
-                        className="schedule-day-zoom"
-                        aria-label={
-                          "View " +
-                          Temporal.PlainDate.from(date)
-                            .add({ days: index })
-                            .toLocaleString("en", {
-                              weekday: "long",
-                              month: "long",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                        }
-                        onClick={() => {
-                          const next = new URLSearchParams(params);
-                          next.set(
-                            "scheduleDate",
-                            Temporal.PlainDate.from(date)
-                              .add({ days: index })
-                              .toString(),
-                          );
-                          next.set("scheduleMode", "day");
-                          setParams(next, { preventScrollReset: true });
-                        }}
-                      >
-                        {Temporal.PlainDate.from(date)
-                          .add({ days: index })
-                          .toLocaleString("en", {
-                            weekday: "short",
-                            day: "numeric",
-                          })}
-                      </button>
-                    ) : (
-                      String(index * 6).padStart(2, "0") + ":00"
-                    )}
-                  </span>
-                ))}
-              </div>
-            </div>
-            {visible.map((row) => {
-              const draft = drafts[row.repository.id],
-                valid = draftMatches(row, draft),
-                entries = row.result?.evidence?.entries ?? [];
-              return (
-                <article
-                  key={row.repository.id}
-                  className="schedule-repository"
-                  data-schedule-repository={row.repository.id}
-                >
-                  <div className="schedule-repository-heading">
-                    <strong>{row.repository.fullName}</strong>
-                    <span
-                      className={
-                        stale(row, now) ? "schedule-stale" : "dependency-meta"
-                      }
-                    >
-                      {rowState(row, now)}
-                    </span>
-                    {row.result?.evidence ? (
-                      <time
-                        className="dependency-meta"
-                        dateTime={row.result.evidence.observedAt}
-                      >
-                        Read {dates.dateTime(row.result.evidence.observedAt)}
-                      </time>
-                    ) : null}
-                    {row.result?.nextReadAt &&
-                    Date.parse(row.result.nextReadAt) > now ? (
-                      <span className="dependency-meta">
-                        Next read {dates.dateTime(row.result.nextReadAt)}
-                      </span>
-                    ) : null}
-                    {draft ? (
-                      <div className="dependency-change-actions">
-                        <span>
-                          {valid ? "Local draft" : "Draft evidence changed"}
-                        </span>
-                        <Button
-                          size="sm"
-                          disabled={!valid || !operator || stale(row, now)}
-                          onClick={() => setPreparing(row)}
-                        >
-                          Review changes
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => removeDraft(row.repository.id)}
-                        >
-                          Discard draft
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                  {entries.map((entry) => {
-                    const key = entryKey(row, entry),
-                      edit = valid
-                        ? draft?.edits.find((edit) => edit.entryId === entry.id)
-                        : undefined;
-                    return (
-                      <div key={entry.id} className="schedule-entry">
-                        <div className="schedule-entry-label">
-                          <Button
-                            variant="link"
-                            onClick={(event) =>
-                              show(row, entry, event.currentTarget)
-                            }
-                          >
-                            {scheduleMembers(entry)}
-                          </Button>
-                          <span className="dependency-meta">
-                            {dependabotScheduleLabel(entry.schedule)}
-                          </span>
-                          {noticeByKey.get(key)?.map((notice) => (
-                            <span key={notice.code} className="dependency-meta">
-                              {DEPENDABOT_NOTICE_LABELS[notice.code]}
-                            </span>
-                          ))}
-                        </div>
-                        <div
-                          className={`schedule-lane ${mode === "day" ? "is-day" : ""}`}
-                        >
-                          {(observedByKey.get(key) ?? []).map((item) =>
-                            marker(row, entry, item),
-                          )}
-                          {edit
-                            ? (previewByKey.get(key) ?? []).map((item) =>
-                                marker(row, entry, item, true),
-                              )
-                            : null}
-                          {edit && !previewByKey.get(key)?.length ? (
-                            <span className="schedule-draft-note">
-                              Draft: {dependabotScheduleLabel(edit.schedule)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <ul
-                    className="schedule-mobile-starts"
-                    aria-label={row.repository.fullName + " starts"}
-                  >
-                    {entries
-                      .flatMap((entry) => [
-                        ...(observedByKey.get(entryKey(row, entry)) ?? []).map(
-                          (item) => ({ entry, item, draft: false }),
-                        ),
-                        ...(valid &&
-                        draft?.edits.some((edit) => edit.entryId === entry.id)
-                          ? (previewByKey.get(entryKey(row, entry)) ?? []).map(
-                              (item) => ({ entry, item, draft: true }),
-                            )
-                          : []),
-                      ])
-                      .sort(
-                        (a, b) =>
-                          a.item.instant.localeCompare(b.item.instant) ||
-                          Number(a.draft) - Number(b.draft),
-                      )
-                      .map(({ entry, item, draft }) => (
-                        <li key={entry.id + item.instant + draft}>
-                          <span>{scheduleMembers(entry)}</span>
-                          {marker(row, entry, item, draft)}
-                        </li>
-                      ))}
-                  </ul>
-                  {!entries.length ? (
-                    <p className="dependency-meta schedule-empty">
-                      {row.result?.evidence?.configuration === "missing" ? (
-                        <>
-                          Create Dependabot configuration in this repository to
-                          add a schedule.{" "}
-                          <a
-                            className="quiet-link"
-                            href={githubRepositoryUrl(row.repository.fullName)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open repository on GitHub
-                          </a>
-                        </>
-                      ) : (
-                        <>
-                          {rowState(row, now)}. Refresh to inspect through an
-                          enrolled GitHub source.
-                        </>
-                      )}
-                    </p>
-                  ) : null}
-                  {!operator ? (
-                    <p className="dependency-meta">
-                      A workspace operator can prepare a pull request.
-                    </p>
-                  ) : (
-                    <DependabotHistory
-                      workspaceId={workspaceId}
-                      repositoryId={row.repository.id}
-                    />
-                  )}
-                </article>
-              );
-            })}
-          </div>
+          <p className="dependency-meta schedule-move-help">
+            Drag times in 15-minute steps. Changes apply to the recurring
+            schedule.
+          </p>
+          <span className="sr-only" id="schedule-move-instructions">
+            Click to edit. Space picks up a block; Left and Right change time;
+            Alt with Left or Right changes the day of a weekly schedule. Enter
+            saves the local draft; Escape cancels. You can also use the form.
+          </span>
+          {mode === "week" ? (
+            <DependabotWeekOverview {...timelineProps} />
+          ) : (
+            <DependabotDayTimeline key={date + zone} {...timelineProps} />
+          )}
           {!query.isPending && data && !visible.length ? (
             <p role="status">No repositories match this view.</p>
           ) : null}
@@ -967,27 +835,9 @@ export function DependabotView({
           repository={editing.row.repository.fullName}
           returnFocus={editing.focus}
           onClose={() => setEditing(null)}
-          onSave={(schedule) => {
-            const { row, entry } = editing;
-            setDrafts((old) => {
-              const edits = (
-                draftMatches(row, old[row.repository.id])
-                  ? old[row.repository.id]!.edits
-                  : []
-              ).filter((edit) => edit.entryId !== entry.id);
-              if (JSON.stringify(schedule) !== JSON.stringify(entry.schedule))
-                edits.push({ entryId: entry.id, schedule });
-              const next = { ...old };
-              if (edits.length)
-                next[row.repository.id] = {
-                  head: row.result!.evidence!.headSha!,
-                  digest: row.result!.evidence!.file!.digest,
-                  edits,
-                };
-              else delete next[row.repository.id];
-              return next;
-            });
-          }}
+          onSave={(schedule) =>
+            saveSchedule(editing.row, editing.entry, schedule)
+          }
         />
       ) : null}
       {preparing ? (
@@ -1006,6 +856,18 @@ export function DependabotView({
           }}
         />
       ) : null}
+      <DependabotDragPreview
+        drag={drag}
+        overlap={liveOverlap}
+        incomplete={
+          !coverage ||
+          Boolean(live?.limited) ||
+          Boolean(
+            live?.notices.some((notice) => notice.code !== "outside_range"),
+          )
+        }
+      />
+      {drag.announcement ? <p role="status">{drag.announcement}</p> : null}
       {!editing ? (
         <DraftNavigationGuard
           dirty={Object.keys(drafts).length > 0}

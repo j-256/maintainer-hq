@@ -5,6 +5,7 @@ import { dependabotBrowserRows } from "./dependabot-fixture";
 import { type DependabotChangeReview } from "../shared/dependabot-changes";
 import { type DependabotOperation } from "../shared/dependabot-operations";
 import { mockWorkspaceView } from "./workspace-fixture";
+import type { Locator } from "@playwright/test";
 
 const DIGEST = "sha256:" + "b".repeat(64),
   SHA = "a".repeat(40);
@@ -468,11 +469,9 @@ for (const edit of ["unknown time", "dense cron", "unmatched identity"])
           .click();
       }
       await expect(
-        page
-          .getByRole("status")
-          .filter({
-            hasText: /Proposed overlap comparison is (incomplete|undetermined)/,
-          }),
+        page.getByRole("status").filter({
+          hasText: /Proposed overlap comparison is (incomplete|undetermined)/,
+        }),
       ).toBeVisible();
     },
   );
@@ -527,4 +526,336 @@ test("week dates zoom to a day and missing configuration links to its repository
       .locator('[data-schedule-repository="schedule-0"]')
       .getByRole("link", { name: "Open repository on GitHub" }),
   ).toHaveAttribute("href", "https://github.com/example/alpha");
+});
+
+async function dayEditor(page: Page) {
+  await page
+    .getByRole("button", { name: "View Monday, October 26, 2026" })
+    .click();
+  await expect(page.getByLabel("View", { exact: true })).toHaveValue("day");
+  const row = page.locator('[data-schedule-repository="schedule-0"]');
+  return {
+    row,
+    block: row.getByRole("button", { name: /Observed.*08:00/ }),
+    lane: row.locator("[data-schedule-hour-lane]"),
+  };
+}
+async function startMove(page: Page, block: Locator) {
+  await block.scrollIntoViewIfNeeded();
+  const box = await block.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  return box!;
+}
+test("week groups by weekday and opens a detailed quarter-hour day", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.goto(href);
+  const monday = page.getByRole("region", {
+    name: "Monday, October 26, 2026",
+    exact: true,
+  });
+  await expect(monday).toBeVisible();
+  await expect(
+    monday.getByText("example/alpha", { exact: true }),
+  ).toBeVisible();
+  await dayEditor(page);
+  await expect(
+    page.getByRole("list", { name: "Hours in UTC" }).getByRole("listitem"),
+  ).toHaveCount(24);
+  await expect(
+    page.getByRole("button", { name: "View Tuesday, October 27, 2026" }),
+  ).toBeVisible();
+});
+test("pointer movement snaps with a live time above the block and drops only a draft", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.goto(href);
+  const { row, block, lane } = await dayEditor(page);
+  await startMove(page, block);
+  const box = await lane.boundingBox();
+  await page.mouse.move(
+    box!.x + (box!.width * 566) / 1440,
+    box!.y + box!.height / 2,
+    { steps: 12 },
+  );
+  const label = page.locator(".schedule-drag-time");
+  await expect(label).toContainText("09:30 UTC");
+  const bubble = await label.boundingBox(),
+    ghost = await page.locator(".schedule-drag-block").boundingBox();
+  expect(bubble!.y + bubble!.height).toBeLessThanOrEqual(ghost!.y);
+  await page.mouse.up();
+  await expect(row.getByRole("button", { name: /Draft.*09:30/ })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(state.calls).not.toContain("dependabot_change_plan");
+  expect(state.calls).not.toContain("dependabot_change_apply");
+});
+test("a weekly block moves across days from the detailed day and preserves its time", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.goto(href);
+  const { block } = await dayEditor(page);
+  await startMove(page, block);
+  const target = await page
+    .locator('[data-schedule-drop-date="2026-10-27"]')
+    .boundingBox();
+  await page.mouse.move(
+    target!.x + target!.width / 2,
+    target!.y + target!.height / 2,
+    { steps: 12 },
+  );
+  await expect(page.locator(".schedule-drag-time")).toContainText("Tue");
+  await expect(page.locator(".schedule-drag-time")).toContainText("08:00 UTC");
+  await page.mouse.up();
+  await expect(page.getByLabel("Starting date")).toHaveValue("2026-10-27");
+  const row = page.locator('[data-schedule-repository="schedule-0"]');
+  await expect(row.getByRole("button", { name: /Draft.*08:00/ })).toBeVisible();
+  await row.getByRole("button", { name: "Review changes" }).click();
+  await page.getByRole("button", { name: "Prepare review" }).click();
+  expect(state.review!.edits[0]!.schedule).toEqual({
+    interval: "weekly",
+    day: "tuesday",
+    time: "08:00",
+  });
+});
+test("keyboard moves can be canceled or committed without opening the editor", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.goto(href);
+  const { row, block } = await dayEditor(page);
+  await block.focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".schedule-drag-time")).toContainText("08:15 UTC");
+  await page.keyboard.press("Escape");
+  await expect(row.getByRole("button", { name: /Draft/ })).toHaveCount(0);
+  await block.focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Alt+ArrowRight");
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Starting date")).toHaveValue("2026-10-27");
+  await expect(
+    page
+      .locator('[data-schedule-repository="schedule-0"]')
+      .getByRole("button", { name: /Draft.*08:15/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(state.calls).not.toContain("dependabot_change_plan");
+});
+test("pointer Escape cancels and a normal click still opens the form", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.goto(href);
+  const { row, block, lane } = await dayEditor(page);
+  await startMove(page, block);
+  const box = await lane.boundingBox();
+  await page.mouse.move(
+    box!.x + (box!.width * 555) / 1440,
+    box!.y + box!.height / 2,
+    { steps: 8 },
+  );
+  await expect(page.locator(".schedule-drag-time")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(row.getByRole("button", { name: /Draft/ })).toHaveCount(0);
+  await block.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("a repository keeps unprojectable entries visible beside its scheduled entries", async ({ page }) => {
+  const state = await fixture(page);
+  const entry = structuredClone(state.rows[2]!.result!.evidence!.entries[0]!);
+  entry.id = DIGEST + ":update:1";
+  state.rows[0]!.result!.evidence!.entries.push(entry);
+  await page.goto(href);
+  await expect(page.getByRole("region", { name: "Unplaced schedules" }).getByText("example/alpha", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Unplaced schedules" }).getByText("Time assigned by GitHub", { exact: true }).first()).toBeVisible();
+});
+
+test("leaving a grabbed block cancels the keyboard move", async ({ page }) => {
+  await fixture(page);
+  await page.goto(href);
+  const { row, block } = await dayEditor(page);
+  await block.focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".schedule-drag-time")).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".schedule-drag-time")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: /Draft/ })).toHaveCount(0);
+});
+
+test("Escape suppresses the canceled pointer click until the next gesture", async ({ page }) => {
+  await fixture(page);
+  await page.goto(href);
+  const { block } = await dayEditor(page);
+  const box = await startMove(page, block);
+  await page.mouse.move(box.x + box.width / 2 + 10, box.y + box.height / 2);
+  await expect(page.locator(".schedule-drag-time")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await block.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("week cards move to another weekday without opening its day", async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto(href);
+  const block = page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: /Observed/ });
+  await startMove(page, block);
+  const target = (await page.locator('[data-schedule-drop-date="2026-10-27"]').boundingBox())!;
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+  await expect(page.locator(".schedule-drag-time")).toContainText("Tue, Oct 27 08:00 UTC");
+  await page.mouse.up();
+  await expect(page.getByLabel("View", { exact: true })).toHaveValue("week");
+  await expect(page.getByRole("region", { name: "Tuesday, October 27, 2026", exact: true }).getByRole("button", { name: /Draft.*08:00/ })).toBeVisible();
+  expect(state.calls).not.toContain("dependabot_change_plan");
+});
+
+test("overlap stays allowed during a filtered live move", async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto(href);
+  const { row, block } = await dayEditor(page);
+  await page.getByLabel("Find a repository").fill("alpha");
+  await block.focus();
+  await page.keyboard.press("Space");
+  await expect(page.locator(".schedule-drag-time")).toContainText("3 starts at the same minute; overlap allowed.");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".schedule-drag-time")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: /Observed.*3 starts/ })).toBeVisible();
+  expect(state.calls).not.toContain("dependabot_change_apply");
+});
+
+test.describe("touch scheduling", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test("touch moves a block on the hourly lane without page overflow", async ({ page }) => {
+    const state = await fixture(page);
+    await page.goto(href);
+    const { row, block, lane } = await dayEditor(page);
+    await block.scrollIntoViewIfNeeded();
+    const box = (await block.boundingBox())!, track = (await lane.boundingBox())!;
+    const client = await page.context().newCDPSession(page);
+    const touch = (x: number, y: number) => [{ x, y, id: 1 }];
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touch(box.x + box.width / 2, box.y + box.height / 2) });
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touch(track.x + track.width * 555 / 1440, box.y + box.height / 2) });
+    await expect(page.locator(".schedule-drag-time")).toContainText("09:15 UTC");
+    await client.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+    await expect(page.locator(".schedule-drag-time")).toHaveCount(0);
+    await expect(row.getByRole("button", { name: /Draft/ })).toHaveCount(0);
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touch(box.x + box.width / 2, box.y + box.height / 2) });
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touch(track.x + track.width * 555 / 1440, box.y + box.height / 2) });
+    await expect(page.locator(".schedule-drag-time")).toContainText("09:15 UTC");
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect(row.getByRole("button", { name: /Draft.*09:15/ })).toBeAttached();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(state.calls).not.toContain("dependabot_change_apply");
+  });
+});
+
+for (const theme of ["light", "dark"])
+  test(`${theme} hourly day and grabbed preview remain accessible on mobile`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript((value) => localStorage.setItem("hq.theme.v1", value), theme);
+    await fixture(page);
+    await page.goto(href);
+    const { block } = await dayEditor(page);
+    await block.focus();
+    await page.keyboard.press("Space");
+    await page.keyboard.press("ArrowRight");
+    const label = (await page.locator(".schedule-drag-time").boundingBox())!;
+    expect(label.x).toBeGreaterThanOrEqual(0);
+    expect(label.y).toBeGreaterThanOrEqual(0);
+    expect(label.x + label.width).toBeLessThanOrEqual(390);
+    expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+    await page.keyboard.press("Escape");
+  });
+
+test("off-center pointer pickup preserves the clock and applies only horizontal displacement", async ({ page }) => {
+  await fixture(page);
+  await page.goto(href);
+  const { row, block, lane } = await dayEditor(page);
+  await block.scrollIntoViewIfNeeded();
+  const box = (await block.boundingBox())!;
+  const track = (await lane.boundingBox())!;
+  const x = box.x + box.width / 2 + 24;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 5);
+  await expect(page.locator(".schedule-drag-time")).toContainText("08:00 UTC");
+  await page.mouse.up();
+  await expect(row.getByRole("button", { name: /Draft/ })).toHaveCount(0);
+  const again = (await block.boundingBox())!;
+  const nextX = again.x + again.width / 2 + 24;
+  const nextY = again.y + again.height / 2;
+  await page.mouse.move(nextX, nextY);
+  await page.mouse.down();
+  await page.mouse.move(nextX + track.width * 15 / 1440, nextY + 5);
+  await expect(page.locator(".schedule-drag-time")).toContainText("08:15 UTC");
+  await page.mouse.up();
+  await expect(row.getByRole("button", { name: /Draft.*08:15/ })).toBeVisible();
+});
+
+test.describe("touch movement continuity", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test("off-center touch pickup preserves the clock until horizontal movement", async ({ page }) => {
+    await fixture(page);
+    await page.goto(href);
+    const { row, block, lane } = await dayEditor(page);
+    await block.scrollIntoViewIfNeeded();
+    const box = (await block.boundingBox())!;
+    const track = (await lane.boundingBox())!;
+    const client = await page.context().newCDPSession(page);
+    const x = box.x + box.width / 2 + 24;
+    const y = box.y + box.height / 2;
+    const touch = (left: number, top: number) => [{ x: left, y: top, id: 1 }];
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touch(x, y) });
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touch(x, y + 5) });
+    await expect(page.locator(".schedule-drag-time")).toContainText("08:00 UTC");
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touch(x + track.width * 15 / 1440, y + 5) });
+    await expect(page.locator(".schedule-drag-time")).toContainText("08:15 UTC");
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect(row.getByRole("button", { name: /Draft.*08:15/ })).toBeInViewport({ ratio: 1 });
+  });
+  for (const earlyObserved of [false, true])
+    test(`cross-day touch reveals the exact moved draft with early observation ${earlyObserved}`, async ({ page }) => {
+      const state = await fixture(page);
+      if (earlyObserved)
+        state.rows[1]!.result!.evidence!.entries[0]!.schedule = {
+          interval: "weekly", day: "tuesday", time: "00:15",
+        };
+      await page.goto(href);
+      const { block } = await dayEditor(page);
+      await block.scrollIntoViewIfNeeded();
+      const box = (await block.boundingBox())!;
+      const target = (await page.locator('[data-schedule-drop-date="2026-10-27"]').boundingBox())!;
+      const client = await page.context().newCDPSession(page);
+      const touch = (x: number, y: number) => [{ x, y, id: 1 }];
+      await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touch(box.x + box.width / 2, box.y + box.height / 2) });
+      await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touch(target.x + target.width / 2, target.y + target.height / 2) });
+      await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await expect(page.getByLabel("Starting date")).toHaveValue("2026-10-27");
+      const row = page.locator('[data-schedule-repository="schedule-0"]');
+      const draft = row.getByRole("button", { name: /Draft.*08:00/ });
+      await expect(draft).toBeInViewport({ ratio: 1 });
+      const next = (await draft.boundingBox())!;
+      const lane = (await row.locator("[data-schedule-hour-lane]").boundingBox())!;
+      const x = next.x + next.width / 2;
+      const y = next.y + next.height / 2;
+      await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touch(x, y) });
+      await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touch(x + lane.width * 15 / 1440, y) });
+      await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await expect(row.getByRole("button", { name: /Draft.*08:15/ })).toBeInViewport({ ratio: 1 });
+      expect(state.calls).not.toContain("dependabot_change_apply");
+    });
 });
