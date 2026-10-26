@@ -148,6 +148,7 @@ export function releaseOverrides(profile: ReleaseProfile) {
     workers_dev: false,
     preview_urls: false,
     send_metrics: false,
+    upload_source_maps: false,
     limits: RELEASE_WORKER_LIMITS,
     routes: [],
     durable_objects: {
@@ -182,6 +183,7 @@ export function verifyGeneratedConfig(
     "workers_dev",
     "preview_urls",
     "send_metrics",
+    "upload_source_maps",
     "limits",
     "triggers",
     "vars",

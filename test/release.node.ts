@@ -87,6 +87,22 @@ test("generated config rejects merged databases, inherited schedules and unrevie
     );
 });
 
+test("release config requires disabled source-map uploads", () => {
+  const config = {
+    ...portableConfig(fixture),
+    upload_source_maps: false,
+    main: "index.js",
+    rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
+  };
+  assert.doesNotThrow(() => verifyGeneratedConfig(config, fixture));
+  for (const value of [true, undefined, "false", null])
+    assert.throws(
+      () =>
+        verifyGeneratedConfig({ ...config, upload_source_maps: value }, fixture),
+      /Generated configuration differs from the reviewed profile: upload_source_maps/,
+    );
+});
+
 test("private monitoring bindings are exact reviewed authority alongside hooks", () => {
   const enabled = releaseProfileSchema.parse({
     ...fixture,

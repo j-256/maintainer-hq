@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -33,6 +33,23 @@ test(
       profile,
       review,
       artifact,
+    );
+    const workerOutput = join(process.cwd(), "dist", "maintainer_hq");
+    for (const config of [
+      join(workerOutput, "wrangler.json"),
+      join(artifact, "wrangler.json"),
+    ])
+      assert.equal(
+        JSON.parse(await readFile(config, "utf8")).upload_source_maps,
+        false,
+      );
+    assert.equal(
+      (await readdir(workerOutput)).some((name) => name.endsWith(".map")),
+      false,
+    );
+    assert.doesNotMatch(
+      await readFile(join(artifact, "worker.js"), "utf8"),
+      /\/\/[#@]\s*sourceMappingURL=/,
     );
     assert.equal(
       (await verifyArtifact(artifact, review, receipt.artifactFingerprint))

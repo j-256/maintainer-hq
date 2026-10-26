@@ -35,6 +35,8 @@ jobs:
         run: npm run check
       - name: Install the cover browser
         run: npx playwright install chromium
+      - name: Verify portable release
+        run: npm run test:release
       - name: Verify cover capture diagnostics
         run: npm run test:cover
       - name: Build and capture the project cover
