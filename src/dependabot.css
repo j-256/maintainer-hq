@@ -407,3 +407,19 @@
     grid-row: 2;
   }
 }
+
+.schedule-day-zoom {
+  min-height: 2rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 0.2em;
+}
+.schedule-day-zoom:hover {
+  text-decoration-color: var(--foreground);
+}
+.schedule-day-zoom:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.2rem;
+}

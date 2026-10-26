@@ -11,7 +11,7 @@ const DIGEST = "sha256:" + "b".repeat(64),
 const href =
   "/dependencies?workspace=development&view=schedules&scheduleDate=2026-10-26&scheduleZone=UTC";
 async function fixture(page: Page, writable = true, operator = true) {
-  const rows=dependabotBrowserRows();
+  const rows = dependabotBrowserRows();
   const state = {
     rows,
     review: null as DependabotChangeReview | null,
@@ -21,6 +21,7 @@ async function fixture(page: Page, writable = true, operator = true) {
     refreshDelay: 0,
     changedPages: false,
     rejectInventory: 0,
+    reviewDenied: false,
   };
   await mockWorkspaceView(page, (s) => ({
     ...s,
@@ -93,7 +94,17 @@ async function fixture(page: Page, writable = true, operator = true) {
       return route.fulfill({ json: state.review });
     }
     if (name === "dependabot_change_review")
-      return route.fulfill({ json: state.review });
+      return state.reviewDenied
+        ? route.fulfill({
+            status: 404,
+            json: {
+              error: {
+                code: "not_found",
+                message: "Review belongs to another actor",
+              },
+            },
+          })
+        : route.fulfill({ json: state.review });
     if (name === "dependabot_operations_list")
       return route.fulfill({
         json: {
@@ -421,4 +432,99 @@ test("an overlap remains allowed through draft review and one grouped schedule s
     page.getByRole("link", { name: "Pull request #42" }),
   ).toBeVisible();
   expect(state.review!.changes).toHaveLength(1);
+});
+
+for (const edit of ["unknown time", "dense cron", "unmatched identity"])
+  test(
+    "saved reviews qualify overlap coverage for " + edit,
+    async ({ page }) => {
+      const state = await fixture(page);
+      state.rows.splice(2);
+      await page.goto(href);
+      const alpha = page.locator('[data-schedule-repository="schedule-0"]');
+      await alpha.getByRole("button", { name: /Observed/ }).click();
+      if (edit === "dense cron") {
+        await page
+          .getByRole("combobox", { name: "Interval", exact: true })
+          .selectOption("cron");
+        await page.getByLabel("Cron expression").fill("* * * * *");
+      } else
+        await page
+          .getByLabel("Time", { exact: true })
+          .fill(edit === "unknown time" ? "" : "09:30");
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await alpha.getByRole("button", { name: "Review changes" }).click();
+      await page.getByRole("button", { name: "Prepare review" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Saved schedule review" }),
+      ).toBeVisible();
+      if (edit === "unmatched identity") {
+        state.rows[0]!.result!.evidence!.entries[0]!.id =
+          "sha256:" + "e".repeat(64) + ":update:0";
+        state.rows[0]!.result!.evidence!.file!.digest =
+          "sha256:" + "e".repeat(64);
+        await page
+          .getByRole("button", { name: "Reload list", exact: true })
+          .click();
+      }
+      await expect(
+        page
+          .getByRole("status")
+          .filter({
+            hasText: /Proposed overlap comparison is (incomplete|undetermined)/,
+          }),
+      ).toBeVisible();
+    },
+  );
+test("another operator can inspect a history receipt without the original review authority", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.goto(href);
+  const alpha = page.locator('[data-schedule-repository="schedule-0"]');
+  await alpha.getByRole("button", { name: /Observed/ }).click();
+  await page.getByLabel("Time", { exact: true }).fill("09:30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await alpha.getByRole("button", { name: "Review changes" }).click();
+  await page.getByRole("button", { name: "Prepare review" }).click();
+  await page.getByRole("button", { name: "Create pull request" }).click();
+  await expect(
+    page.getByRole("link", { name: "Pull request #42" }),
+  ).toBeVisible();
+  state.reviewDenied = true;
+  await page.getByRole("button", { name: "Back to timeline" }).click();
+  await alpha.getByRole("button", { name: "PR history" }).click();
+  await alpha.getByRole("button", { name: /succeeded/ }).click();
+  await page.reload();
+  await expect(
+    page.getByRole("link", { name: "Pull request #42" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Check GitHub outcome" }),
+  ).toHaveCount(0);
+  expect(
+    state.calls.filter((name) => name === "dependabot_change_apply"),
+  ).toHaveLength(1);
+});
+test("week dates zoom to a day and missing configuration links to its repository", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  const e = state.rows[0]!.result!.evidence!;
+  e.configuration = "missing";
+  e.file = null;
+  e.entries = [];
+  await page.goto(href);
+  const day = page.getByRole("button", {
+    name: "View Tuesday, October 27, 2026",
+  });
+  await expect(day).toBeVisible();
+  await day.click();
+  await expect(page.getByLabel("View", { exact: true })).toHaveValue("day");
+  await expect(page.getByLabel("Starting date")).toHaveValue("2026-10-27");
+  await expect(
+    page
+      .locator('[data-schedule-repository="schedule-0"]')
+      .getByRole("link", { name: "Open repository on GitHub" }),
+  ).toHaveAttribute("href", "https://github.com/example/alpha");
 });

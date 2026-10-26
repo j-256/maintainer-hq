@@ -13,7 +13,7 @@ import {
   type DependabotEdit,
   type DependabotInventoryRow,
 } from "../shared/dependabot";
-import { command } from "./lib/api";
+import { command, RequestError } from "./lib/api";
 import { COORDINATED_QUERY_OPTIONS } from "./lib/workspace-query-refresh";
 import { Button } from "./components/ui/button";
 import {
@@ -174,12 +174,14 @@ export function DependabotSavedReview({
   now,
   overlaps,
   onSubmitted,
+  repositoryName,
 }: {
   workspaceId: string;
   planId: string;
   now: number;
   overlaps: (review: DependabotChangeReview) => string;
   onSubmitted: (repositoryId: string) => void;
+  repositoryName: (repositoryId: string) => string | undefined;
 }) {
   const [params, setParams] = useSearchParams();
   const cache = useQueryClient(),
@@ -218,6 +220,13 @@ export function DependabotSavedReview({
   });
   const r = review.error ? undefined : review.data,
     op = receipt.error ? undefined : receipt.data;
+  const sharedReceipt = Boolean(
+    !r &&
+    op &&
+    review.error instanceof RequestError &&
+    review.error.status === 404,
+  );
+  const repository = op ? repositoryName(op.repositoryId) : undefined;
   async function apply() {
     if (busy || attempted || !r) return;
     setAttempted(true);
@@ -289,7 +298,14 @@ export function DependabotSavedReview({
       {review.isPending ? (
         <p role="status">Loading saved review...</p>
       ) : review.error ? (
-        <p role="alert">{review.error.message}</p>
+        sharedReceipt ? (
+          <p>
+            Only the original identity can open this saved review. Its
+            authorized operation receipt is shown below.
+          </p>
+        ) : (
+          <p role="alert">{review.error.message}</p>
+        )
       ) : null}
       {r ? (
         <>
@@ -367,6 +383,31 @@ export function DependabotSavedReview({
             variant="outline"
             disabled={busy}
             onClick={() => void receipt.refetch()}
+          >
+            Check saved receipt
+          </Button>
+        </>
+      ) : null}
+      {sharedReceipt && op ? (
+        <>
+          {repository ? (
+            <DependencyOperationView
+              label="Schedule operation outcome"
+              operation={op}
+              repository={repository}
+              now={now}
+              busy={busy}
+            />
+          ) : (
+            <p role="status">
+              Recorded outcome: {op.status}. Operation reference: {op.id}. Open
+              the workspace timeline to locate its repository links.
+            </p>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => void receipt.refetch()}
+            disabled={busy}
           >
             Check saved receipt
           </Button>

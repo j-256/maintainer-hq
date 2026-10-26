@@ -135,12 +135,15 @@ export function projectDependabotSchedules(
           .toZonedDateTime(zone, { disambiguation: "reject" })
           .toInstant();
       } catch {
+        const earlier = nominal
+          .toZonedDateTime(zone, { disambiguation: "earlier" })
+          .toInstant();
+        const later = nominal
+          .toZonedDateTime(zone, { disambiguation: "later" })
+          .toInstant();
         if (
-          Temporal.PlainDate.compare(nominal.toPlainDate(), date) >= 0 &&
-          Temporal.PlainDate.compare(
-            nominal.toPlainDate(),
-            date.add({ days }),
-          ) < 0
+          Temporal.Instant.compare(earlier, end) < 0 &&
+          Temporal.Instant.compare(later, start) >= 0
         )
           notice("dst_uncertain");
         continue;

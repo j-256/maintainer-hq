@@ -25,6 +25,7 @@ import {
   projectDependabotSchedules,
   type DependabotOccurrence,
 } from "../shared/dependabot-projection";
+import { githubRepositoryUrl } from "../shared/github-context";
 import type { DependabotChangeReview } from "../shared/dependabot-changes";
 import { command, RequestError } from "./lib/api";
 import { COORDINATED_QUERY_OPTIONS } from "./lib/workspace-query-refresh";
@@ -438,12 +439,19 @@ export function DependabotView({
         )),
   );
   function reviewOverlap(review: DependabotChangeReview) {
+    const currentKeys = new Set(inputs.map((input) => input.key));
+    const repository = rows.find(
+      (row) => row.repository.id === review.basis.repository.id,
+    );
     if (
-      !inputs.some((input) =>
-        input.key.startsWith(review.basis.repository.id + ":"),
+      !repository ||
+      repository.result?.evidence?.file?.digest !== review.basis.file.digest ||
+      review.edits.some(
+        (edit) =>
+          !currentKeys.has(review.basis.repository.id + ":" + edit.entryId),
       )
     )
-      return "The reviewed repository is outside the loaded comparison. Overlaps have not been determined.";
+      return "Proposed overlap comparison is undetermined. The reviewed schedules do not match the loaded observation. Refresh and prepare a fresh review.";
     const projected = projectDependabotSchedules(
       inputs.map((input) => {
         const edit = review.edits.find(
@@ -463,7 +471,10 @@ export function DependabotView({
         )
         .map((item) => Math.floor(Date.parse(item.instant) / 60000)),
     ).size;
-    return `${count} proposed overlapping start minutes in this view against observed schedules. Overlaps are allowed.${coverage ? "" : " Coverage is incomplete; additional overlaps may exist."}`;
+    const incomplete =
+      projected.limited ||
+      projected.notices.some((notice) => notice.code !== "outside_range");
+    return `${count} proposed overlapping start minutes in this view against observed schedules. Overlaps are allowed.${incomplete ? " Proposed overlap comparison is incomplete; unknown times or projection limits may conceal additional overlaps." : coverage ? "" : " Coverage is incomplete; additional overlaps may exist."}`;
   }
   const clock = useMemo(
     () =>
@@ -692,6 +703,9 @@ export function DependabotView({
             now={now}
             overlaps={reviewOverlap}
             onSubmitted={removeDraft}
+            repositoryName={(id) =>
+              rows.find((row) => row.repository.id === id)?.repository.fullName
+            }
           />
         ) : (
           <p role="status">
@@ -727,14 +741,43 @@ export function DependabotView({
               <div>
                 {Array.from({ length: mode === "week" ? 7 : 4 }, (_, index) => (
                   <span key={index}>
-                    {mode === "week"
-                      ? Temporal.PlainDate.from(date)
+                    {mode === "week" ? (
+                      <button
+                        type="button"
+                        className="schedule-day-zoom"
+                        aria-label={
+                          "View " +
+                          Temporal.PlainDate.from(date)
+                            .add({ days: index })
+                            .toLocaleString("en", {
+                              weekday: "long",
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                        }
+                        onClick={() => {
+                          const next = new URLSearchParams(params);
+                          next.set(
+                            "scheduleDate",
+                            Temporal.PlainDate.from(date)
+                              .add({ days: index })
+                              .toString(),
+                          );
+                          next.set("scheduleMode", "day");
+                          setParams(next, { preventScrollReset: true });
+                        }}
+                      >
+                        {Temporal.PlainDate.from(date)
                           .add({ days: index })
                           .toLocaleString("en", {
                             weekday: "short",
                             day: "numeric",
-                          })
-                      : String(index * 6).padStart(2, "0") + ":00"}
+                          })}
+                      </button>
+                    ) : (
+                      String(index * 6).padStart(2, "0") + ":00"
+                    )}
                   </span>
                 ))}
               </div>
@@ -869,8 +912,25 @@ export function DependabotView({
                   </ul>
                   {!entries.length ? (
                     <p className="dependency-meta schedule-empty">
-                      {rowState(row, now)}. Refresh to inspect through an
-                      enrolled GitHub source.
+                      {row.result?.evidence?.configuration === "missing" ? (
+                        <>
+                          Create Dependabot configuration in this repository to
+                          add a schedule.{" "}
+                          <a
+                            className="quiet-link"
+                            href={githubRepositoryUrl(row.repository.fullName)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open repository on GitHub
+                          </a>
+                        </>
+                      ) : (
+                        <>
+                          {rowState(row, now)}. Refresh to inspect through an
+                          enrolled GitHub source.
+                        </>
+                      )}
                     </p>
                   ) : null}
                   {!operator ? (

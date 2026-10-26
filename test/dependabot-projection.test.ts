@@ -114,6 +114,33 @@ describe("Dependabot dated nominal starts", () => {
       code: "dst_uncertain",
     });
   });
+  it.each([
+    ["2026-10-31", "01:30"],
+    ["2026-03-07", "02:30"],
+  ])(
+    "keeps cross-date DST uncertainty in the %s display window",
+    (date, time) => {
+      const result = projectDependabotSchedules(
+        [
+          {
+            key: "uncertain",
+            schedule: {
+              interval: "weekly",
+              day: "sunday",
+              time,
+              timezone: "America/New_York",
+            },
+          },
+        ],
+        { date, mode: "day", timeZone: "Pacific/Honolulu" },
+      );
+      expect(result.occurrences).toHaveLength(0);
+      expect(result.notices).toContainEqual({
+        key: "uncertain",
+        code: "dst_uncertain",
+      });
+    },
+  );
   it("bounds cron expansion and preserves natural expressions as unprojectable", () => {
     const result = projectDependabotSchedules(
       [
