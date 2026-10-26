@@ -170,8 +170,21 @@ import {
 } from "./hooks";
 
 import { repositoryCoverageInput } from "./repository-coverage";
+import { dependabotInspectionInput, dependabotListInput } from "./dependabot";
 
 export const commands = {
+  dependabot_schedules: {
+    schema: dependabotListInput,
+    method: "dependabotSchedules",
+    title: "List retained Dependabot schedule observations without provider calls",
+    readOnly: true,
+  },
+  repository_dependabot: {
+    schema: dependabotInspectionInput,
+    method: "repositoryDependabot",
+    title: "Read or explicitly inspect the fixed Dependabot configuration through a bounded authorized GitHub source",
+    readOnly: true,
+  },
   dependency_change_apply: {
     schema: dependencyChangeApplyInput,
     method: "dependencyChangeApply",
@@ -1332,6 +1345,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "repository_releases",
         "repository_work",
         "repository_dependencies",
+        "repository_dependabot",
         "dependency_operation_reconcile",
         "provider_credential_verify",
         "hooks_snapshot",

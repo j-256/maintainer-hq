@@ -5,6 +5,7 @@ import { DEPENDENCIES_LIMITS } from "../shared/dependencies";
 import { dependencyOperationSchema } from "../shared/dependency-operations";
 import { HOOK_INVENTORY_LIMIT_REASONS } from "../shared/coverage-evidence";
 import { monitorTargetScanSchema } from "../shared/monitoring";
+import { dependabotEvidenceSchema } from "../shared/dependabot";
 
 const identity = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const elapsed = z.number().int().nonnegative().max(86400000);
@@ -16,6 +17,20 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  z
+    .object({
+      event: z.literal("hq.dependabot.inspected"),
+      reference: z.uuid(),
+      workspaceId: identity,
+      sourceId: identity,
+      repositoryId: identity,
+      state: contextReadSchema.shape.state,
+      reason: contextReadSchema.shape.reason,
+      configuration: dependabotEvidenceSchema.shape.configuration,
+      requests: dependabotEvidenceSchema.shape.requests,
+      elapsedMs: elapsed,
+    })
+    .strict(),
   monitorTargetScanSchema
     .extend({
       event: z.literal("hq.monitoring.targets.limited"),

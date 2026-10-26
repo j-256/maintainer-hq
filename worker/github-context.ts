@@ -40,6 +40,7 @@ const CACHE_TABLES = Object.freeze({
   work: "github_work_cache",
   dependencies: "github_dependency_cache",
   dependencyCandidates: "github_dependency_candidate_cache",
+  dependabot: "github_dependabot_cache",
 });
 
 export async function readGitHubContext<T extends { retryAt: string | null }>(
@@ -85,6 +86,15 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
       .prepare(SCOPE + ` AND ${actor.sql}`)
       .bind(...keys, ...actor.values)
       .first<Scope>();
+    if (
+      context.principal.expiresAt !== undefined &&
+      context.principal.expiresAt <= context.now()
+    )
+      throw new DomainError(
+        "unauthorized",
+        "Renew your workspace sign-in before reading repository evidence",
+        401,
+      );
     if (!row) {
       await authorizeHooks(context, workspaceId);
       throw new DomainError(
@@ -121,13 +131,15 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
     nextReadAt: string | null,
     stored: string | null,
   ): Promise<GitHubContextResult<T>> {
-    const latest = await scope();
+    const catalog = context.env.GITHUB_CREDENTIALS;
     const latestCredential = await githubCredentialIdentity(
       context.env,
       workspaceId,
-      latest.credential_ref,
+      original.credential_ref,
     );
+    const latest = await scope();
     if (
+      catalog !== context.env.GITHUB_CREDENTIALS ||
       JSON.stringify(latest) !== JSON.stringify(original) ||
       latestCredential?.hash !== credential?.hash
     )
@@ -330,7 +342,6 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
       "The repository read expired or its source changed. Reload this evidence.",
       409,
     );
-  const result = await finish("ready", next, stored);
   await deliverWorkspacePush(context.env, workspaceId);
-  return result;
+  return finish("ready", next, stored);
 }

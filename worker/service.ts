@@ -40,6 +40,7 @@ import { githubCoverage } from "./github-coverage";
 import { readReleases } from "./releases";
 import { readRepositoryWork } from "./repository-work";
 import { listDependencies, readRepositoryDependencies } from "./dependencies";
+import { listDependabotSchedules, readRepositoryDependabot } from "./dependabot";
 import { DependencyChanges } from "./dependency-changes";
 import { dependencyWriteAccess } from "./dependency-credentials";
 import { DependencyOperations } from "./dependency-operations";
@@ -135,6 +136,8 @@ function repositoryFromRow(row: RepositoryRow): Repository {
 }
 
 export class WorkspaceService {
+  dependabotSchedules(input: unknown) { return listDependabotSchedules(this, input); }
+  repositoryDependabot(input: unknown) { return readRepositoryDependabot(this, input); }
   dependencyChangeApply(input: unknown) { return new DependencyOperations(this).apply(input); }
   dependencyOperationGet(input: unknown) { return new DependencyOperations(this).get(input); }
   dependencyOperationReconcile(input: unknown) { return new DependencyOperations(this).reconcile(input); }

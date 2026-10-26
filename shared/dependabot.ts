@@ -27,7 +27,7 @@ export const DEPENDABOT_LIMITS = Object.freeze({
   DIRECTORIES: 16,
   YAML_NODES: 4096,
   TREE_ENTRIES: 10000,
-  REQUESTS: 4,
+  REQUESTS: 5,
   PAGE_SIZE: 10,
   INVENTORY_REPOSITORIES: 500,
   REFRESH_CONCURRENCY: 2,
@@ -171,7 +171,28 @@ export const dependabotEvidenceSchema = z
       .nullable(),
     entries: z.array(dependabotEntrySchema).max(DEPENDABOT_LIMITS.ENTRIES),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const observed = value.read.state === "observed";
+    const completeIdentity = Boolean(
+      value.branch && value.headSha && value.treeSha,
+    );
+    if (
+      (observed && !completeIdentity) ||
+      (value.configuration === "present" &&
+        (!observed || !value.file || !value.entries.length)) ||
+      (value.configuration !== "present" && value.entries.length > 0) ||
+      (!observed && (value.file !== null || value.entries.length > 0)) ||
+      (value.file &&
+        value.entries.some(
+          (entry) => !entry.id.startsWith(value.file!.digest + ":"),
+        ))
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Dependabot observation identity or state is inconsistent",
+      });
+  });
 export type DependabotEvidence = z.infer<typeof dependabotEvidenceSchema>;
 export const dependabotResultSchema = githubContextResultSchema
   .extend({ evidence: dependabotEvidenceSchema.nullable() })
@@ -198,6 +219,7 @@ export type DependabotInventoryRow = z.infer<
 >;
 export const dependabotPageSchema = z
   .object({
+    revision: z.number().int().nonnegative(),
     page: z.number().int().positive(),
     pageSize: z.literal(DEPENDABOT_LIMITS.PAGE_SIZE),
     total: z.number().int().nonnegative(),
