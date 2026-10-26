@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "./test-fixture";
 import AxeBuilder from "@axe-core/playwright";
 import { CAPABILITY } from "../shared/domain";
-import { dependabotBrowserRows } from "./dependabot-fixture";
+import { dependabotBrowserRows, dependabotFleetBrowserRows } from "./dependabot-fixture";
 import { type DependabotChangeReview } from "../shared/dependabot-changes";
 import { type DependabotOperation } from "../shared/dependabot-operations";
 import { mockWorkspaceView } from "./workspace-fixture";
@@ -18,6 +18,7 @@ async function fixture(page: Page, writable = true, operator = true) {
     review: null as DependabotChangeReview | null,
     operation: null as DependabotOperation | null,
     calls: [] as string[],
+    inventoryPages: [] as number[],
     lose: false,
     refreshDelay: 0,
     changedPages: false,
@@ -46,6 +47,7 @@ async function fixture(page: Page, writable = true, operator = true) {
           },
         });
       const pageNumber = input.page ?? 1;
+      state.inventoryPages.push(pageNumber);
       return route.fulfill({
         json: {
           revision: state.changedPages && pageNumber > 1 ? 2 : 1,
@@ -859,3 +861,20 @@ test.describe("touch movement continuity", () => {
       expect(state.calls).not.toContain("dependabot_change_apply");
     });
 });
+
+for (const width of [1440, 390])
+  test(`fleet-sized schedules load every page and populate the week at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await fixture(page);
+    state.rows.splice(0, state.rows.length, ...dependabotFleetBrowserRows());
+    await page.goto(href);
+    await expect(page.getByText(/55 of 55 repositories/)).toBeVisible();
+    expect([...new Set(state.inventoryPages)].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+    const days = page.locator(".schedule-week-day");
+    await expect(days).toHaveCount(7);
+    for (const day of await days.all())
+      expect(await day.getByRole("button", { name: /Observed/ }).count()).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "View Wednesday, October 28, 2026" }).click();
+    await expect.poll(() => page.locator(".schedule-time-block").count()).toBeGreaterThan(7);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
