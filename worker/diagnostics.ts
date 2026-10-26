@@ -90,7 +90,7 @@ const diagnosticSchema = z.discriminatedUnion("event", [
     .strict(),
   z
     .object({
-      event: z.literal("hq.dependencies.operation"),
+      event: z.enum(["hq.dependencies.operation","hq.dependabot.operation"]),
       action: z.enum(["submit", "reconcile"]),
       reference: z.uuid(),
       workspaceId: identity,
@@ -189,7 +189,7 @@ export function emitDiagnostic(event: Diagnostic) {
     else if (
       (value.event === "hq.hooks.setup" &&
         (value.state !== "installed" || !value.linked)) ||
-      (value.event === "hq.dependencies.operation" &&
+      ((value.event === "hq.dependencies.operation" || value.event === "hq.dependabot.operation") &&
         value.status !== "succeeded") ||
       (value.event === "hq.dependencies.inspected" &&
         (value.state !== "observed" ||

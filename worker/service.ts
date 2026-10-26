@@ -1,3 +1,5 @@
+import { DependabotChanges } from "./dependabot-changes";
+import { DependabotOperations } from "./dependabot-operations";
 import { credentialIsCurrentSql } from "./credential-expiry";
 import { HookSetup } from "./hook-setup";
 import { ExpectationReviews } from "./expectation-review";
@@ -136,6 +138,13 @@ function repositoryFromRow(row: RepositoryRow): Repository {
 }
 
 export class WorkspaceService {
+  dependabotChangePlan(input:unknown) { return new DependabotChanges(this).plan(input); }
+  dependabotChangeReview(input:unknown) { return new DependabotChanges(this).review(input); }
+  dependabotChangeApply(input:unknown) { return new DependabotOperations(this).apply(input); }
+  dependabotOperationGet(input:unknown) { return new DependabotOperations(this).get(input); }
+  dependabotOperationReconcile(input:unknown) { return new DependabotOperations(this).reconcile(input); }
+  dependabotOperationsList(input:unknown) { return new DependabotOperations(this).list(input); }
+
   dependabotSchedules(input: unknown) { return listDependabotSchedules(this, input); }
   repositoryDependabot(input: unknown) { return readRepositoryDependabot(this, input); }
   dependencyChangeApply(input: unknown) { return new DependencyOperations(this).apply(input); }

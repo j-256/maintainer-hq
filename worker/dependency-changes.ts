@@ -17,8 +17,8 @@ import { dependencyHash } from "./dependency-client";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
 import { dependencyCredential } from "./dependency-credentials";
-import { providerCredentialGuard } from "./provider-credential-store";
-import { PROVIDER_CREDENTIAL_KIND } from "../shared/provider-credentials";
+import { repositoryReviewGuard as dependencyReviewGuard } from "./repository-review-authority";
+export { repositoryReviewGuard as dependencyReviewGuard } from "./repository-review-authority";
 
 export const storedDependencyReviewSchema = z
   .object({
@@ -44,54 +44,6 @@ export function dependencyReviewConflict(): never {
     "This dependency review expired, its evidence changed, or access changed. Inspect the repository again and prepare a fresh review. No repository changes were applied.",
     409,
   );
-}
-export async function dependencyReviewGuard(
-  context: WorkspaceService,
-  stored: StoredDependencyReview,
-) {
-  const { review } = stored;
-  const { basis, workspaceId } = review;
-  const actor = hookActorGuard(
-    context,
-    workspaceId,
-    CAPABILITY.OPERATE,
-    stored.memberRevision,
-  );
-  const credential = await githubCredentialIdentity(
-    context.env,
-    workspaceId,
-    stored.credentialRef,
-  );
-  const writer =
-    review.writer && stored.writerIdentity
-      ? providerCredentialGuard(
-          workspaceId,
-          PROVIDER_CREDENTIAL_KIND.REPOSITORY,
-          review.writer.id,
-          stored.writerIdentity,
-        )
-      : { sql: "1", values: [] };
-  return {
-    sql: `${actor.sql} AND ${writer.sql} AND ?=1 AND EXISTS (
-      SELECT 1 FROM repositories r JOIN source_repositories sr ON sr.workspace_id=r.workspace_id AND sr.repository_id=r.id
-      JOIN connections s ON s.workspace_id=sr.workspace_id AND s.id=sr.source_id
-      WHERE r.workspace_id=? AND r.id=? AND r.full_name=? AND r.revision=? AND s.id=? AND s.revision=? AND s.enabled=1 AND s.provider='github' AND s.credential_ref=?)`,
-    values: [
-      ...actor.values,
-      ...writer.values,
-      Number(
-        credential?.hash === stored.credentialHash &&
-          stored.tokenId === (context.principal.tokenId ?? null),
-      ),
-      workspaceId,
-      basis.repository.id,
-      basis.repository.fullName,
-      basis.repository.revision,
-      basis.source.id,
-      basis.source.revision,
-      stored.credentialRef,
-    ],
-  };
 }
 export class DependencyChanges {
   constructor(readonly context: WorkspaceService) {}

@@ -1,3 +1,5 @@
+import { supportedDependabotCron } from "./dependabot-cron";
+export { supportedDependabotCron } from "./dependabot-cron";
 import { Temporal } from "@js-temporal/polyfill";
 import { CronExpressionParser } from "cron-parser";
 import {
@@ -45,27 +47,6 @@ export const DEPENDABOT_NOTICE_LABELS: Record<
   limited: "Too many occurrences to plot completely",
   outside_range: "No start in this date range",
 };
-export function supportedDependabotCron(expression: string) {
-  const trimmed = expression.trim();
-  if (
-    trimmed.split(/\s+/).length !== 5 ||
-    /[^\d*,/\-\s]/.test(
-      trimmed
-        .toUpperCase()
-        .replace(
-          /SUN|MON|TUE|WED|THU|FRI|SAT|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/g,
-          "",
-        ),
-    )
-  )
-    return false;
-  try {
-    CronExpressionParser.parse(trimmed, { tz: "UTC" });
-    return true;
-  } catch {
-    return false;
-  }
-}
 function expression(schedule: DependabotSchedule) {
   if (schedule.interval === "cron")
     return supportedDependabotCron(schedule.cronjob!)

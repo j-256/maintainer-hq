@@ -67,6 +67,55 @@ function limited(): never {
     "response_size",
   );
 }
+export async function readDependabotBlob(
+  reader: GitHubReader,
+  base: string,
+  entry: { sha: string; size?: number },
+) {
+  const blob = blobSchema.parse(
+    (
+      await reader.request(
+        "repository",
+        new URL(base + "/git/blobs/" + entry.sha, GITHUB_LIMITS.API_ORIGIN),
+      )
+    ).data,
+  );
+  if (
+    blob.sha !== entry.sha ||
+    (entry.size !== undefined && blob.size !== entry.size) ||
+    !/^[A-Za-z0-9+/=\r\n]*$/.test(blob.content)
+  )
+    invalid();
+  const encoded = blob.content.replace(/[\r\n]/g, "");
+  const binary = atob(encoded);
+  if (btoa(binary) !== encoded || binary.length !== blob.size) invalid();
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const prefix = new TextEncoder().encode("blob " + bytes.length + "\0");
+  const object = new Uint8Array(prefix.length + bytes.length);
+  object.set(prefix);
+  object.set(bytes, prefix.length);
+  const actual = Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest(
+        blob.sha.length === 40 ? "SHA-1" : "SHA-256",
+        object,
+      ),
+    ),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  if (actual !== blob.sha) invalid();
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+  } catch {
+    invalid();
+  }
+  if (new TextEncoder().encode(text).length !== bytes.length) invalid();
+  return text;
+}
 export async function inspectDependabotFile(
   fullName: string,
   token: string,
@@ -158,49 +207,16 @@ export async function inspectDependabotFile(
       )
         invalid();
       if (entry.size > LIMITS.FILE_BYTES) limited();
-      const blob = blobSchema.parse(await read("/git/blobs/" + entry.sha));
-      if (
-        blob.sha !== entry.sha ||
-        blob.size !== entry.size ||
-        !/^[A-Za-z0-9+/=\r\n]*$/.test(blob.content)
-      )
-        invalid();
-      const encoded = blob.content.replace(/[\r\n]/g, "");
-      const binary = atob(encoded);
-      if (btoa(binary) !== encoded || binary.length !== blob.size) invalid();
-      const bytes = Uint8Array.from(binary, (character) =>
-        character.charCodeAt(0),
-      );
-      const prefix = new TextEncoder().encode("blob " + bytes.length + "\0");
-      const object = new Uint8Array(prefix.length + bytes.length);
-      object.set(prefix);
-      object.set(bytes, prefix.length);
-      const actual = Array.from(
-        new Uint8Array(
-          await crypto.subtle.digest(
-            blob.sha.length === 40 ? "SHA-1" : "SHA-256",
-            object,
-          ),
-        ),
-        (byte) => byte.toString(16).padStart(2, "0"),
-      ).join("");
-      if (actual !== blob.sha) invalid();
-      let text: string;
-      try {
-        text = new TextDecoder("utf-8", {
-          fatal: true,
-          ignoreBOM: true,
-        }).decode(bytes);
-      } catch {
-        invalid();
-      }
-      if (new TextEncoder().encode(text).length !== bytes.length) invalid();
+      const text = await readDependabotBlob(reader, base, {
+        sha: entry.sha,
+        size: entry.size,
+      });
       const path = (".github/" +
         entry.path) as (typeof DEPENDABOT_PATHS)[number];
       evidence.file = {
         path,
         mode: entry.mode as "100644" | "100755",
-        blobSha: blob.sha,
+        blobSha: entry.sha,
         digest: await dependencyHash(text),
       };
       try {
