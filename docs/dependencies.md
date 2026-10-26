@@ -1,6 +1,6 @@
 ---
 title: Dependency maintenance
-description: Enforce temporary npm overrides, track upstream fixes, and verify cleanup.
+description: Compare Dependabot schedules and manage reviewed npm override maintenance.
 ---
 
 # Dependency maintenance
@@ -56,6 +56,26 @@ HQ creates a Git tree, a commit, a new `hq/dependencies/<review-id>` branch, the
 Treat **Outcome uncertain** and **Partially completed** literally. A lost response may leave a Git object, branch, or PR even when no final receipt exists. Inspect the recorded commit/branch or reconcile the original operation before preparing a new review. A branch-only attempt requires deliberate recovery on GitHub; HQ does not automatically create another PR or delete the branch. A verified PR can later be shown as created, closed, or merged; none proves passing CI or deployment. Merge cleanup into its reviewed destination, then inspect that destination again to establish adoption.
 
 Browser, CLI, and MCP also share `dependency_write_access`, `dependency_change_apply`, `dependency_operation_get`, `dependency_operation_reconcile`, and `dependency_operations_list`. Credential setup uses the existing `provider_credential_*` reviews/private-input contract, with `provider_credentials_list` purpose `repositories` and provider kind `github-repositories`. Use [command schema discovery](commands.md#discover-exact-inputs) for exact bounds; tokens never belong in ordinary command inputs.
+
+## Dependabot schedules
+
+Open **Dependencies > Schedules** in a workspace or project. Repository rows share a dated week axis; **Day** zooms into one date. The display timezone starts from your date/time preference and can be changed independently of the schedule's timezone. On mobile, each repository has a chronological list of its configured starts. Markers and entry labels open the same keyboard-accessible details and editor.
+
+**Reload list** reads retained observations only. **Refresh schedules** explicitly inspects enrolled repositories with available read credentials, at bounded concurrency and within the shared read budget and cooldown. **Stop refresh** cancels unsent work; in-flight reads finish. Observation times and next-read deadlines stay visible. Pagination loads the bounded inventory before comparison and offers **Load more repositories** when required. Missing access, stale observations, unavailable pages, unsupported schedules, and projection limits keep the comparison incomplete.
+
+An overlap is an equal UTC start minute among the loaded fresh schedules, including schedules in the same repository. It is informational and never blocks a draft or PR. Counts are computed before search and the overlap filter. These are nominal configured starts, not execution times, job durations, or a guarantee that GitHub runs at that instant. Stale or unprojectable schedules can conceal additional overlaps.
+
+Standard intervals follow GitHub's calendar defaults: daily means weekdays; an omitted weekly day means Monday; monthly uses the first day; quarterly uses January, April, July, and October; semiannual uses January and July; yearly uses January. An omitted timezone means UTC. An omitted time stays GitHub-assigned and gets no invented marker. Existing supported five-field cron expressions are expanded within bounded date windows; natural expressions or dense schedules remain visible with an explicit timeline limitation. Ambiguous or nonexistent local times at DST transitions are not silently resolved to an instant. The [GitHub schedule reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#schedule) owns the provider semantics.
+
+**Save draft** changes only this browser tab. Multiple edits in one repository form one review and one PR; each repository has its own PR. A group-owned schedule is one entry and lists the affected ecosystems. Solid markers remain observed configuration; dashed draft markers show the proposed times. Leaving the view warns about unsaved drafts. A changed file or base commit preserves the draft but prevents submitting it against different evidence.
+
+A workspace operator selects existing **Repository write access** and prepares an expiring review. Without an eligible writer, review-only preparation is available and cannot submit a PR. Credential setup is the existing owner-managed [repository maintenance workflow](#configure-repository-write-access); this feature grants no credentials. Preparation re-reads and verifies the pinned immutable blob, stores normalized before/after schedules, and binds the actor, workspace membership, source, read/write credential identity and revisions, base commit, file mode, digest, and selected entry identities. **Create pull request** rechecks those inputs, journals intent, edits only the reviewed schedule mappings, and creates a unique branch and PR. It never merges or updates an existing branch.
+
+Only `.github/dependabot.yml` or `.github/dependabot.yaml` is accepted. Both names together are ambiguous. Malformed YAML, duplicate keys, aliases, anchors, merges, and unsafe shared ownership are explicit limitations. Inline/flow mappings and unfamiliar schedule fields are read-only. The server preserves bytes outside selected schedule mappings, including unrelated comments, registry configuration, unknown settings, and line endings. Raw YAML and registry values are neither returned nor retained in observation caches or reviews.
+
+Saved review URLs and **PR history** recover the original operation. Duplicate confirmation returns the same receipt. Failed, partial, and uncertain operations retain the completed step and any verified Git identities. **Check GitHub outcome** only reads the original branch and PR; it never retries a write. A PR receipt is separate from merge, CI, deployment, and the observed default-branch schedule. Keep uncertain operations for reconciliation before preparing another change.
+
+Browser, CLI, HTTP, and MCP share `dependabot_schedules`, `repository_dependabot`, `dependabot_change_plan`, `dependabot_change_review`, `dependabot_change_apply`, `dependabot_operation_get`, `dependabot_operations_list`, and `dependabot_operation_reconcile`. Readers can inspect observations; operators prepare reviews and submit through an eligible scoped writer. Source-bound publishers cannot use these operator commands. Use `npm run cli -- schema <command>` for exact bounded inputs. Schedule operations use a distinct kind and fixed path allowlist; override-maintenance inputs and receipts cannot stand in for schedule reviews.
 
 ## Run the checks
 

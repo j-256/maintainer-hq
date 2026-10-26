@@ -279,7 +279,7 @@ test("the real stdio MCP shares the service transport, schemas and exact goal pa
     await client.connect(transport);
     const list = await client.listTools();
     for (const [name, command] of Object.entries(commands).filter(([name]) =>
-      /^(projects_organize_|expectations_|hooks_|monitoring_|resource_repositories|repository_resources|repository_context|repository_coverage|github_coverage|workspace_attention|attention_connection)/.test(
+      /^(dependabot_|repository_dependabot|projects_organize_|expectations_|hooks_|monitoring_|resource_repositories|repository_resources|repository_context|repository_coverage|github_coverage|workspace_attention|attention_connection)/.test(
         name,
       ),
     )) {
