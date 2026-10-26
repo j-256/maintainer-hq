@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import {
   DEPENDABOT_DAYS,
   DEPENDABOT_INTERVALS,
@@ -19,6 +19,7 @@ import {
   DialogDescription,
 } from "./components/ui/dialog";
 import { DiscardDialog, useCloseGuard } from "./source-editor";
+import { withinDependabotSchedules } from "./lib/dependabot-view";
 
 export function scheduleMembers(entry: DependabotEntry) {
   return entry.group
@@ -31,7 +32,9 @@ export function scheduleMembers(entry: DependabotEntry) {
           (m) =>
             m.ecosystem +
             " " +
-            m.directories.join(", ") +
+            m.directories
+              .map((path) => path === "/" ? "at repository root" : "in " + path)
+              .join(", ") +
             (m.targetBranch ? " on " + m.targetBranch : ""),
         )
         .join("; ");
@@ -44,6 +47,7 @@ export function DependabotEditor({
   onSave,
   returnFocus,
   hasDrafts,
+  children,
 }: {
   entry: DependabotEntry;
   schedule: DependabotSchedule | null;
@@ -52,6 +56,7 @@ export function DependabotEditor({
   onSave: (schedule: DependabotSchedule) => void;
   returnFocus: HTMLElement | null;
   hasDrafts: boolean;
+  children?: ReactNode;
 }) {
   const [interval, setInterval] = useState(schedule?.interval ?? "weekly");
   const [day, setDay] = useState(schedule?.day ?? "");
@@ -66,8 +71,12 @@ export function DependabotEditor({
     ...(timezone ? { timezone } : {}),
     ...(interval === "cron" ? { cronjob } : {}),
   };
-  const dirty = JSON.stringify(value) !== JSON.stringify(schedule);
-  const guard = useCloseGuard(dirty || hasDrafts, onClose);
+  const dirty = entry.editable && JSON.stringify(value) !== JSON.stringify(schedule);
+  const guard = useCloseGuard(
+    dirty || hasDrafts,
+    onClose,
+    (current, next) => !dirty && withinDependabotSchedules(current, next),
+  );
   const close = () => (dirty ? guard.requestClose() : onClose());
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,9 +115,26 @@ export function DependabotEditor({
               {entry.editable ? "Edit schedule" : "Schedule details"}
             </DialogTitle>
             <DialogDescription>
-              {repository} / {scheduleMembers(entry)}
+              {repository}
             </DialogDescription>
           </DialogHeader>
+          {entry.group ? <p className="dependency-meta">Group: {entry.group}</p> : null}
+          {entry.members.map((member, index) => (
+            <dl className="schedule-member-details" key={index}>
+              <div>
+                <dt>Ecosystem</dt><dd>{member.ecosystem}</dd>
+              </div>
+              <div>
+                <dt>Directory</dt>
+                <dd>{member.directories.map((path) =>
+                  path === "/" ? "Repository root (/)" : path,
+                ).join(", ")}</dd>
+              </div>
+              {member.targetBranch ? (
+                <div><dt>Target branch</dt><dd>{member.targetBranch}</dd></div>
+              ) : null}
+            </dl>
+          ))}
           <p className="dependency-meta">
             Observed: {dependabotScheduleLabel(entry.schedule)}
           </p>
@@ -200,6 +226,15 @@ export function DependabotEditor({
               </Button>
             </>
           )}
+          {children ? (
+            <fieldset disabled={dirty}>
+              <legend className="sr-only">Schedule history</legend>
+              {dirty ? (
+                <p className="dependency-meta">Save or cancel your edits to open PR history.</p>
+              ) : null}
+              {children}
+            </fieldset>
+          ) : null}
         </DialogContent>
       </Dialog>
       <DiscardDialog guard={guard} busy={false} />

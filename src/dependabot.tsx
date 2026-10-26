@@ -12,6 +12,7 @@ import {
   entryKey,
   stale,
   draftMatches,
+  withinDependabotSchedules,
 } from "./lib/dependabot-view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,7 +46,11 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { DiscardDialog, useCloseGuard } from "./source-editor";
 import { DependabotEditor, scheduleMembers } from "./dependabot-editor";
-import { DependabotPrepare, DependabotSavedReview } from "./dependabot-review";
+import {
+  DependabotPrepare,
+  DependabotSavedReview,
+  DependabotHistory,
+} from "./dependabot-review";
 import "./dependabot.css";
 
 type Inventory = {
@@ -55,6 +60,7 @@ type Inventory = {
   issue: string;
 };
 const EMPTY_ROWS: DependabotInventoryRow[] = [];
+const ISOLATED_REVIEW_MODE = "e2e";
 function byKey<T extends { key: string }>(items: T[]) {
   const grouped = new Map<string, T[]>();
   for (const item of items) {
@@ -76,11 +82,7 @@ function DraftNavigationGuard({
   const guard = useCloseGuard(
     dirty,
     onDiscard,
-    (current, next) =>
-      current.pathname === next.pathname &&
-      new URLSearchParams(current.search).get("workspace") ===
-        new URLSearchParams(next.search).get("workspace") &&
-      new URLSearchParams(next.search).get("view") === "schedules",
+    withinDependabotSchedules,
   );
   return <DiscardDialog guard={guard} busy={busy} />;
 }
@@ -242,6 +244,8 @@ export function DependabotView({
       };
     },
     retry: false,
+    refetchInterval:
+      import.meta.env.MODE === ISOLATED_REVIEW_MODE ? LIMITS.CLOCK_MS : false,
     ...COORDINATED_QUERY_OPTIONS,
   });
   const data = query.error ? undefined : query.data,
@@ -516,6 +520,18 @@ export function DependabotView({
       }),
     [zone],
   );
+  const repositoryNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const name = row.repository.fullName.split("/").at(-1)!;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return new Map(rows.map(row => {
+      const fullName = row.repository.fullName;
+      const name = fullName.split("/").at(-1)!;
+      return [fullName, counts.get(name)! > 1 ? fullName : name];
+    }));
+  }, [rows]);
   function marker(
     row: DependabotInventoryRow,
     entry: DependabotEntry,
@@ -523,7 +539,7 @@ export function DependabotView({
     draft = false,
     card = false,
   ) {
-    const label = `${draft ? "Draft" : "Observed"} ${scheduleMembers(entry)} ${Temporal.Instant.from(item.instant).toZonedDateTimeISO(zone).toPlainDate().toString()} ${clock.format(new Date(item.instant))} ${zone}${item.overlap > 1 ? `, ${item.overlap} starts at the same UTC minute` : ""}${item.stale ? ", stale observation" : ""}`;
+    const label = `${draft ? "Draft" : "Observed"} ${row.repository.fullName} ${scheduleMembers(entry)} ${Temporal.Instant.from(item.instant).toZonedDateTimeISO(zone).toPlainDate().toString()} ${clock.format(new Date(item.instant))} ${zone}${item.overlap > 1 ? `, ${item.overlap} starts at the same UTC minute` : ""}${item.stale ? ", stale observation" : ""}`;
     const schedule =
       (draft
         ? drafts[row.repository.id]?.edits.find(
@@ -545,21 +561,21 @@ export function DependabotView({
         className={`schedule-marker${card ? " schedule-week-marker" : " schedule-time-block"}${draft ? " is-draft" : ""}${item.overlap > 1 ? " has-overlap" : ""}${item.stale ? " is-stale" : ""}`}
         style={card ? undefined : { left: `${item.position * 100}%` }}
         aria-label={label}
-        title={label}
+        title={label + (row.result?.evidence ? ", read " + dates.dateTime(row.result.evidence.observedAt) : "")}
         {...drag.handlers(selection)}
       >
         <span className="schedule-block-time">
           {clock.format(new Date(item.instant))}
         </span>
         {card ? (
-          <span className="schedule-block-member">
-            {scheduleMembers(entry)}
+          <span className="schedule-block-repository">
+            {repositoryNames.get(row.repository.fullName)}
           </span>
         ) : null}
-        <span className="schedule-block-kind">
+        {!card ? <span className="schedule-block-kind">
           {draft ? "Draft" : "Observed"}
-        </span>
-        {item.overlap > 1 ? (
+        </span> : null}
+        {!card && item.overlap > 1 ? (
           <span className="schedule-block-overlap">{item.overlap} starts</span>
         ) : null}
       </button>
@@ -838,7 +854,15 @@ export function DependabotView({
           onSave={(schedule) =>
             saveSchedule(editing.row, editing.entry, schedule)
           }
-        />
+        >
+          {operator ? (
+            <DependabotHistory
+              workspaceId={workspaceId}
+              repositoryId={editing.row.repository.id}
+              onSelect={() => setEditing(null)}
+            />
+          ) : null}
+        </DependabotEditor>
       ) : null}
       {preparing ? (
         <DependabotPrepare

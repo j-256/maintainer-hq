@@ -230,6 +230,15 @@ export function DependabotWeekOverview(props: TimelineProps) {
   );
   return (
     <>
+      {props.rows.some(row => props.drafts[row.repository.id]) ? (
+        <section className="schedule-week-drafts" aria-label="Draft schedules">
+          {props.rows.filter(row => props.drafts[row.repository.id]).map(row => (
+            <div key={row.repository.id} data-schedule-repository={row.repository.id}>
+              <RepositoryHeader row={row} props={props} compact />
+            </div>
+          ))}
+        </section>
+      ) : null}
       <div
         className="schedule-week-grid"
         role="region"
@@ -249,11 +258,6 @@ export function DependabotWeekOverview(props: TimelineProps) {
                 ) ||
                 Number(a.draft) - Number(b.draft),
             );
-          const rows = Array.from(
-            new Map(
-              items.map((item) => [item.row.repository.id, item.row]),
-            ).values(),
-          );
           return (
             <section
               key={date}
@@ -285,37 +289,16 @@ export function DependabotWeekOverview(props: TimelineProps) {
                   schedules
                 </span>
               </header>
-              {rows.map((row) => (
-                <article
-                  key={row.repository.id}
-                  className="schedule-week-repository"
-                  data-schedule-repository={row.repository.id}
-                >
-                  <RepositoryHeader row={row} props={props} compact />
-                  <div className="schedule-week-blocks">
-                    {items
-                      .filter(
-                        (item) => item.row.repository.id === row.repository.id,
-                      )
-                      .map((item) => (
-                        <div
-                          key={
-                            item.entry.id + item.occurrence.instant + item.draft
-                          }
-                        >
-                          {props.block(
-                            row,
-                            item.entry,
-                            item.occurrence,
-                            item.draft,
-                            true,
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                  <History row={row} props={props} />
-                </article>
-              ))}
+              <ol className="schedule-week-blocks">
+                {items.map((item) => (
+                  <li
+                    key={entryKey(item.row, item.entry) + item.occurrence.instant + item.draft}
+                    data-schedule-repository={item.row.repository.id}
+                  >
+                    {props.block(item.row, item.entry, item.occurrence, item.draft, true)}
+                  </li>
+                ))}
+              </ol>
               {!items.length ? (
                 <p className="dependency-meta schedule-empty">
                   No projected starts

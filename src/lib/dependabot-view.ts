@@ -11,6 +11,15 @@ export type DependabotDraft = {
 };
 export const entryKey = (row: DependabotInventoryRow, entry: DependabotEntry) =>
   row.repository.id + ":" + entry.id;
+export function withinDependabotSchedules(
+  current: { pathname: string; search: string },
+  next: { pathname: string; search: string },
+) {
+  return current.pathname === next.pathname &&
+    new URLSearchParams(current.search).get("workspace") ===
+      new URLSearchParams(next.search).get("workspace") &&
+    new URLSearchParams(next.search).get("view") === "schedules";
+}
 export function stale(row: DependabotInventoryRow, now: number) {
   const observed = row.result?.evidence?.observedAt;
   return (

@@ -426,9 +426,11 @@ const historySchema = z
 export function DependabotHistory({
   workspaceId,
   repositoryId,
+  onSelect,
 }: {
   workspaceId: string;
   repositoryId: string;
+  onSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false),
     [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
@@ -475,6 +477,7 @@ export function DependabotHistory({
                       onClick={() => {
                         const next = new URLSearchParams(params);
                         next.set("scheduleReview", op.planId);
+                        onSelect?.();
                         setParams(next);
                       }}
                     >

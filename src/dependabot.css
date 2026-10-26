@@ -123,28 +123,35 @@
   justify-content: start;
   font-weight: 650;
 }
-.schedule-week-repository {
-  padding: 0.65rem 0.5rem;
-  min-width: 0;
-}
-.schedule-week-repository + .schedule-week-repository {
-  border-top: 1px solid var(--border);
-}
-.schedule-week-repository .schedule-repository-heading {
-  display: grid;
-  gap: 0.35rem;
-}
-.schedule-week-repository .schedule-repository-heading > strong {
-  font-size: 0.8rem;
-}
-.schedule-week-repository .dependency-meta,
-.schedule-week-repository .schedule-stale {
-  font-size: 0.75rem;
-}
 .schedule-week-blocks {
   display: grid;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  margin: 0;
+  list-style: none;
+}
+.schedule-week-drafts {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--foreground);
+  border-radius: 0.5rem;
+}
+.schedule-member-details {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+}
+.schedule-member-details > div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
   gap: 0.5rem;
-  margin-top: 0.5rem;
+}
+.schedule-member-details dt {
+  color: var(--muted-foreground);
+}
+.schedule-member-details dd {
+  overflow-wrap: anywhere;
 }
 .schedule-unplaced {
   display: grid;
@@ -392,33 +399,27 @@
 .schedule-week-marker {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 0.2rem;
+  gap: 0.35rem;
   text-align: left;
   width: 100%;
   height: auto;
-  min-height: 3rem;
-  padding: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.4rem;
   position: relative;
 }
 .schedule-week-marker .schedule-block-time {
-  font-size: 0.9rem;
-}
-.schedule-week-marker .schedule-block-member {
-  grid-row: 2;
-  grid-column: 1/-1;
-  font-size: 0.75rem;
-  overflow-wrap: anywhere;
-}
-.schedule-week-marker .schedule-block-kind {
   grid-column: 2;
   grid-row: 1;
-  font-size: 0.65rem;
-  font-weight: 400;
-  align-self: center;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
-.schedule-week-marker .schedule-block-overlap {
-  grid-column: 1/-1;
-  font-size: 0.7rem;
+.schedule-week-marker .schedule-block-repository {
+  grid-row: 1;
+  grid-column: 1;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .schedule-draft-note {
   display: block;
@@ -574,9 +575,6 @@
   }
   .schedule-week-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .schedule-week-repository {
-    padding: 0.65rem 0.4rem;
   }
   .schedule-repository {
     padding: 0.75rem;

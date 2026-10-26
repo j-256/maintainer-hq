@@ -268,7 +268,7 @@ test("missing write access is review-only and unknown/stale schedules stay expli
     page.getByText("Time assigned by GitHub", { exact: true }).first(),
   ).toBeVisible();
   await expect(
-    page.getByText("Stale observation", { exact: true }),
+    page.locator('[data-schedule-repository="schedule-3"]').getByRole("button", { name: /stale observation/ }),
   ).toBeVisible();
   await expect(
     page.getByText("Timeline unavailable for this cron expression", {
@@ -334,6 +334,7 @@ for (const theme of ["light", "dark"])
     await button.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toBeVisible();
+    expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
     await page.keyboard.press("Escape");
     await expect(button).toBeFocused();
     expect(
@@ -417,7 +418,7 @@ test("an overlap remains allowed through draft review and one grouped schedule s
   await page.goto(href);
   const group = page.locator('[data-schedule-repository="schedule-5"]');
   await expect(
-    group.getByRole("button", { name: /Observed frontend/ }),
+    group.getByRole("button", { name: /Observed.*frontend/ }),
   ).toHaveCount(1);
   const alpha = page.locator('[data-schedule-repository="schedule-0"]');
   await alpha.getByRole("button", { name: /Observed/ }).click();
@@ -494,8 +495,19 @@ test("another operator can inspect a history receipt without the original review
   ).toBeVisible();
   state.reviewDenied = true;
   await page.getByRole("button", { name: "Back to timeline" }).click();
-  await alpha.getByRole("button", { name: "PR history" }).click();
-  await alpha.getByRole("button", { name: /succeeded/ }).click();
+  await alpha.getByRole("button", { name: /Observed/ }).click();
+  await page.getByLabel("Time", { exact: true }).fill("09:45");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await alpha.getByRole("button", { name: /Observed/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "PR history" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /succeeded/ }).click();
+  await expect(page.getByRole("link", { name: "Pull request #42" })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to timeline" }).click();
+  await expect(alpha.getByRole("button", { name: /Draft.*09:45/ })).toBeVisible();
+  await alpha.getByRole("button", { name: /Observed/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "PR history" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /succeeded/ }).click();
   await page.reload();
   await expect(
     page.getByRole("link", { name: "Pull request #42" }),
@@ -561,7 +573,7 @@ test("week groups by weekday and opens a detailed quarter-hour day", async ({
   });
   await expect(monday).toBeVisible();
   await expect(
-    monday.getByText("example/alpha", { exact: true }),
+    monday.getByRole("button", { name: /Observed example\/alpha/ }),
   ).toBeVisible();
   await dayEditor(page);
   await expect(
@@ -878,3 +890,80 @@ for (const width of [1440, 390])
     await expect.poll(() => page.locator(".schedule-time-block").count()).toBeGreaterThan(7);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
+
+test("weekly assignments show repo and time with secondary metadata in details", async ({ page }) => {
+  await fixture(page);
+  await page.goto(href);
+  const week = page.getByRole("region", { name: "Schedules grouped by weekday" });
+  const alpha = week.locator('[data-schedule-repository="schedule-0"]');
+  const block = alpha.getByRole("button", { name: /Observed/ });
+  await expect(block).toContainText("alpha");
+  await expect(block).toContainText("08:00");
+  await expect(week.getByText("Observed", { exact: true })).toHaveCount(0);
+  await expect(week.getByRole("button", { name: "PR history" })).toHaveCount(0);
+  const stale = week.locator('[data-schedule-repository="schedule-3"]').getByRole("button", { name: /stale observation/ });
+  await expect(stale).toHaveClass(/is-stale/);
+  await expect(stale).toHaveAttribute("title", /stale observation/i);
+  await block.click();
+  const details = page.getByRole("dialog");
+  await expect(details.getByText("Ecosystem", { exact: true })).toBeVisible();
+  await expect(details.getByText("npm", { exact: true })).toBeVisible();
+  await expect(details.getByText("Repository root (/)", { exact: true })).toBeVisible();
+  await expect(details.getByRole("button", { name: "PR history" })).toBeVisible();
+});
+
+test("isolated review inventory revalidates without dropping local drafts", async ({ page }) => {
+  await page.clock.install({ time: new Date() });
+  const state = await fixture(page);
+  await page.goto(href);
+  const alpha = page.locator('[data-schedule-repository="schedule-0"]');
+  await alpha.getByRole("button", { name: /Observed/ }).click();
+  await page.getByLabel("Time", { exact: true }).fill("09:30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  const before = state.inventoryPages.length;
+  state.rows[0]!.result!.evidence!.inspectionId = crypto.randomUUID();
+  state.rows[0]!.result!.evidence!.observedAt = new Date(Date.now() + 1000).toISOString();
+  await page.clock.fastForward(30000);
+  await expect.poll(() => state.inventoryPages.length).toBeGreaterThan(before);
+  await expect(alpha.getByRole("button", { name: /Draft.*09:30/ })).toBeVisible();
+});
+
+test("assignment history cannot navigate away from unsaved form changes", async ({ page }) => {
+  await fixture(page);
+  await page.goto(href);
+  await page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: /Observed/ }).click();
+  const dialog = page.getByRole("dialog");
+  await page.getByLabel("Time", { exact: true }).fill("09:30");
+  await expect(dialog.getByRole("button", { name: "PR history" })).toBeDisabled();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: /Draft.*09:30/ }).click();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "PR history" })).toBeEnabled();
+});
+
+test("same repository basenames retain owner identity in weekly assignments", async ({ page }) => {
+  const state = await fixture(page);
+  state.rows[1]!.repository.fullName = "other/alpha";
+  state.rows[1]!.result!.repository.fullName = "other/alpha";
+  await page.goto(href);
+  const week = page.getByRole("region", { name: "Schedules grouped by weekday" });
+  await expect(week.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: /Observed/ })).toContainText("example/alpha");
+  const other = week.locator('[data-schedule-repository="schedule-1"]').getByRole("button", { name: /Observed/ });
+  await expect(other).toContainText("other/alpha");
+  await other.click();
+  await expect(page.getByRole("dialog").getByText("other/alpha", { exact: true })).toBeVisible();
+});
+
+test("read-only schedule details keep history available without an editable form", async ({ page }) => {
+  const state = await fixture(page);
+  const entry = state.rows[0]!.result!.evidence!.entries[0]!;
+  entry.schedule = null;
+  entry.editable = false;
+  entry.issue = "unsupported_schedule";
+  await page.goto(href);
+  await page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: "npm at repository root", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Schedule details" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "PR history" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "PR history" }).click();
+  await expect(dialog.getByText("No schedule PR operations recorded.")).toBeVisible();
+});
