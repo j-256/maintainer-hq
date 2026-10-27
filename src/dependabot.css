@@ -1,5 +1,159 @@
+.dependencies-view.schedule-view {
+  display: flex;
+  flex-direction: column;
+  height: var(--schedule-workspace-height, calc(100dvh - 10rem));
+  min-height: 20rem;
+  gap: 0.5rem;
+}
+.schedule-view.is-focused {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  height: 100dvh;
+  min-height: 0;
+  padding: 0.75rem;
+  background: var(--background);
+  overflow: auto;
+}
+.schedule-toolbar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.schedule-title {
+  font-size: 1rem;
+  line-height: 2rem;
+  font-weight: 650;
+  letter-spacing: normal;
+  margin: 0 0.4rem 0 0;
+}
+.schedule-context {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-toolbar > button,
+.schedule-toolbar select,
+.schedule-toolbar input,
+.schedule-options > summary {
+  height: 2rem;
+}
+.schedule-toolbar > button {
+  width: 2rem;
+}
+.schedule-toolbar .schedule-controls {
+  flex: 1;
+}
+.schedule-options {
+  position: static;
+}
+.schedule-options > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  list-style: none;
+}
+.schedule-options > summary::-webkit-details-marker {
+  display: none;
+}
+.schedule-options-panel {
+  position: absolute;
+  top: 2.5rem;
+  right: 0;
+  z-index: 10;
+  width: min(24rem, calc(100vw - 3rem));
+  max-height: 60dvh;
+  overflow: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.4rem 1rem #0003;
+  font-size: 0.8rem;
+}
+.schedule-canvas {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 10rem;
+  gap: 0.35rem;
+}
+.schedule-filter-controls {
+  flex-shrink: 0;
+}
+.schedule-filter-controls > [role="status"] {
+  flex: 1;
+  min-width: 12rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.schedule-filter-controls input {
+  height: 2rem;
+}
+.schedule-other {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+}
+.schedule-other > summary {
+  cursor: pointer;
+  padding: 0.3rem;
+}
+.schedule-other > summary > span {
+  color: var(--muted-foreground);
+}
+.schedule-unplaced {
+  max-height: 24dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.schedule-row-label {
+  display: grid;
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--background);
+  width: 100%;
+  min-width: 0;
+  padding: 0.15rem 0.4rem;
+  line-height: 1.15;
+  cursor: pointer;
+}
+.schedule-row-label strong,
+.schedule-row-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-row-label strong {
+  font-size: 0.75rem;
+}
+.schedule-row-label span {
+  font-size: 0.65rem;
+  color: var(--muted-foreground);
+}
+.schedule-row-label:focus-visible,
+.schedule-options > summary:focus-visible,
+.schedule-other > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
 .schedule-view {
-  --schedule-label-width: 15rem;
+  --schedule-label-width: 12rem;
   --schedule-overlap: oklch(0.83 0.15 83);
 }
 .schedule-controls,
@@ -8,8 +162,8 @@
 .schedule-legend {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.4rem;
 }
 .schedule-controls label,
 .schedule-filter-controls > label:not(.schedule-check),
@@ -23,7 +177,7 @@
 }
 .schedule-view select,
 .schedule-dialog select {
-  height: 2.25rem;
+  height: 2rem;
   max-width: 100%;
   padding: 0.25rem 0.65rem;
   border: 1px solid var(--border);
@@ -38,21 +192,21 @@
   outline-offset: 2px;
 }
 .schedule-controls > label:last-child {
-  max-width: 21rem;
+  max-width: 14rem;
 }
 .schedule-date-controls {
   flex-wrap: nowrap;
 }
 .schedule-date-controls input {
-  min-width: 10rem;
-  height: 2.25rem;
+  min-width: 8rem;
+  height: 2rem;
 }
 .schedule-date-controls > button {
-  height: 2.25rem;
+  height: 2rem;
 }
 .schedule-filter-controls > label:first-child {
   flex: 1;
-  max-width: 24rem;
+  max-width: 15rem;
   min-width: 10rem;
 }
 .schedule-check {
@@ -99,19 +253,26 @@
 }
 .schedule-week-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(7, minmax(7.5rem, 1fr));
+  gap: 0.4rem;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-x: auto;
+  overscroll-behavior: contain;
 }
 .schedule-week-day {
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 0.6rem;
-  align-self: start;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--background);
 }
 .schedule-week-day > header {
-  padding: 0.35rem 0.4rem 0.5rem;
+  flex-shrink: 0;
+  padding: 0.2rem;
   border-bottom: 1px solid var(--border);
   background: var(--muted);
   border-radius: 0.6rem 0.6rem 0 0;
@@ -127,16 +288,30 @@
   font-weight: 650;
 }
 .schedule-week-blocks {
-  display: grid;
   gap: 0.3rem;
-  padding: 0.4rem;
+  padding: 0.3rem;
   margin: 0;
   list-style: none;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.schedule-week-blocks:empty {
+  display: none;
+}
+.schedule-week-blocks > li {
+  flex-shrink: 0;
 }
 .schedule-week-drafts {
   display: grid;
   gap: 0.6rem;
-  padding: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  max-height: 8rem;
+  overflow: auto;
+  flex-shrink: 0;
   border: 1px dashed var(--foreground);
   border-radius: 0.5rem;
 }
@@ -160,21 +335,14 @@
   display: grid;
   gap: 0.65rem;
 }
-.schedule-unplaced > h2 {
-  font-weight: 600;
-}
 .schedule-week-day.is-drop-target {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 .schedule-day-strip {
-  display: grid;
-  gap: 0.35rem;
-  position: sticky;
-  top: 0;
-  z-index: 8;
+  flex-shrink: 0;
+  min-width: 0;
   background: var(--background);
-  padding: 0.5rem 0;
 }
 .schedule-day-strip > div {
   display: flex;
@@ -189,8 +357,10 @@
 .schedule-day-scroll {
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   --schedule-hour-padding: 2rem;
@@ -206,10 +376,13 @@
 .schedule-entry {
   display: grid;
   grid-template-columns: var(--schedule-label-width) minmax(0, 1fr);
-  gap: 1rem;
+  gap: 0.5rem;
 }
 .schedule-axis {
-  padding: 0.75rem 1rem;
+  padding: 0.45rem 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
   background: var(--muted);
   font-size: 0.8rem;
   font-weight: 600;
@@ -261,14 +434,12 @@
   border: 1px dashed var(--foreground);
   border-radius: 0.3rem;
 }
-.is-detailed-day .schedule-repository-heading {
-  position: sticky;
-  left: 0;
-  max-width: min(56rem, calc(100vw - 4rem));
-}
+
 .schedule-entry {
-  margin-top: 0.65rem;
+  margin: 0;
+  padding: 0 0.5rem;
   align-items: center;
+  border-bottom: 1px solid var(--border);
 }
 .schedule-entry-label {
   min-width: 0;
@@ -288,15 +459,9 @@
   font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
-.is-detailed-day .schedule-entry-label {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: var(--background);
-  padding-right: 0.5rem;
-}
+
 .schedule-lane {
-  height: 4.5rem;
+  height: 2.5rem;
   padding-inline: var(--schedule-hour-padding);
 }
 .schedule-hour-track {
@@ -335,10 +500,10 @@
 }
 .schedule-time-block {
   position: absolute;
-  top: 30%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  width: 4rem;
-  height: 2rem;
+  width: 3.5rem;
+  height: 1.75rem;
   z-index: 1;
 }
 .schedule-marker.has-overlap {
@@ -348,8 +513,16 @@
   border-style: dashed;
 }
 .schedule-time-block.is-draft {
-  top: 78%;
   z-index: 2;
+}
+.schedule-entry.has-comparison .schedule-lane {
+  height: 4rem;
+}
+.has-comparison .schedule-time-block {
+  top: 25%;
+}
+.has-comparison .schedule-time-block.is-draft {
+  top: 75%;
 }
 .schedule-marker.is-stale {
   border-style: dotted;
@@ -403,8 +576,9 @@
   text-align: left;
   width: 100%;
   height: auto;
-  min-height: 2.25rem;
-  padding: 0.35rem 0.4rem;
+  min-height: 2rem;
+  padding: 0.2rem 0.35rem;
+  flex-shrink: 0;
   position: relative;
 }
 .schedule-week-marker.has-overlap::after {
@@ -433,11 +607,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.schedule-draft-note {
-  display: block;
-  padding: 0.5rem;
-  font-size: 0.8rem;
-}
+
 .schedule-history {
   margin-top: 0.3rem;
 }
@@ -445,13 +615,7 @@
   list-style: none;
   padding: 0;
 }
-.is-detailed-day .schedule-history,
-.is-detailed-day .schedule-empty {
-  position: sticky;
-  left: 0;
-  width: fit-content;
-  max-width: calc(100vw - 4rem);
-}
+
 .schedule-empty {
   padding: 0.5rem;
   color: var(--muted-foreground);
@@ -513,7 +677,7 @@
   gap: 0.8rem;
 }
 .schedule-form input {
-  height: 2.25rem;
+  height: 2rem;
 }
 .schedule-change-list {
   display: grid;
@@ -546,32 +710,31 @@
 .dark .schedule-dialog input[type="time"] {
   color-scheme: dark;
 }
-@media (max-width: 1250px) {
-  .schedule-week-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
 @media (max-width: 760px) {
   .schedule-view {
     --schedule-label-width: 8rem;
   }
+  .schedule-toolbar {
+    gap: 0.3rem;
+  }
+  .schedule-toolbar .schedule-controls {
+    order: 5;
+    flex-basis: 100%;
+  }
   .schedule-controls {
-    display: grid;
-    grid-template-columns: 5rem minmax(0, 1fr);
-    gap: 0.5rem;
-    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
   }
   .schedule-controls > label:last-child {
-    grid-column: 2;
-    grid-row: 1;
+    flex: 1;
     max-width: 100%;
+  }
+  .schedule-controls > label:last-child select {
     width: 100%;
   }
   .schedule-date-controls {
+    order: 3;
     width: 100%;
-    gap: 0.4rem;
-    grid-column: 1/-1;
-    grid-row: 2;
   }
   .schedule-date-controls label {
     flex: 1;
@@ -583,19 +746,30 @@
   .schedule-date-controls > button {
     padding-inline: 0.4rem;
   }
-  .schedule-week-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .schedule-toolbar .schedule-context {
+    display: none;
+  }
+  .schedule-filter-controls > [role="status"] {
+    flex-basis: 100%;
   }
   .schedule-repository {
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
-  .schedule-repository-heading {
-    align-items: start;
-  }
-  .schedule-repository-heading > strong {
-    width: 100%;
-  }
-  .schedule-legend {
-    gap: 0.5rem 1rem;
-  }
+}
+
+.schedule-other > summary .schedule-exception {
+  color: var(--foreground);
+  font-weight: 650;
+}
+.schedule-row-label.has-notice { padding-right: 1.25rem; }
+.schedule-row-label .schedule-entry-warning {
+  position: absolute;
+  right: 0.25rem;
+  top: 0.2rem;
+  border: 1px solid #78601e;
+  border-radius: 0.25rem;
+  background: var(--schedule-overlap);
+  color: #30260a;
+  font-weight: 700;
+  padding-inline: 0.25rem;
 }

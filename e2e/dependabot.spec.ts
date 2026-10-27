@@ -11,6 +11,14 @@ const DIGEST = "sha256:" + "b".repeat(64),
   SHA = "a".repeat(40);
 const href =
   "/dependencies?workspace=development&view=schedules&scheduleDate=2026-10-26&scheduleZone=UTC";
+async function showOptions(page: Page, open = true) {
+  const details = page.locator(".schedule-options");
+  if ((await details.getAttribute("open") !== null) !== open) await details.locator("summary").click();
+}
+async function showOther(page: Page) {
+  const details = page.locator(".schedule-other");
+  if (await details.getAttribute("open") === null) await details.locator("summary").click();
+}
 async function fixture(page: Page, writable = true, operator = true) {
   const rows = dependabotBrowserRows();
   const state = {
@@ -264,6 +272,7 @@ test("missing write access is review-only and unknown/stale schedules stay expli
 }) => {
   await fixture(page, false);
   await page.goto(href);
+  await showOther(page);
   await expect(
     page.getByText("Time assigned by GitHub", { exact: true }).first(),
   ).toBeVisible();
@@ -372,6 +381,7 @@ test("changed inventory pages remain incomplete and access errors hide retained 
     page.getByRole("status").filter({ hasText: "10 of 12 repositories" }),
   ).toBeVisible();
   state.rejectInventory = 403;
+  await showOptions(page);
   await page.getByRole("button", { name: "Reload list", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator("[data-schedule-repository]")).toHaveCount(0);
@@ -382,6 +392,7 @@ test("refresh cancellation stops unsent work and drafts stay pinned when observa
   const state = await fixture(page);
   state.refreshDelay = 400;
   await page.goto(href);
+  await showOptions(page);
   await page
     .getByRole("button", { name: "Refresh schedules", exact: true })
     .click();
@@ -403,6 +414,7 @@ test("refresh cancellation stops unsent work and drafts stay pinned when observa
   await page.getByLabel("Time", { exact: true }).fill("09:30");
   await page.getByRole("button", { name: "Save draft" }).click();
   state.rows[0]!.result!.evidence!.headSha = "f".repeat(40);
+  await showOptions(page);
   await page.getByRole("button", { name: "Reload list", exact: true }).click();
   await expect(
     alpha.getByText("Draft evidence changed", { exact: true }),
@@ -467,6 +479,7 @@ for (const edit of ["unknown time", "dense cron", "unmatched identity"])
           "sha256:" + "e".repeat(64) + ":update:0";
         state.rows[0]!.result!.evidence!.file!.digest =
           "sha256:" + "e".repeat(64);
+        await showOptions(page);
         await page
           .getByRole("button", { name: "Reload list", exact: true })
           .click();
@@ -535,6 +548,7 @@ test("week dates zoom to a day and missing configuration links to its repository
   await day.click();
   await expect(page.getByLabel("View", { exact: true })).toHaveValue("day");
   await expect(page.getByLabel("Starting date")).toHaveValue("2026-10-27");
+  await showOther(page);
   await expect(
     page
       .locator('[data-schedule-repository="schedule-0"]')
@@ -689,6 +703,7 @@ test("a repository keeps unprojectable entries visible beside its scheduled entr
   entry.id = DIGEST + ":update:1";
   state.rows[0]!.result!.evidence!.entries.push(entry);
   await page.goto(href);
+  await showOther(page);
   await expect(page.getByRole("region", { name: "Unplaced schedules" }).getByText("example/alpha", { exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Unplaced schedules" }).getByText("Time assigned by GitHub", { exact: true }).first()).toBeVisible();
 });
@@ -960,6 +975,7 @@ test("read-only schedule details keep history available without an editable form
   entry.editable = false;
   entry.issue = "unsupported_schedule";
   await page.goto(href);
+  await showOther(page);
   await page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: "npm at repository root", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Schedule details" })).toBeVisible();
@@ -1038,3 +1054,177 @@ test("matching times share their color and dragged draft colors follow the previ
   await expect(page.getByLabel("Starting date")).toHaveValue("2026-10-27");
   expect(await blockBackground(page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: /Draft.*08:15/ }))).toBe(destination);
 });
+
+test("laptop workbench fits fleet assignments and scrolls weekdays independently", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const state = await fixture(page);
+  state.rows.splice(0, state.rows.length, ...dependabotFleetBrowserRows());
+  await page.goto(href);
+  await expect(page.getByText(/55 of 55 repositories/)).toBeVisible();
+  const first = page.locator(".schedule-week-marker").first();
+  expect((await first.boundingBox())!.y).toBeLessThan(340);
+  const visibleRows = () =>
+    page
+      .locator(".schedule-week-day")
+      .first()
+      .locator(".schedule-week-marker")
+      .evaluateAll(
+        (nodes) =>
+          nodes.filter((node) => {
+            const box = node.getBoundingClientRect(),
+              parent = node.closest("ol")!.getBoundingClientRect();
+            return (
+              box.top >= parent.top &&
+              box.bottom <= Math.min(parent.bottom, innerHeight)
+            );
+          }).length,
+      );
+  expect(await visibleRows()).toBeGreaterThanOrEqual(10);
+  const days = await page
+    .locator(".schedule-week-day")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getBoundingClientRect().top),
+    );
+  expect(new Set(days).size).toBe(1);
+  const monday = page.locator(".schedule-week-blocks").first(),
+    tuesday = page.locator(".schedule-week-blocks").nth(1);
+  await monday.evaluate((node) => (node.scrollTop = node.scrollHeight));
+  expect(await monday.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  expect(await tuesday.evaluate((node) => node.scrollTop)).toBe(0);
+  await page.getByRole("button", { name: "Enter focus view" }).click();
+  expect(await visibleRows()).toBeGreaterThanOrEqual(15);
+  await page
+    .getByRole("button", { name: "View Monday, October 26, 2026" })
+    .click();
+  const entries = page.locator(".schedule-day-scroll .schedule-entry");
+  await expect.poll(() => entries.count()).toBeGreaterThan(15);
+  expect((await entries.first().boundingBox())!.height).toBeLessThanOrEqual(44);
+  expect(
+    await entries.evaluateAll(
+      (nodes) =>
+        nodes.filter((node) => {
+          const box = node.getBoundingClientRect(),
+            parent = node
+              .closest(".schedule-day-scroll")!
+              .getBoundingClientRect();
+          return box.top >= parent.top && box.bottom <= parent.bottom;
+        }).length,
+    ),
+  ).toBeGreaterThanOrEqual(12);
+  await page.getByRole("button", { name: "Exit focus view" }).click();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("focus preserves drafts and filters while dialogs and move cancellation remain usable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const state = await fixture(page);
+  await page.goto(href);
+  await page.getByRole("button", { name: "Enter focus view" }).click();
+  const { block } = await dayEditor(page);
+  await block.focus();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Exit focus view" }),
+  ).toBeVisible();
+  await expect(page.locator(".schedule-drag-ghost")).toHaveCount(0);
+  await block.click();
+  await page.getByLabel("Time", { exact: true }).fill("09:30");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByLabel("Find a repository").fill("beta");
+  await expect(
+    page.getByRole("button", { name: "Review changes" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Exit focus view" }).click();
+  await expect(page.getByLabel("Find a repository")).toHaveValue("beta");
+  await expect(page.getByLabel("View", { exact: true })).toHaveValue("day");
+  await page.getByRole("button", { name: "Enter focus view" }).click();
+  await page.getByRole("button", { name: "Review changes" }).click();
+  await page.getByRole("button", { name: "Prepare review" }).click();
+  await expect(
+    page.getByRole("button", { name: "Create pull request" }),
+  ).toBeVisible();
+  expect(state.calls).not.toContain("dependabot_change_apply");
+});
+
+for (const theme of ["light", "dark"])
+  test(`${theme} compact focus keeps mobile options, dialogs and navigation accessible`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(t => localStorage.setItem("hq.theme.v1", t), theme);
+    await fixture(page);
+    await page.goto(href);
+    await showOptions(page);
+    const options = await page.locator(".schedule-options-panel").boundingBox();
+    expect(options!.x).toBeGreaterThanOrEqual(0);
+    expect(options!.x + options!.width).toBeLessThanOrEqual(390);
+    await showOptions(page, false);
+    await page.getByRole("button", { name: "Enter focus view" }).click();
+    await expect(page.getByRole("navigation", { name: "Main navigation", exact: true })).toHaveCount(0);
+    await expect(page.locator(".sidebar")).toHaveAttribute("inert", "");
+    await showOptions(page);
+    await expect(page.locator(".schedule-options-panel")).toBeInViewport({ ratio: 1 });
+    await showOptions(page, false);
+    const { block } = await dayEditor(page);
+    await block.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("time[datetime]")).toBeVisible();
+    await page.getByLabel("Time", { exact: true }).fill("09:30");
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByRole("button", { name: "Review changes" })).toBeVisible();
+    const workbench = page.getByRole("region", { name: "Dependabot schedules", exact: true });
+    expect((await workbench.boundingBox())!.height).toBe(844);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(async () => (await workbench.boundingBox())!.height).toBe(720);
+    const draft = page.getByRole("button", { name: /Draft.*09:30/ });
+    await draft.focus();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Enter focus view" })).toBeVisible();
+    expect(await page.locator(".sidebar").getAttribute("inert")).toBeNull();
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Enter focus view" }).click();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });
+
+test("compact Day exposes a placed schedule's projection limit and its detail", async ({ page }) => {
+  const state = await fixture(page);
+  state.rows.splice(1);
+  state.rows[0]!.result!.evidence!.entries[0]!.schedule = { interval: "cron", cronjob: "*/15 * * * *" };
+  await page.goto(href + "&scheduleMode=day");
+  await expect(page.locator(".schedule-time-block")).toHaveCount(64);
+  await expect.soft(page.getByRole("status").filter({ hasText: "Display limit reached" })).toBeVisible();
+  const label = page.locator(".schedule-row-label");
+  await expect.soft(label).toHaveAccessibleName(/Too many occurrences to plot completely/);
+  await label.click();
+  await expect(page.getByRole("dialog").getByText("Too many occurrences to plot completely", { exact: true })).toBeVisible();
+});
+
+for (const mode of ["week", "day"])
+  test(`${mode} distinguishes unavailable repository reads before disclosure`, async ({ page }) => {
+    const state = await fixture(page);
+    state.rows.splice(1);
+    const evidence = state.rows[0]!.result!.evidence!;
+    evidence.read = { state: "unavailable", reason: "credential" };
+    evidence.configuration = "unknown";
+    evidence.file = null;
+    evidence.entries = [];
+    await page.goto(href + "&scheduleMode=" + mode);
+    await expect(page.getByText(/1 of 1 repositories/)).toBeVisible();
+    await expect(page.locator(".schedule-other summary")).toContainText("1 repository unavailable");
+    await expect(page.locator(".schedule-other")).not.toHaveAttribute("open", "");
+    await showOther(page);
+    await expect(page.getByText("Read unavailable: credential", { exact: true }).first()).toBeVisible();
+  });

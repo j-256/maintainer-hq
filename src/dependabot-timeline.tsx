@@ -37,6 +37,7 @@ type TimelineProps = {
   observed: Map<string, DependabotOccurrence[]>;
   preview: Map<string, DependabotOccurrence[]>;
   notices: Map<string, DependabotNotice[]>;
+  repositoryName: (row: DependabotInventoryRow) => string;
   onDay: (date: string) => void;
   onPrepare: (row: DependabotInventoryRow) => void;
   onDiscard: (id: string) => void;
@@ -198,6 +199,73 @@ function EmptyRepository({
     </p>
   );
 }
+export function DependabotDraftSummary(props: TimelineProps) {
+  const rows = props.rows.filter((row) => props.drafts[row.repository.id]);
+  return rows.length ? (
+    <section className="schedule-week-drafts" aria-label="Draft schedules">
+      {rows.map((row) => (
+        <div
+          key={row.repository.id}
+          data-schedule-repository={row.repository.id}
+        >
+          <RepositoryHeader row={row} props={props} compact />
+        </div>
+      ))}
+    </section>
+  ) : null;
+}
+function OtherSchedules({
+  props,
+  placed,
+}: {
+  props: TimelineProps;
+  placed: Set<string>;
+}) {
+  const unplaced = props.rows.filter(
+    (row) =>
+      !row.result?.evidence?.entries.length ||
+      row.result.evidence.entries.some(
+        (entry) => !placed.has(entryKey(row, entry)),
+      ),
+  );
+  const unavailable = unplaced.filter(row => !row.source || row.result?.state !== "ready" || row.result.evidence?.read.state !== "observed").length;
+  return unplaced.length ? (
+    <details className="schedule-other">
+      <summary>
+        Other schedules <span>({unplaced.length} {unplaced.length === 1 ? "repository" : "repositories"})</span>
+        {unavailable ? <span className="schedule-exception"> / {unavailable} {unavailable === 1 ? "repository" : "repositories"} unavailable</span> : null}
+      </summary>
+      <section className="schedule-unplaced" aria-label="Unplaced schedules">
+        <p className="dependency-meta">
+          Unknown times and starts outside this view.
+        </p>
+        {unplaced.map((row) => (
+          <article
+            key={row.repository.id}
+            className="schedule-repository"
+            data-schedule-repository={row.repository.id}
+          >
+            <RepositoryHeader row={row} props={props} />
+            {(row.result?.evidence?.entries ?? [])
+              .filter((entry) => !placed.has(entryKey(row, entry)))
+              .map((entry) => (
+                <EntryDetails
+                  key={entry.id}
+                  row={row}
+                  entry={entry}
+                  props={props}
+                />
+              ))}
+            {!row.result?.evidence?.entries.length ? (
+              <EmptyRepository row={row} props={props} />
+            ) : null}
+            <History row={row} props={props} />
+          </article>
+        ))}
+      </section>
+    </details>
+  ) : null;
+}
 export function DependabotWeekOverview(props: TimelineProps) {
   const entries = props.rows.flatMap((row) =>
     (row.result?.evidence?.entries ?? []).flatMap((entry) => [
@@ -221,28 +289,13 @@ export function DependabotWeekOverview(props: TimelineProps) {
     ]),
   );
   const placed = new Set(entries.map((item) => entryKey(item.row, item.entry)));
-  const unplaced = props.rows.filter(
-    (row) =>
-      !row.result?.evidence?.entries.length ||
-      row.result.evidence.entries.some(
-        (entry) => !placed.has(entryKey(row, entry)),
-      ),
-  );
   return (
     <>
-      {props.rows.some(row => props.drafts[row.repository.id]) ? (
-        <section className="schedule-week-drafts" aria-label="Draft schedules">
-          {props.rows.filter(row => props.drafts[row.repository.id]).map(row => (
-            <div key={row.repository.id} data-schedule-repository={row.repository.id}>
-              <RepositoryHeader row={row} props={props} compact />
-            </div>
-          ))}
-        </section>
-      ) : null}
       <div
         className="schedule-week-grid"
         role="region"
         aria-label="Schedules grouped by weekday"
+        tabIndex={0}
       >
         {Array.from({ length: DEPENDABOT_TIME.DAYS_PER_WEEK }, (_, index) => {
           const date = Temporal.PlainDate.from(props.date)
@@ -292,10 +345,20 @@ export function DependabotWeekOverview(props: TimelineProps) {
               <ol className="schedule-week-blocks">
                 {items.map((item) => (
                   <li
-                    key={entryKey(item.row, item.entry) + item.occurrence.instant + item.draft}
+                    key={
+                      entryKey(item.row, item.entry) +
+                      item.occurrence.instant +
+                      item.draft
+                    }
                     data-schedule-repository={item.row.repository.id}
                   >
-                    {props.block(item.row, item.entry, item.occurrence, item.draft, true)}
+                    {props.block(
+                      item.row,
+                      item.entry,
+                      item.occurrence,
+                      item.draft,
+                      true,
+                    )}
                   </li>
                 ))}
               </ol>
@@ -308,37 +371,7 @@ export function DependabotWeekOverview(props: TimelineProps) {
           );
         })}
       </div>
-      {unplaced.length ? (
-        <section className="schedule-unplaced" aria-label="Unplaced schedules">
-          <h2>Other repositories</h2>
-          <p className="dependency-meta">
-            Unknown times and starts outside this week stay visible here.
-          </p>
-          {unplaced.map((row) => (
-            <article
-              key={row.repository.id}
-              className="schedule-repository"
-              data-schedule-repository={row.repository.id}
-            >
-              <RepositoryHeader row={row} props={props} />
-              {(row.result?.evidence?.entries ?? [])
-                .filter((entry) => !placed.has(entryKey(row, entry)))
-                .map((entry) => (
-                  <EntryDetails
-                    key={entry.id}
-                    row={row}
-                    entry={entry}
-                    props={props}
-                  />
-                ))}
-              {!row.result?.evidence?.entries.length ? (
-                <EmptyRepository row={row} props={props} />
-              ) : null}
-              <History row={row} props={props} />
-            </article>
-          ))}
-        </section>
-      ) : null}
+      <OtherSchedules props={props} placed={placed} />
     </>
   );
 }
@@ -358,15 +391,29 @@ export function DependabotDayTimeline(props: TimelineProps) {
         DEPENDABOT_DRAG.MIN_HOUR_WIDTH,
     );
   }, [props.observed]);
+  const entries = props.rows.flatMap((row) =>
+    (row.result?.evidence?.entries ?? []).flatMap((entry) => {
+      const key = entryKey(row, entry);
+      const observed = props.observed.get(key) ?? [];
+      const edited =
+        draftMatches(row, props.drafts[row.repository.id]) &&
+        props.drafts[row.repository.id]?.edits.some(
+          (edit) => edit.entryId === entry.id,
+        );
+      const preview = edited ? (props.preview.get(key) ?? []) : [];
+      const notices = (props.notices.get(key) ?? []).filter(notice => notice.code !== "outside_range");
+      return observed.length || preview.length
+        ? [{ row, entry, observed, preview, notices }]
+        : [];
+    }),
+  );
+  const placed = new Set(entries.map(({ row, entry }) => entryKey(row, entry)));
   const week = Temporal.PlainDate.from(props.date).subtract({
     days: Temporal.PlainDate.from(props.date).dayOfWeek - 1,
   });
   return (
     <>
       <nav className="schedule-day-strip" aria-label="Weekdays">
-        <span className="dependency-meta">
-          View a day or drop a weekly schedule
-        </span>
         <div>
           {Array.from({ length: DEPENDABOT_TIME.DAYS_PER_WEEK }, (_, index) => {
             const date = week.add({ days: index }).toString();
@@ -421,57 +468,57 @@ export function DependabotDayTimeline(props: TimelineProps) {
               </ol>
             </div>
           </div>
-          {props.rows.map((row) => {
-            const draft = props.drafts[row.repository.id],
-              valid = draftMatches(row, draft),
-              entries = row.result?.evidence?.entries ?? [];
-            return (
-              <article
-                key={row.repository.id}
-                className="schedule-repository"
-                data-schedule-repository={row.repository.id}
+          {entries.map(({ row, entry, observed, preview, notices }) => (
+            <div
+              key={entryKey(row, entry)}
+              className={
+                "schedule-entry" +
+                (observed.length && preview.length ? " has-comparison" : "")
+              }
+              data-schedule-repository={row.repository.id}
+            >
+              <button
+                type="button"
+                className={"schedule-row-label" + (notices.length ? " has-notice" : "")}
+                aria-label={
+                  "Edit schedule for " +
+                  row.repository.fullName +
+                  ", " +
+                  scheduleMembers(entry) +
+                  notices.map(notice => ", " + DEPENDABOT_NOTICE_LABELS[notice.code]).join("")
+                }
+                title={
+                  row.repository.fullName +
+                  " / " +
+                  scheduleMembers(entry) +
+                  " / " +
+                  dependabotScheduleLabel(entry.schedule) +
+                  " / " +
+                  rowState(row, props.now) +
+                  notices.map(notice => " / " + DEPENDABOT_NOTICE_LABELS[notice.code]).join("")
+                }
+                onClick={(event) =>
+                  props.onShow(row, entry, event.currentTarget)
+                }
               >
-                <RepositoryHeader row={row} props={props} />
-                {entries.map((entry) => {
-                  const key = entryKey(row, entry),
-                    edit = valid
-                      ? draft?.edits.find((edit) => edit.entryId === entry.id)
-                      : undefined;
-                  return (
-                    <div className="schedule-entry" key={entry.id}>
-                      <EntryDetails row={row} entry={entry} props={props} />
-                      <div className="schedule-lane is-day">
-                        <div
-                          className="schedule-hour-track"
-                          data-schedule-hour-lane={props.date}
-                        >
-                          {(props.observed.get(key) ?? []).map((item) =>
-                            props.block(row, entry, item, false),
-                          )}
-                          {edit
-                            ? (props.preview.get(key) ?? []).map((item) =>
-                                props.block(row, entry, item, true),
-                              )
-                            : null}
-                          {edit && !props.preview.get(key)?.length ? (
-                            <span className="schedule-draft-note">
-                              Draft: {dependabotScheduleLabel(edit.schedule)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {!entries.length ? (
-                  <EmptyRepository row={row} props={props} />
-                ) : null}
-                <History row={row} props={props} />
-              </article>
-            );
-          })}
+                <strong>{props.repositoryName(row)}</strong>
+                {notices.length ? <span className="schedule-entry-warning" aria-hidden="true">!</span> : null}
+                <span>{scheduleMembers(entry)}</span>
+              </button>
+              <div className="schedule-lane is-day">
+                <div
+                  className="schedule-hour-track"
+                  data-schedule-hour-lane={props.date}
+                >
+                  {observed.map((item) => props.block(row, entry, item, false))}
+                  {preview.map((item) => props.block(row, entry, item, true))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+      <OtherSchedules props={props} placed={placed} />
     </>
   );
 }

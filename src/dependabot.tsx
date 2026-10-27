@@ -6,6 +6,7 @@ import {
 import {
   DependabotWeekOverview,
   DependabotDayTimeline,
+  DependabotDraftSummary,
 } from "./dependabot-timeline";
 import {
   type DependabotDraft as Draft,
@@ -13,6 +14,7 @@ import {
   stale,
   draftMatches,
   withinDependabotSchedules,
+  rowState,
 } from "./lib/dependabot-view";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +24,9 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  CalendarClock,
+  Maximize2,
+  Minimize2,
+  SlidersHorizontal,
   RefreshCw,
 } from "lucide-react";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
@@ -36,6 +40,7 @@ import {
 } from "../shared/dependabot";
 import {
   projectDependabotSchedules,
+  DEPENDABOT_NOTICE_LABELS,
   type DependabotOccurrence,
 } from "../shared/dependabot-projection";
 import type { DependabotChangeReview } from "../shared/dependabot-changes";
@@ -52,6 +57,7 @@ import {
   DependabotHistory,
 } from "./dependabot-review";
 import "./dependabot.css";
+import { useScheduleWorkspace } from "./lib/use-schedule-workspace";
 import { dependabotTimeColor } from "./lib/dependabot-colors";
 
 type Inventory = {
@@ -94,7 +100,6 @@ export function DependabotView({
   snapshot: Snapshot;
   projectId?: string;
 }) {
-  const Heading = projectId ? "h2" : "h1";
   const workspaceId = snapshot.workspace.id,
     dates = useDateTime(),
     cache = useQueryClient();
@@ -288,7 +293,9 @@ export function DependabotView({
   );
   const observedByKey = useMemo(() => byKey(observed.occurrences), [observed]);
   const previewByKey = useMemo(() => byKey(preview.occurrences), [preview]);
-  const noticeByKey = useMemo(() => byKey(observed.notices), [observed]);
+  const noticeByKey = useMemo(() => byKey(Array.from(new Map(
+    [...observed.notices, ...preview.notices].map(notice => [notice.key + ":" + notice.code, notice]),
+  ).values())), [observed, preview]);
   const ambiguous = observed.notices.some(
     (notice) => notice.code !== "outside_range",
   );
@@ -356,6 +363,11 @@ export function DependabotView({
     },
     onOpen: (selection, target) => show(selection.row, selection.entry, target),
   });
+  const workspace = useScheduleWorkspace(
+    Boolean(editing || preparing),
+    Boolean(drag.preview),
+  );
+  const Heading = projectId && !workspace.focused ? "h2" : "h1";
   const liveInputs = useMemo(() => {
     const candidate = drag.preview;
     if (!candidate?.result.ok) return draftInputs;
@@ -605,6 +617,8 @@ export function DependabotView({
     activeDate: drag.preview?.result.ok ? drag.preview.result.date : undefined,
     preview: previewByKey,
     notices: noticeByKey,
+    repositoryName: (row: DependabotInventoryRow) =>
+      repositoryNames.get(row.repository.fullName) ?? row.repository.fullName,
     onDay: selectDay,
     onPrepare: setPreparing,
     onDiscard: removeDraft,
@@ -613,21 +627,19 @@ export function DependabotView({
   };
   return (
     <section
-      className="dependencies-view schedule-view"
+      ref={workspace.ref}
+      className={
+        "dependencies-view schedule-view" +
+        (workspace.focused ? " is-focused" : "")
+      }
       aria-label="Dependabot schedules"
     >
-      <header className="dependency-toolbar">
-        <div>
-          <Heading className="page-title">
-            <CalendarClock size={24} aria-hidden="true" />
-            Dependabot schedules
-          </Heading>
-          <p className="dependency-meta">
-            Configured start times. Overlaps are allowed.
-          </p>
-        </div>
+      <header className="schedule-toolbar">
         <Button
-          variant="outline"
+          variant="ghost"
+          size="icon"
+          aria-label="Back to dependencies"
+          title="Back to dependencies"
           onClick={() => {
             const next = new URLSearchParams(params);
             next.delete("view");
@@ -636,86 +648,166 @@ export function DependabotView({
           }}
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          Dependencies
+        </Button>
+        <Heading className="schedule-title" aria-label="Dependabot schedules">Schedules</Heading>
+        {workspace.focused ? (
+          <span className="schedule-context">
+            {snapshot.workspace.name}
+            {projectId
+              ? " / " +
+                (snapshot.projects.find((project) => project.id === projectId)
+                  ?.name ?? "Project")
+              : ""}
+          </span>
+        ) : null}
+        <div className="schedule-controls">
+          <label>
+            <span className="sr-only">View</span>
+            <select
+              aria-label="View"
+              value={mode}
+              onChange={(event) => change("scheduleMode", event.target.value)}
+            >
+              <option value="week">Week</option>
+              <option value="day">Day</option>
+            </select>
+          </label>
+          <div className="schedule-date-controls">
+            <Button
+              variant="outline"
+              aria-label="Previous date range"
+              onClick={() =>
+                change(
+                  "scheduleDate",
+                  Temporal.PlainDate.from(date)
+                    .subtract({ days: mode === "week" ? 7 : 1 })
+                    .toString(),
+                )
+              }
+            >
+              <ChevronLeft size={16} />
+            </Button>
+            <label>
+              <span className="sr-only">Starting date</span>
+              <Input
+                type="date"
+                value={date}
+                onChange={(event) => {
+                  if (event.target.value)
+                    change("scheduleDate", event.target.value);
+                }}
+              />
+            </label>
+            <Button
+              variant="outline"
+              aria-label="Next date range"
+              onClick={() =>
+                change(
+                  "scheduleDate",
+                  Temporal.PlainDate.from(date)
+                    .add({ days: mode === "week" ? 7 : 1 })
+                    .toString(),
+                )
+              }
+            >
+              <ChevronRight size={16} />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                change(
+                  "scheduleDate",
+                  Temporal.Now.plainDateISO(zone).toString(),
+                )
+              }
+            >
+              Today
+            </Button>
+          </div>
+          <label>
+            <span className="sr-only">Display timezone</span>
+            <select
+              aria-label="Display timezone"
+              value={zone}
+              onChange={(event) => change("scheduleZone", event.target.value)}
+            >
+              {zones.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <details className="schedule-options">
+          <summary aria-label="Schedule options" title="Schedule options">
+            <SlidersHorizontal size={16} aria-hidden="true" />
+            <span className="sr-only">Schedule options</span>
+          </summary>
+          <div className="schedule-options-panel">
+            <Button
+              variant="outline"
+              disabled={query.isFetching || refreshing}
+              onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void query.refetch(); }}
+            >
+              Reload list
+            </Button>
+            <Button
+              variant="outline"
+              disabled={refreshing || !rows.length}
+              onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); void refreshSchedules(); }}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              Refresh schedules
+            </Button>
+            <div className="schedule-legend">
+              <span>
+                <i className="schedule-dot schedule-time-swatch" />
+                Time color
+              </span>
+              <span>
+                <i className="schedule-dot has-overlap" />
+                Same UTC minute
+              </span>
+              <span>
+                <i className="schedule-dot is-draft" />
+                Draft outline
+              </span>
+            </div>
+            <p>
+              Nominal starts; execution may vary. Overlaps are allowed. Drafts
+              stay in this tab.
+            </p>
+            <p>
+              Drag in 15-minute steps. Drop weekly schedules on another weekday.
+              Changes apply to the recurring schedule.
+            </p>
+            <p>
+              Keyboard: Space to pick up, Left/Right to change time,
+              Alt+Left/Right to change day, Enter to save, Escape to cancel.
+            </p>
+          </div>
+        </details>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label={
+            workspace.focused ? "Exit focus view" : "Enter focus view"
+          }
+          title={workspace.focused ? "Exit focus view" : "Enter focus view"}
+          onClick={() => {
+            drag.cancel();
+            workspace.toggle();
+          }}
+        >
+          {workspace.focused ? (
+            <Minimize2 size={16} aria-hidden="true" />
+          ) : (
+            <Maximize2 size={16} aria-hidden="true" />
+          )}
         </Button>
       </header>
-      <div className="schedule-controls">
-        <label>
-          View
-          <select
-            aria-label="View"
-            value={mode}
-            onChange={(event) => change("scheduleMode", event.target.value)}
-          >
-            <option value="week">Week</option>
-            <option value="day">Day</option>
-          </select>
-        </label>
-        <div className="schedule-date-controls">
-          <Button
-            variant="outline"
-            aria-label="Previous date range"
-            onClick={() =>
-              change(
-                "scheduleDate",
-                Temporal.PlainDate.from(date)
-                  .subtract({ days: mode === "week" ? 7 : 1 })
-                  .toString(),
-              )
-            }
-          >
-            <ChevronLeft size={16} />
-          </Button>
-          <label>
-            Starting date
-            <Input
-              type="date"
-              value={date}
-              onChange={(event) => {
-                if (event.target.value)
-                  change("scheduleDate", event.target.value);
-              }}
-            />
-          </label>
-          <Button
-            variant="outline"
-            aria-label="Next date range"
-            onClick={() =>
-              change(
-                "scheduleDate",
-                Temporal.PlainDate.from(date)
-                  .add({ days: mode === "week" ? 7 : 1 })
-                  .toString(),
-              )
-            }
-          >
-            <ChevronRight size={16} />
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() =>
-              change("scheduleDate", Temporal.Now.plainDateISO(zone).toString())
-            }
-          >
-            Today
-          </Button>
-        </div>
-        <label>
-          Display timezone
-          <select
-            aria-label="Display timezone"
-            value={zone}
-            onChange={(event) => change("scheduleZone", event.target.value)}
-          >
-            {zones.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-      </div>
       <div className="schedule-filter-controls">
         <label>
-          Find a repository
+          <span className="sr-only">Find a repository</span>
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -731,21 +823,6 @@ export function DependabotView({
           />
           Overlaps only
         </label>
-        <Button
-          variant="outline"
-          disabled={query.isFetching || refreshing}
-          onClick={() => void query.refetch()}
-        >
-          Reload list
-        </Button>
-        <Button
-          variant="outline"
-          disabled={refreshing || !rows.length}
-          onClick={() => void refreshSchedules()}
-        >
-          <RefreshCw size={16} aria-hidden="true" />
-          Refresh schedules
-        </Button>
         {refreshing ? (
           <Button
             variant="outline"
@@ -759,20 +836,21 @@ export function DependabotView({
             Stop refresh
           </Button>
         ) : null}
+        {query.isPending ? (
+          <p role="status">Loading schedule inventory...</p>
+        ) : query.error ? (
+          <p role="alert">{query.error.message}</p>
+        ) : (
+          <p role="status">
+            {rows.length} of {data?.total ?? 0} repositories. {present} fresh.{" "}
+            {overlapMinutes} overlapping start minutes.
+            {observed.limited || preview.limited ? " Display limit reached; some starts are not shown." : ""}
+            {coverage
+              ? ""
+              : " Incomplete comparison: unknown or stale schedules may add overlaps."}
+          </p>
+        )}
       </div>
-      {query.isPending ? (
-        <p role="status">Loading schedule inventory...</p>
-      ) : query.error ? (
-        <p role="alert">{query.error.message}</p>
-      ) : (
-        <p role="status">
-          {rows.length} of {data?.total ?? 0} repositories. {present} fresh.{" "}
-          {overlapMinutes} overlapping start minutes.
-          {coverage
-            ? ""
-            : " Incomplete comparison: unknown or stale schedules may add overlaps."}
-        </p>
-      )}
       {data?.issue ? <p role="status">{data.issue}</p> : null}
       {data && rows.length < data.total ? (
         <Button
@@ -806,37 +884,19 @@ export function DependabotView({
         )
       ) : (
         <>
-          <div className="schedule-legend">
-            <span>
-              <i className="schedule-dot schedule-time-swatch" />
-              Time color
-            </span>
-            <span>
-              <i className="schedule-dot has-overlap" />
-              Same UTC minute
-            </span>
-            <span>
-              <i className="schedule-dot is-draft" />
-              Local draft
-            </span>
-            <span className="dependency-meta">
-              Nominal starts; execution may vary. Drafts stay in this tab.
-            </span>
-          </div>
-          <p className="dependency-meta schedule-move-help">
-            Drag times in 15-minute steps. Changes apply to the recurring
-            schedule.
-          </p>
+          <DependabotDraftSummary {...timelineProps} rows={rows} />
           <span className="sr-only" id="schedule-move-instructions">
             Click to edit. Space picks up a block; Left and Right change time;
             Alt with Left or Right changes the day of a weekly schedule. Enter
             saves the local draft; Escape cancels. You can also use the form.
           </span>
-          {mode === "week" ? (
-            <DependabotWeekOverview {...timelineProps} />
-          ) : (
-            <DependabotDayTimeline key={date + zone} {...timelineProps} />
-          )}
+          <div className="schedule-canvas">
+            {mode === "week" ? (
+              <DependabotWeekOverview {...timelineProps} />
+            ) : (
+              <DependabotDayTimeline key={date + zone} {...timelineProps} />
+            )}
+          </div>
           {!query.isPending && data && !visible.length ? (
             <p role="status">No repositories match this view.</p>
           ) : null}
@@ -861,6 +921,18 @@ export function DependabotView({
             saveSchedule(editing.row, editing.entry, schedule)
           }
         >
+          <div className="dependency-meta">
+            <span>{rowState(editing.row, now)}</span>
+            {editing.row.result?.evidence ? (
+              <time dateTime={editing.row.result.evidence.observedAt}>Read {dates.dateTime(editing.row.result.evidence.observedAt)}</time>
+            ) : null}
+            {editing.row.result?.nextReadAt && Date.parse(editing.row.result.nextReadAt) > now ? (
+              <span>Next read {dates.dateTime(editing.row.result.nextReadAt)}</span>
+            ) : null}
+          </div>
+          {noticeByKey.get(entryKey(editing.row, editing.entry))?.filter(notice => notice.code !== "outside_range").map(notice => (
+            <p role="status" key={notice.code}>{DEPENDABOT_NOTICE_LABELS[notice.code]}</p>
+          ))}
           {operator ? (
             <DependabotHistory
               workspaceId={workspaceId}
