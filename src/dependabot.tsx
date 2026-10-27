@@ -14,7 +14,7 @@ import {
   draftMatches,
   withinDependabotSchedules,
 } from "./lib/dependabot-view";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Temporal } from "@js-temporal/polyfill";
@@ -52,6 +52,7 @@ import {
   DependabotHistory,
 } from "./dependabot-review";
 import "./dependabot.css";
+import { dependabotTimeColor } from "./lib/dependabot-colors";
 
 type Inventory = {
   rows: DependabotInventoryRow[];
@@ -539,7 +540,9 @@ export function DependabotView({
     draft = false,
     card = false,
   ) {
-    const label = `${draft ? "Draft" : "Observed"} ${row.repository.fullName} ${scheduleMembers(entry)} ${Temporal.Instant.from(item.instant).toZonedDateTimeISO(zone).toPlainDate().toString()} ${clock.format(new Date(item.instant))} ${zone}${item.overlap > 1 ? `, ${item.overlap} starts at the same UTC minute` : ""}${item.stale ? ", stale observation" : ""}`;
+    const local = Temporal.Instant.from(item.instant).toZonedDateTimeISO(zone);
+    const day = local.toPlainDate().toString();
+    const label = `${draft ? "Draft" : "Observed"} ${row.repository.fullName} ${scheduleMembers(entry)} ${day} ${clock.format(new Date(item.instant))} ${zone}${item.overlap > 1 ? `, ${item.overlap} starts at the same UTC minute` : ""}${item.stale ? ", stale observation" : ""}`;
     const schedule =
       (draft
         ? drafts[row.repository.id]?.edits.find(
@@ -559,7 +562,10 @@ export function DependabotView({
         key={item.instant}
         type="button"
         className={`schedule-marker${card ? " schedule-week-marker" : " schedule-time-block"}${draft ? " is-draft" : ""}${item.overlap > 1 ? " has-overlap" : ""}${item.stale ? " is-stale" : ""}`}
-        style={card ? undefined : { left: `${item.position * 100}%` }}
+        style={{
+          ...(!card ? { left: `${item.position * 100}%` } : {}),
+          "--schedule-time-color": dependabotTimeColor(day, item.minute),
+        } as CSSProperties}
         aria-label={label}
         title={label + (row.result?.evidence ? ", read " + dates.dateTime(row.result.evidence.observedAt) : "")}
         {...drag.handlers(selection)}
@@ -802,8 +808,8 @@ export function DependabotView({
         <>
           <div className="schedule-legend">
             <span>
-              <i className="schedule-dot" />
-              Observed
+              <i className="schedule-dot schedule-time-swatch" />
+              Time color
             </span>
             <span>
               <i className="schedule-dot has-overlap" />

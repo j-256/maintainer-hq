@@ -89,6 +89,9 @@
   background: var(--schedule-overlap);
   border-color: #5d4913;
 }
+.schedule-time-swatch {
+  background: linear-gradient(135deg, #a3c5ef, #ecb8d5, #b0e1b4);
+}
 .schedule-dot.is-draft {
   border: 2px dashed var(--foreground);
   background: var(--background);
@@ -317,11 +320,14 @@
     );
   border-bottom: 1px solid var(--border);
 }
+.schedule-marker,
+.schedule-drag-block {
+  color: #111;
+  background: var(--schedule-time-color);
+}
 .schedule-marker {
-  border: 2px solid var(--foreground);
+  border: 2px solid #1f2933;
   border-radius: 0.5rem;
-  color: var(--background);
-  background: var(--foreground);
   font: inherit;
   font-size: 0.75rem;
   font-weight: 600;
@@ -336,13 +342,9 @@
   z-index: 1;
 }
 .schedule-marker.has-overlap {
-  background: var(--schedule-overlap);
-  color: #30260a;
-  border-color: #78601e;
+  box-shadow: inset 0 -3px 0 var(--schedule-overlap);
 }
 .schedule-marker.is-draft {
-  background: var(--background);
-  color: var(--foreground);
   border-style: dashed;
 }
 .schedule-time-block.is-draft {
@@ -351,8 +353,6 @@
 }
 .schedule-marker.is-stale {
   border-style: dotted;
-  background: var(--muted);
-  color: var(--foreground);
 }
 .schedule-marker:hover {
   outline: 2px solid var(--muted-foreground);
@@ -406,6 +406,18 @@
   min-height: 2.25rem;
   padding: 0.35rem 0.4rem;
   position: relative;
+}
+.schedule-week-marker.has-overlap::after {
+  content: "";
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--schedule-overlap);
+  border: 1px solid #3d3217;
+  pointer-events: none;
 }
 .schedule-week-marker .schedule-block-time {
   grid-column: 2;
@@ -475,9 +487,7 @@
   display: grid;
   gap: 0.25rem;
   overflow-wrap: anywhere;
-  background: var(--background);
-  color: var(--foreground);
-  border: 2px solid var(--primary);
+  border: 2px solid #1f2933;
   border-radius: 0.5rem;
   padding: 0.5rem;
   box-shadow: 0 0.4rem 1rem #0003;
@@ -485,7 +495,7 @@
 }
 .schedule-drag-block > span {
   font-size: 0.75rem;
-  color: var(--muted-foreground);
+  color: inherit;
 }
 .schedule-drag-ghost.is-invalid .schedule-drag-block,
 .schedule-drag-ghost.is-invalid .schedule-drag-time {

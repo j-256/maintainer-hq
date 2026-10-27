@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -23,6 +24,7 @@ import {
   type DependabotMoveTarget,
 } from "../shared/dependabot-movement";
 import type { DependabotOccurrence } from "../shared/dependabot-projection";
+import { dependabotTimeColor } from "./lib/dependabot-colors";
 
 export type DependabotMoveSelection = {
   key: string;
@@ -436,7 +438,8 @@ export function DependabotDragPreview({
       style={{
         left: preview.x,
         top: preview.y,
-      }}
+        "--schedule-time-color": dependabotTimeColor(preview.target.date, minute),
+      } as CSSProperties}
     >
       <div role="status" aria-live="polite" className="schedule-drag-time">
         <strong>
