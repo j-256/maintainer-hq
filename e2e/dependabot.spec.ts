@@ -918,7 +918,9 @@ test("weekly assignments show repo and time with secondary metadata in details",
   await expect(week.getByRole("button", { name: "PR history" })).toHaveCount(0);
   const stale = week.locator('[data-schedule-repository="schedule-3"]').getByRole("button", { name: /stale observation/ });
   await expect(stale).toHaveClass(/is-stale/);
-  await expect(stale).toHaveAttribute("title", /stale observation/i);
+  await stale.hover();
+  await expect(page.getByRole("tooltip")).toContainText("Stale observation");
+  await expect(page.getByRole("tooltip")).toContainText(/Stale observation \/ \d{4}-\d{2}-\d{2}/);
   await block.click();
   const details = page.getByRole("dialog");
   await expect(details.getByText("Ecosystem", { exact: true })).toBeVisible();
@@ -1190,6 +1192,10 @@ for (const theme of ["light", "dark"])
     await expect.poll(async () => (await workbench.boundingBox())!.height).toBe(720);
     const draft = page.getByRole("button", { name: /Draft.*09:30/ });
     await draft.focus();
+    await expect(page.getByRole("tooltip")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Exit focus view" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "Enter focus view" })).toBeVisible();
     expect(await page.locator(".sidebar").getAttribute("inert")).toBeNull();
@@ -1227,4 +1233,132 @@ for (const mode of ["week", "day"])
     await expect(page.locator(".schedule-other")).not.toHaveAttribute("open", "");
     await showOther(page);
     await expect(page.getByText("Read unavailable: credential", { exact: true }).first()).toBeVisible();
+  });
+
+test("hover distinguishes repeated repository assignments without opening the editor", async ({ page }) => {
+  const state = await fixture(page);
+  const original = state.rows[0]!.result!.evidence!.entries[0]!;
+  state.rows[0]!.result!.evidence!.entries = ["npm", "docker", "cargo"].map((ecosystem, index) => ({
+    ...structuredClone(original),
+    id: DIGEST + ":update:" + index,
+    members: [{ ecosystem, directories: [index ? "/packages/" + ecosystem : "/"], targetBranch: index === 1 ? "release/1.0" : null }],
+  }));
+  await page.goto(href);
+  const blocks = page.locator('[data-schedule-repository="schedule-0"] .schedule-week-marker');
+  await expect(blocks).toHaveCount(3);
+  for (const [index, ecosystem] of ["npm", "docker", "cargo"].entries()) {
+    await blocks.nth(index).hover();
+    const preview = page.getByRole("tooltip");
+    await expect(preview).toContainText("example/alpha");
+    await expect(preview).toContainText(ecosystem);
+    await expect(preview).toContainText(index ? "/packages/" + ecosystem : "Repository root (/)");
+    await expect(preview).toContainText(index === 1 ? "release/1.0" : "Default branch");
+    await expect(preview).toContainText("weekly");
+    await expect(preview).toContainText("08:00 UTC");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  expect(state.calls).not.toContain("repository_dependabot");
+  expect(state.calls).not.toContain("dependabot_change_plan");
+});
+
+test("assignment focus previews are hoverable, dismiss before focus view and yield to moves", async ({ page }) => {
+  await fixture(page);
+  await page.goto(href);
+  await page.getByRole("button", { name: "Enter focus view" }).click();
+  const group = page.locator('[data-schedule-repository="schedule-5"]').getByRole("button", { name: /Observed/ });
+  await group.focus();
+  const preview = page.getByRole("tooltip");
+  await expect(preview).toContainText("frontend");
+  await expect(preview).toContainText("npm");
+  await expect(preview).toContainText("docker");
+  await expect(preview.getByText("Repository root (/)", { exact: true })).toHaveCount(2);
+  await expect(group).toHaveAccessibleDescription(/Space picks up a block/);
+  await expect(group).toHaveAccessibleDescription(/frontend/);
+  await preview.hover();
+  await expect(preview).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Exit focus view" })).toBeVisible();
+  await expect(group).toBeFocused();
+  const { block } = await dayEditor(page);
+  await block.focus();
+  await expect(preview).toBeVisible();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowRight");
+  await expect(preview).toHaveCount(0);
+  await expect(page.locator(".schedule-drag-time")).toContainText("08:15 UTC");
+  await page.keyboard.press("Enter");
+  const draft = page.getByRole("button", { name: /Draft.*example\/alpha.*08:15/ });
+  await expect(draft).toBeFocused();
+  await page.keyboard.press("Tab");
+  await draft.focus();
+  await expect(preview).toContainText("Local draft");
+  await expect(preview).toContainText("08:15 UTC");
+  await expect(preview).toContainText("08:15");
+});
+
+for (const theme of ["light", "dark"])
+  test(`${theme} assignment preview fits the mobile viewport and leaves click editing available`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(value => localStorage.setItem("hq.theme.v1", value), theme);
+    const state = await fixture(page);
+    const entry = state.rows[0]!.result!.evidence!.entries[0]!;
+    entry.members[0]!.directories = ["/packages/" + "long-directory-".repeat(12)];
+    await page.goto(href);
+    const block = page.locator('[data-schedule-repository="schedule-0"]').getByRole("button", { name: /Observed/ });
+    await block.focus();
+    const preview = page.getByRole("tooltip");
+    await expect(preview).toBeVisible();
+    await expect(preview).toBeInViewport({ ratio: 1 });
+    expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(preview).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+
+test("large grouped previews disclose omitted details without a keyboard-inaccessible scroll panel", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  const state = await fixture(page);
+  const entry = state.rows[5]!.result!.evidence!.entries[0]!;
+  entry.members = Array.from({ length: 5 }, (_, member) => ({
+    ecosystem: "npm",
+    directories: Array.from({ length: 5 }, (_, directory) => "/packages/" + member + "/" + directory + "/" + "long-name-".repeat(12)),
+    targetBranch: "release/" + member,
+  }));
+  await page.goto(href);
+  await page.getByRole("button", { name: "Enter focus view" }).click();
+  const block = page.locator('[data-schedule-repository="schedule-5"]').getByRole("button", { name: /Observed/ });
+  await block.focus();
+  const preview = page.getByRole("tooltip");
+  await expect(preview.getByText("Preview shortened. Open assignment for full details.", { exact: true })).toBeVisible();
+  await expect(preview).toBeInViewport({ ratio: 1 });
+  await expect(block).toHaveAccessibleDescription(/2 more members in details/);
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog").locator(".schedule-member-details")).toHaveCount(5);
+});
+
+for (const [observedHour, draftHour] of [[1, 3], [3, 1]])
+  test(`hover projection warnings follow observed ${observedHour} and draft ${draftHour} across DST`, async ({ page }) => {
+    const state = await fixture(page);
+    state.rows.splice(1);
+    state.rows[0]!.result!.evidence!.entries[0]!.schedule = {
+      interval: "cron", cronjob: "30 " + observedHour + " * * *", timezone: "America/New_York",
+    };
+    await page.goto(href.replace("scheduleZone=UTC", "scheduleZone=America%2FNew_York"));
+    const monday = page.locator(".schedule-week-day").first();
+    const observed = monday.getByRole("button", { name: /Observed/ });
+    await observed.click();
+    await page.getByLabel("Cron expression").fill("30 " + draftHour + " * * *");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await observed.hover();
+    const preview = page.getByRole("tooltip");
+    await expect(preview).toContainText("Schedule: 30 " + observedHour + " * * *");
+    if (observedHour === 1) await expect.soft(preview).toContainText("Ambiguous or nonexistent local time");
+    else await expect.soft(preview).not.toContainText("Ambiguous or nonexistent local time");
+    await monday.getByRole("button", { name: /Draft/ }).hover();
+    await expect(preview).toContainText("Schedule: 30 " + draftHour + " * * *");
+    if (draftHour === 1) await expect(preview).toContainText("Ambiguous or nonexistent local time");
+    else await expect(preview).not.toContainText("Ambiguous or nonexistent local time");
   });

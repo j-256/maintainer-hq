@@ -58,6 +58,7 @@ import {
 } from "./dependabot-review";
 import "./dependabot.css";
 import { useScheduleWorkspace } from "./lib/use-schedule-workspace";
+import { DependabotAssignmentPreview } from "./dependabot-assignment-preview";
 import { dependabotTimeColor } from "./lib/dependabot-colors";
 
 type Inventory = {
@@ -108,7 +109,8 @@ export function DependabotView({
     [limit, setLimit] = useState<number>(LIMITS.INVENTORY_REPOSITORIES);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({}),
     [search, setSearch] = useState(""),
-    [onlyOverlaps, setOnlyOverlaps] = useState(false);
+    [onlyOverlaps, setOnlyOverlaps] = useState(false),
+    [assignmentPreview, setAssignmentPreview] = useState<string | null>(null);
   const [editing, setEditing] = useState<{
       row: DependabotInventoryRow;
       entry: DependabotEntry;
@@ -293,6 +295,8 @@ export function DependabotView({
   );
   const observedByKey = useMemo(() => byKey(observed.occurrences), [observed]);
   const previewByKey = useMemo(() => byKey(preview.occurrences), [preview]);
+  const observedNoticeByKey = useMemo(() => byKey(observed.notices), [observed]);
+  const draftNoticeByKey = useMemo(() => byKey(preview.notices), [preview]);
   const noticeByKey = useMemo(() => byKey(Array.from(new Map(
     [...observed.notices, ...preview.notices].map(notice => [notice.key + ":" + notice.code, notice]),
   ).values())), [observed, preview]);
@@ -368,6 +372,10 @@ export function DependabotView({
     Boolean(drag.preview),
   );
   const Heading = projectId && !workspace.focused ? "h2" : "h1";
+  const previewsDisabled = Boolean(drag.preview || editing || preparing || planId);
+  useEffect(() => {
+    if (previewsDisabled) setAssignmentPreview(null);
+  }, [previewsDisabled]);
   const liveInputs = useMemo(() => {
     const candidate = drag.preview;
     if (!candidate?.result.ok) return draftInputs;
@@ -569,34 +577,50 @@ export function DependabotView({
       schedule,
       draft,
     };
+    const previewKey = selection.key + ":" + item.instant + ":" + draft;
     return (
-      <button
+      <DependabotAssignmentPreview
         key={item.instant}
-        type="button"
-        className={`schedule-marker${card ? " schedule-week-marker" : " schedule-time-block"}${draft ? " is-draft" : ""}${item.overlap > 1 ? " has-overlap" : ""}${item.stale ? " is-stale" : ""}`}
-        style={{
-          ...(!card ? { left: `${item.position * 100}%` } : {}),
-          "--schedule-time-color": dependabotTimeColor(day, item.minute),
-        } as CSSProperties}
-        aria-label={label}
-        title={label + (row.result?.evidence ? ", read " + dates.dateTime(row.result.evidence.observedAt) : "")}
-        {...drag.handlers(selection)}
+        row={row}
+        entry={entry}
+        schedule={schedule}
+        occurrence={item}
+        timestamp={day + " " + clock.format(new Date(item.instant)) + " " + zone}
+        draft={draft}
+        now={now}
+        notices={(draft ? draftNoticeByKey : observedNoticeByKey).get(selection.key) ?? []}
+        disabled={previewsDisabled}
+        open={assignmentPreview === previewKey}
+        onOpenChange={open => setAssignmentPreview(current =>
+          open ? previewKey : current === previewKey ? null : current,
+        )}
       >
-        <span className="schedule-block-time">
-          {clock.format(new Date(item.instant))}
-        </span>
-        {card ? (
-          <span className="schedule-block-repository">
-            {repositoryNames.get(row.repository.fullName)}
+        <button
+          type="button"
+          className={`schedule-marker${card ? " schedule-week-marker" : " schedule-time-block"}${draft ? " is-draft" : ""}${item.overlap > 1 ? " has-overlap" : ""}${item.stale ? " is-stale" : ""}`}
+          style={{
+            ...(!card ? { left: `${item.position * 100}%` } : {}),
+            "--schedule-time-color": dependabotTimeColor(day, item.minute),
+          } as CSSProperties}
+          aria-label={label}
+          {...drag.handlers(selection)}
+        >
+          <span className="schedule-block-time">
+            {clock.format(new Date(item.instant))}
           </span>
-        ) : null}
-        {!card ? <span className="schedule-block-kind">
-          {draft ? "Draft" : "Observed"}
-        </span> : null}
-        {!card && item.overlap > 1 ? (
-          <span className="schedule-block-overlap">{item.overlap} starts</span>
-        ) : null}
-      </button>
+          {card ? (
+            <span className="schedule-block-repository">
+              {repositoryNames.get(row.repository.fullName)}
+            </span>
+          ) : null}
+          {!card ? <span className="schedule-block-kind">
+            {draft ? "Draft" : "Observed"}
+          </span> : null}
+          {!card && item.overlap > 1 ? (
+            <span className="schedule-block-overlap">{item.overlap} starts</span>
+          ) : null}
+        </button>
+      </DependabotAssignmentPreview>
     );
   }
   function selectDay(value: string) {
