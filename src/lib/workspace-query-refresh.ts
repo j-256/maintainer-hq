@@ -19,6 +19,7 @@ const SOURCE_QUERIES = new Set([
   "repository-work",
   "repository-dependencies",
   "dependencies",
+  "dependabot-schedules",
   "github-coverage",
   "github-refresh",
   "github-refreshes",

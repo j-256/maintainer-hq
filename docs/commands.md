@@ -35,6 +35,7 @@ Discovery works without a running dashboard. The schema command is authoritative
 | Saved repository coverage and latest collection results | [GitHub coverage](github.md) |
 | Read-only GitHub collection | [GitHub evidence](github-evidence.md) |
 | Inspect configured collection and repository-write credential coverage without credential values or provider calls | [Credential coverage](dependencies.md#inspect-repository-credential-coverage), `repository_credential_coverage` |
+| Compare and edit Dependabot schedules through reviewed repository PRs | [Dependabot schedules](dependencies.md#dependabot-schedules) |
 | Override lifecycle, PR-head inspections, reviewed maintenance PRs and recovery | [Dependency maintenance](dependencies.md) |
 | Local observations | [Publishing](publishing.md) |
 | Invites, roles, and first-owner setup | [Access](access.md) |

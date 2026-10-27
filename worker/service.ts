@@ -1,3 +1,5 @@
+import { DependabotChanges } from "./dependabot-changes";
+import { DependabotOperations } from "./dependabot-operations";
 import { credentialIsCurrentSql } from "./credential-expiry";
 import { HookSetup } from "./hook-setup";
 import { ExpectationReviews } from "./expectation-review";
@@ -40,6 +42,7 @@ import { githubCoverage } from "./github-coverage";
 import { readReleases } from "./releases";
 import { readRepositoryWork } from "./repository-work";
 import { listDependencies, readRepositoryDependencies } from "./dependencies";
+import { listDependabotSchedules, readRepositoryDependabot } from "./dependabot";
 import { DependencyChanges } from "./dependency-changes";
 import { dependencyWriteAccess } from "./dependency-credentials";
 import { DependencyOperations } from "./dependency-operations";
@@ -135,6 +138,15 @@ function repositoryFromRow(row: RepositoryRow): Repository {
 }
 
 export class WorkspaceService {
+  dependabotChangePlan(input:unknown) { return new DependabotChanges(this).plan(input); }
+  dependabotChangeReview(input:unknown) { return new DependabotChanges(this).review(input); }
+  dependabotChangeApply(input:unknown) { return new DependabotOperations(this).apply(input); }
+  dependabotOperationGet(input:unknown) { return new DependabotOperations(this).get(input); }
+  dependabotOperationReconcile(input:unknown) { return new DependabotOperations(this).reconcile(input); }
+  dependabotOperationsList(input:unknown) { return new DependabotOperations(this).list(input); }
+
+  dependabotSchedules(input: unknown) { return listDependabotSchedules(this, input); }
+  repositoryDependabot(input: unknown) { return readRepositoryDependabot(this, input); }
   dependencyChangeApply(input: unknown) { return new DependencyOperations(this).apply(input); }
   dependencyOperationGet(input: unknown) { return new DependencyOperations(this).get(input); }
   dependencyOperationReconcile(input: unknown) { return new DependencyOperations(this).reconcile(input); }

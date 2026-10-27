@@ -16,6 +16,7 @@ import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Disclosure } from "./components/ui/disclosure";
 
+type RepositoryOperationViewModel=Omit<DependencyOperation,"files"> & {files:{path:string;beforeDigest:string;afterDigest:string}[]};
 const PHASES: Record<DependencyOperation["phase"], string> = {
   checking: "Preflight checks",
   tree: "Git tree",
@@ -25,7 +26,7 @@ const PHASES: Record<DependencyOperation["phase"], string> = {
   finished: "Finished",
 };
 export function dependencyOutcome(
-  operation: DependencyOperation,
+  operation: RepositoryOperationViewModel,
   now = Date.now(),
 ) {
   return operation.status === "succeeded"
@@ -50,12 +51,14 @@ export function DependencyOperationView({
   now,
   busy,
   onReconcile,
+  label="Dependency operation outcome",
 }: {
-  operation: DependencyOperation;
+  operation: RepositoryOperationViewModel;
   repository: string;
   now: number;
   busy: boolean;
   onReconcile?: () => void;
+  label?: string;
 }) {
   const dates = useDateTime();
   const active =
@@ -68,7 +71,7 @@ export function DependencyOperationView({
   return (
     <section
       className="dependency-notice"
-      aria-label="Dependency operation outcome"
+      aria-label={label}
     >
       <h3>{dependencyOutcome(operation, now)}</h3>
       <p role="status">

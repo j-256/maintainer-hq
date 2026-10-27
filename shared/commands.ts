@@ -1,3 +1,5 @@
+import { dependabotChangeApplyInput, dependabotChangePlanInput, dependabotChangeReviewInput } from "./dependabot-changes";
+import { dependabotOperationInput, dependabotOperationsInput } from "./dependabot-operations";
 import {
   hookSetupConnectionInput,
   hookSetupPlanInput,
@@ -170,8 +172,28 @@ import {
 } from "./hooks";
 
 import { repositoryCoverageInput } from "./repository-coverage";
+import { dependabotInspectionInput, dependabotListInput } from "./dependabot";
 
 export const commands = {
+  dependabot_change_plan: {schema:dependabotChangePlanInput,method:"dependabotChangePlan",title:"Prepare an actor-bound review of schedule-only Git changes",readOnly:false},
+  dependabot_change_review: {schema:dependabotChangeReviewInput,method:"dependabotChangeReview",title:"Read a saved Dependabot schedule review",readOnly:true},
+  dependabot_change_apply: {schema:dependabotChangeApplyInput,method:"dependabotChangeApply",title:"Create the exact reviewed Dependabot pull request",readOnly:false},
+  dependabot_operation_get: {schema:dependabotOperationInput,method:"dependabotOperationGet",title:"Read the retained schedule PR operation receipt",readOnly:true},
+  dependabot_operation_reconcile: {schema:dependabotOperationInput,method:"dependabotOperationReconcile",title:"Inspect a schedule PR outcome without retrying writes",readOnly:true},
+  dependabot_operations_list: {schema:dependabotOperationsInput,method:"dependabotOperationsList",title:"List bounded schedule PR history for one repository",readOnly:true},
+
+  dependabot_schedules: {
+    schema: dependabotListInput,
+    method: "dependabotSchedules",
+    title: "List retained Dependabot schedule observations without provider calls",
+    readOnly: true,
+  },
+  repository_dependabot: {
+    schema: dependabotInspectionInput,
+    method: "repositoryDependabot",
+    title: "Read or explicitly inspect the fixed Dependabot configuration through a bounded authorized GitHub source",
+    readOnly: true,
+  },
   dependency_change_apply: {
     schema: dependencyChangeApplyInput,
     method: "dependencyChangeApply",
@@ -1332,7 +1354,10 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "repository_releases",
         "repository_work",
         "repository_dependencies",
+        "repository_dependabot",
         "dependency_operation_reconcile",
+        "dependabot_operation_reconcile",
+        "dependabot_change_plan",
         "provider_credential_verify",
         "hooks_snapshot",
         "hooks_configuration",

@@ -17,7 +17,7 @@ Read the [Maintainer HQ guide](https://docs.hq.lasers.app), or browse the same M
 - [Activity and exact goals](docs/activity.md), [date/time preferences](docs/preferences.md), and [live updates](docs/push.md)
 - [Integration availability](docs/integrations.md), [Hooks](docs/hooks.md), [Monitoring](docs/monitoring.md), and [Secrets](docs/secrets.md)
 - [Connect GitHub](docs/github.md) and inspect per-repository refresh results
-- [Dependency maintenance](docs/dependencies.md), temporary-override lifecycle checks, and reviewed cleanup or renewal PRs
+- [Dependency maintenance](docs/dependencies.md), temporary-override lifecycle checks, reviewed cleanup or renewal PRs, and a [Dependabot schedule timeline](docs/dependencies.md#dependabot-schedules) with reviewed YAML changes
 - [CLI and MCP](docs/commands.md), [automation credentials](docs/automation.md), and [local publishing](docs/publishing.md)
 - [Troubleshooting](docs/troubleshooting.md), [diagnostics and Free-plan costs](docs/diagnostics.md), and [secure hosting](docs/hosting.md)
 

@@ -52,6 +52,8 @@ const DependencyAccess = lazy(() =>
   })),
 );
 
+const DependabotSchedules = lazy(()=>import("./dependabot").then(module=>({default:module.DependabotView})));
+
 const SUMMARY_LABELS = Object.freeze({
   unread: "Not inspected",
   unavailable: "Evidence unavailable",
@@ -121,6 +123,7 @@ export function DependenciesView({
     : 1;
   const workspaceId = snapshot.workspace.id;
   const access = !projectId && params.get("view") === "access";
+  const schedules=params.get("view")==="schedules";
   const Heading = projectId ? "h2" : "h1";
   const query = useQuery({
     queryKey: ["dependencies", workspaceId, projectId ?? null, search, page],
@@ -133,7 +136,7 @@ export function DependenciesView({
         ),
       ),
     retry: false,
-    enabled: !access,
+    enabled: !access && !schedules,
     ...COORDINATED_QUERY_OPTIONS,
   });
   const data = denied(query.error) ? undefined : query.data;
@@ -146,6 +149,7 @@ export function DependenciesView({
     if (name !== "dependencyPage") next.delete("dependencyPage");
     setParams(next, { preventScrollReset: true });
   }
+  if(schedules)return <Suspense fallback={<p role="status">Loading schedule timeline...</p>}><DependabotSchedules key={workspaceId+":"+(projectId??"")} snapshot={snapshot} projectId={projectId}/></Suspense>;
   if (access)
     return (
       <section className="dependencies-view">
@@ -196,6 +200,7 @@ export function DependenciesView({
             Dependencies
           </Heading>
         </div>
+        <Button variant="outline" onClick={()=>change("view","schedules")}>Schedules</Button>
         <Button
           variant="outline"
           onClick={() => void query.refetch()}
