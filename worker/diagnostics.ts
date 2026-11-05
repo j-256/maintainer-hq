@@ -17,6 +17,8 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  z.object({ event: z.literal("hq.hooks.handoff"), reference: z.uuid(), workspaceId: identity, state: z.enum(["ready", "configured", "conflict", "expired", "unavailable"]), linked: z.boolean() }).strict(),
+  z.object({ event: z.literal("hq.hooks.handoff.private"), reference: z.uuid(), workspaceId: identity, action: z.enum(["export", "reveal"]), state: z.literal("accepted"), elapsedMs: elapsed }).strict(),
   z
     .object({
       event: z.literal("hq.dependabot.inspected"),
@@ -187,6 +189,7 @@ export function emitDiagnostic(event: Diagnostic) {
     )
       console.error(value);
     else if (
+      (value.event === "hq.hooks.handoff" && (value.state !== "configured" || !value.linked)) ||
       (value.event === "hq.hooks.setup" &&
         (value.state !== "installed" || !value.linked)) ||
       ((value.event === "hq.dependencies.operation" || value.event === "hq.dependabot.operation") &&

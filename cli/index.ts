@@ -1,3 +1,4 @@
+import { adoptHandoffFile, exportHandoffFile } from "./hook-handoff";
 import { Command, CommanderError } from "commander";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
@@ -116,6 +117,25 @@ program
       ),
     );
   });
+
+for (const action of ["adopt", "export"] as const) {
+  program.command("hook-handoff-" + action)
+    .description(action === "adopt" ? "Review adoption of one existing recovery record through protected input" : "Save one private provider recovery envelope to a new mode-0600 file")
+    .requiredOption("-i, --input <file>", "JSON selection file; no secret values (use schema hooks_handoff_plan for adoption, workspaceId/connectionId/repositoryId for export)")
+    .requiredOption(action === "adopt" ? "-m, --manifest <file>" : "-o, --output <file>", action === "adopt" ? "Existing regular mode-0600 fleet manifest; only the selected repository is sent" : "New private output file in an owner-controlled directory")
+    .addHelpText("after", "\nAdoption never installs or changes a GitHub hook. Confirm the returned safe review through hooks_handoff_apply. Export retains provider custody; import the envelope with Hookrelay's recovery adapter. Reuse the same review after interruption. Values never appear in output. Requires Node.js and project dependencies; existing HQ authentication environment applies. Exit statuses: 0 success, 1 runtime/uncertain failure, 2 invalid selection or private file.")
+    .action(async (options: { input: string; manifest?: string; output?: string }) => {
+      const global = program.opts<{ url?: string; dev?: boolean }>();
+      if (!global.url) throw new ClientError("Provide --url or HQ_URL", 2);
+      let selection: unknown;
+      try { const text = await readFile(options.input, "utf8"); if (Buffer.byteLength(text) > LIMITS.BODY_BYTES) throw new Error(); selection = JSON.parse(text); }
+      catch { throw new ClientError("Selection file must be bounded JSON without private values", 2); }
+      if (!selection || typeof selection !== "object" || Array.isArray(selection)) throw new ClientError("Selection must be a JSON object", 2);
+      const configuration = clientConfiguration(global.url, Boolean(global.dev));
+      const result = action === "adopt" ? await adoptHandoffFile(configuration, { ...selection, manifestPath: options.manifest }) : await exportHandoffFile(configuration, { ...selection, outputPath: options.output });
+      console.log(JSON.stringify(result, null, 2));
+    });
+}
 
 program
   .command("secret-input")

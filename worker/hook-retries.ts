@@ -1,3 +1,4 @@
+import { HOOK_HANDOFF_KIND } from "../shared/hook-handoff";
 import { HOOK_SETUP_KIND } from "../shared/hook-setup";
 import { z } from "zod";
 import { CAPABILITY, LIMITS, workspaceInput } from "../shared/domain";
@@ -147,7 +148,7 @@ export class HookRetries {
       await this.db
         .prepare(
           `SELECT o.id,o.kind,o.plan_id AS planId,o.status,o.summary,o.created_at AS createdAt,o.updated_at AS updatedAt
-       FROM operations o WHERE o.workspace_id=? AND o.kind IN (?,?,?,?) AND ${guard.sql}
+       FROM operations o WHERE o.workspace_id=? AND o.kind IN (?,?,?,?,?) AND ${guard.sql}
        ORDER BY o.created_at DESC,o.id DESC LIMIT ?`,
         )
         .bind(
@@ -155,6 +156,7 @@ export class HookRetries {
           HOOK_RETRY_KIND,
           HOOK_POLICY_KIND,
           HOOK_SETUP_KIND,
+          HOOK_HANDOFF_KIND,
           HOOK_RESOLUTION_KIND,
           ...guard.values,
           HOOK_LIMITS.HISTORY,

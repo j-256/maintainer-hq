@@ -1,3 +1,4 @@
+import { adoptHandoffFile, exportHandoffFile, handoffAdoptFileInput, handoffExportFileInput } from "./hook-handoff";
 import { Command, CommanderError } from "commander";
 import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -50,6 +51,24 @@ try {
   if (!options.url) throw new ClientError("Provide --url or HQ_URL", 2);
   const configuration = clientConfiguration(options.url, Boolean(options.dev));
   const server = new McpServer({ name: "maintainer-hq", version: "0.1.0" });
+  server.registerTool("hooks_handoff_adopt_file", {
+    title: "Review one legacy repository recovery record from a private local manifest",
+    description: "Trusted local adapter only. Reads a regular non-symlink mode-0600 manifest, selects exactly the named active unbound repository, and supplies it through the private owner boundary. Returns safe review metadata only. Does not install hooks or apply the review. Never pass private values as arguments. Hosted MCP cannot read client files.",
+    inputSchema: handoffAdoptFileInput,
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true },
+  }, async input => {
+    try { return { content: [{ type: "text" as const, text: JSON.stringify(await adoptHandoffFile(configuration, input)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: "text" as const, text: error instanceof ClientError ? error.message : "Private adoption failed; inspect the same review" }] }; }
+  });
+  server.registerTool("hooks_handoff_export_file", {
+    title: "Save one private repository recovery export to a new local file",
+    description: "Trusted local adapter only. Requires live owner authority and an exact provider repository UUID. Creates a new mode-0600 file and returns its path and safe metadata. Never returns credential values through MCP. Provider custody is retained. Hosted MCP cannot write client files.",
+    inputSchema: handoffExportFileInput,
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: false },
+  }, async input => {
+    try { return { content: [{ type: "text" as const, text: JSON.stringify(await exportHandoffFile(configuration, input)) }] }; }
+    catch (error) { return { isError: true, content: [{ type: "text" as const, text: error instanceof ClientError ? error.message : "Private export failed; retain provider custody" }] }; }
+  });
   server.registerTool(
     "secrets_run_supply",
     {
