@@ -40,6 +40,7 @@ Discovery works without a running dashboard. The schema command is authoritative
 | Local observations | [Publishing](publishing.md) |
 | Invites, roles, and first-owner setup | [Access](access.md) |
 | Hookrelay, Endpoint Monitor, and secret operations | [Hooks](hooks.md), [Monitoring](monitoring.md), [Secrets](secrets.md) |
+| Create a manual receiver and privately hand credentials to an external administrator | [GitHub webhook handoff](github-handoff.md), `hooks_handoff_*`; local file adapters `hooks_handoff_adopt_file` and `hooks_handoff_export_file` |
 
 ## Call one command
 

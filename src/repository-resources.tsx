@@ -114,6 +114,7 @@ export function RepositoryResourcesView({
           </p>
         </div>
         <div className="resource-actions">
+          {hooks && snapshot.capabilities.includes(CAPABILITY.SECRETS) ? <Button asChild variant="outline"><Link to={"/hooks?" + new URLSearchParams({ workspace: workspaceId, repository: repository.id, handoff: "new" })}>New GitHub hook</Link></Button> : null}
           <Button
             variant="outline"
             disabled={query.isFetching}

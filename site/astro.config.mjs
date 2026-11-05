@@ -47,7 +47,7 @@ export default defineConfig({
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
       sidebar: [
         { label: "Getting started", items: ["index", "getting-started", "concepts", "integrations"] },
-        { label: "Using HQ", items: ["overview", "projects", "repositories", "fleet-enrollment", "repository-work", "releases", "dependencies", "github", "activity", "hooks", "monitoring", "secrets", "project-transfers", "preferences", "access"] },
+        { label: "Using HQ", items: ["overview", "projects", "repositories", "fleet-enrollment", "repository-work", "releases", "dependencies", "github", "activity", "hooks", "github-handoff", "monitoring", "secrets", "project-transfers", "preferences", "access"] },
         { label: "Automation and reference", collapsed: true, items: ["commands", "automation", "publishing", "github-evidence", "push"] },
         { label: "Self-hosting and recovery", collapsed: true, items: ["development", "hosting", "release", "import", "troubleshooting", "diagnostics", "typography", "documentation"] },
       ],
