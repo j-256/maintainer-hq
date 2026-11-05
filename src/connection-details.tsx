@@ -231,7 +231,7 @@ export function ConnectionDetails(props: Props) {
         <Button
           variant="ghost"
           className="connection-trigger"
-          aria-label="Connection details"
+          aria-label={`Connection details: ${props.label}`}
           title="Connection details"
         >
           <StatusIcon
