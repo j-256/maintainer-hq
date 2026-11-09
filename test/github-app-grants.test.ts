@@ -428,6 +428,15 @@ describe("GitHub App workspace grants", () => {
       "revoked",
     );
   });
+  it("does not reinterpret an existing connection's unavailable manual token reference", async () => {
+    await fixture.runtime.HQ_DB.prepare(
+      "INSERT INTO connections(id,workspace_id,name,provider,configuration_json,credential_ref) VALUES ('existing','alpha','Existing','github','{}','missing-token')",
+    ).run();
+    await expect(offer("alpha", "missing-token")).rejects.toMatchObject({
+      code: "github_app_conflict",
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
   it("rejects credential-reference collisions and includes shared grant impact in registration reviews", async () => {
     await expect(offer("alpha", "legacy")).rejects.toMatchObject({
       code: "github_app_conflict",
@@ -438,7 +447,20 @@ describe("GitHub App workspace grants", () => {
       revision: 1,
       change: { kind: "disconnect" },
     });
+    const staleRotate = await fixture.operator.githubAppRegistrationPlan({
+      workspaceId: "administration",
+      registrationId: "app-a",
+      revision: 1,
+      change: { kind: "rotate" },
+    });
     await grants().accept(selection(await offer()));
+    await expect(
+      new GitHubApps(fixture.operator).privateInputContext({
+        workspaceId: "administration",
+        planId: staleRotate.id,
+        fingerprint: staleRotate.fingerprint,
+      }),
+    ).rejects.toMatchObject({ code: "github_app_conflict" });
     await expect(
       fixture.operator.githubAppRegistrationApply({
         workspaceId: "administration",

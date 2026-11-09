@@ -82,6 +82,7 @@ describe("GitHub App fixed-origin client", () => {
     );
     expect(request?.method).toBe("POST");
     expect(request?.redirect).toBe("manual");
+    expect(request?.headers.get("User-Agent")).toBe("maintainer-hq");
     expect(await request?.json()).toEqual({
       repository_ids: [101],
       permissions: { contents: "read", metadata: "read" },

@@ -19,7 +19,11 @@ import { credentialHash } from "./credential-hash";
 import { emitDiagnostic, type GitHubAppManifestStage } from "./diagnostics";
 import { DomainError } from "./errors";
 import { deliverWorkspacePush } from "./workspace-push";
-import { GitHubAppClient, readGitHubAppResponse } from "./github-app-client";
+import {
+  GitHubAppClient,
+  readGitHubAppResponse,
+  GITHUB_APP_USER_AGENT,
+} from "./github-app-client";
 import {
   normalizeGitHubAppKey,
   sealGitHubAppMaterial,
@@ -377,6 +381,7 @@ export async function completeGitHubAppManifest(
           redirect: "manual",
           headers: {
             Accept: "application/vnd.github+json",
+            "User-Agent": GITHUB_APP_USER_AGENT,
             "X-GitHub-Api-Version": "2022-11-28",
           },
           signal: controller.signal,

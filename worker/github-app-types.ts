@@ -1,18 +1,36 @@
 import type {
   GitHubAuthReference,
   GitHubCapability,
+  GitHubAppPermissions,
 } from "../shared/github-apps";
+import type { Capability, Principal } from "../shared/domain";
 import type { Env } from "./types";
 
 export type GitHubCredentialContext = {
   env: Env;
   db: D1Database;
   now: () => number;
+  principal?: Principal;
 };
+export type GitHubRequestBinding =
+  | {
+      kind: "actor";
+      subject: string;
+      tokenId: string | null;
+      membershipRevision: number;
+    }
+  | { kind: "source"; sourceId: string; sourceRevision: number; jobId: string };
 export type GitHubAuthorityFence = {
   workspaceId: string;
   connectionId: string;
   connectionRevision: number;
+  connectionKind: "source" | "configuration";
+  repositoryId: string | null;
+  repositoryFullName: string;
+  capability: GitHubCapability;
+  binding: GitHubRequestBinding;
+  actorCapability: Capability;
+  actorExpiresAt: number | null;
 } & (
   | {
       kind: "token";
@@ -28,6 +46,7 @@ export type GitHubAuthorityFence = {
       grantId: string;
       grantRevision: number;
       observedAuthorityGeneration: number;
+      providerRepositoryId: number;
     }
 );
 export type GitHubCredentialLease = {
@@ -41,23 +60,14 @@ export type GitHubCredentialLease = {
 export type GitHubCredentialRequest = {
   workspaceId: string;
   reference: GitHubAuthReference;
-  repositoryId: string;
+  repositoryId: string | null;
   repositoryFullName: string;
   capability: GitHubCapability;
   connectionId: string;
   connectionRevision: number;
-  binding:
-    | {
-        kind: "actor";
-        subject: string;
-        tokenId: string | null;
-        membershipRevision: number;
-      }
-    | {
-        kind: "source";
-        sourceId: string;
-        sourceRevision: number;
-        jobId: string;
-      };
+  binding: GitHubRequestBinding;
+  connectionKind?: "source" | "configuration";
+  actorCapability?: Capability;
+  permissions?: GitHubAppPermissions;
   phase: "read" | "effect";
 };

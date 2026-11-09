@@ -330,7 +330,8 @@ export class GitHubApps {
     const current = await this.registration(captured.request.registrationId);
     if (
       !row.applied_at &&
-      (current?.revision ?? 0) !== captured.request.revision
+      ((current?.revision ?? 0) !== captured.request.revision ||
+        (current?.grants_revision ?? 0) !== captured.grantsRevision)
     )
       githubAppConflict();
     const previous =

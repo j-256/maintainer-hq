@@ -129,6 +129,17 @@ export async function managedProviderCredential(
 ) {
   if (!managedCredentialReference(reference)) providerCredentialUnavailable();
   const guard = hookActorGuard(context, workspaceId);
+  return openGuardedProviderCredential(context, workspaceId, reference, kind, guard);
+}
+// Callers must supply their complete server-owned authority fence
+export async function openGuardedProviderCredential(
+  context: Pick<WorkspaceService, "env" | "db" | "now">,
+  workspaceId: string,
+  reference: string,
+  kind: ProviderCredentialKind,
+  guard: { sql: string; values: unknown[] },
+) {
+  if (!managedCredentialReference(reference)) providerCredentialUnavailable();
   const row = await context.db
     .prepare(
       `SELECT ${PROVIDER_CREDENTIAL_COLUMNS},nonce,ciphertext FROM provider_credentials

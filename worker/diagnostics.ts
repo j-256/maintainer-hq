@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GITHUB_APP_LIMITS } from "../shared/github-apps";
 import { githubDiagnosticsSchema } from "../shared/github-diagnostics";
 import { contextReadSchema } from "../shared/github-context";
 import { DEPENDENCIES_LIMITS } from "../shared/dependencies";
@@ -19,6 +20,21 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  z.object({
+    event: z.literal("hq.github.app.authority"),
+    correlationId: z.uuid(),
+    workspaceId: identity,
+    registrationId: identity,
+    installationId: z.number().int().positive(),
+    repositoryId: z.number().int().positive(),
+    grantId: identity,
+    freshness: z.enum(["bounded_read", "fresh_effect"]),
+    state: z.enum(["verified", "denied", "limited", "conflict", "unavailable"]),
+    generation: z.number().int().positive(),
+    requests: z.number().int().nonnegative().max(GITHUB_APP_LIMITS.AUTHORITY_REQUESTS),
+    code: z.string().regex(/^[a-z_]{1,80}$/).nullable(),
+    elapsedMs: elapsed,
+  }).strict(),
   z.object({
     event: z.literal("hq.github.app.manifest"),
     correlationId: z.uuid(),
@@ -212,6 +228,7 @@ export function emitDiagnostic(event: Diagnostic) {
           value.upstreamIncomplete)) ||
       value.event === "hq.push.interrupted" ||
       (value.event === "hq.github.app.manifest" && value.state !== "complete") ||
+      (value.event === "hq.github.app.authority" && value.state !== "verified") ||
       value.event === "hq.secrets.cleanup.interrupted" ||
       value.event === "hq.request.failed" ||
       value.event === "hq.monitoring.targets.limited" ||
