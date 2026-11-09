@@ -13,10 +13,10 @@
           "replacement": "0.35.5",
           "advisory": "GHSA-wq5f-xc86-pv6w",
           "vulnerable": "<0.35.5",
-          "reason": "Miniflare's local image tooling pins a Sharp release containing vulnerable native decoders. The replacement includes patched libheif and librsvg dependencies; the development and test toolchains must use it.",
+          "reason": "Installed Miniflare releases still request Sharp 0.35.2, which includes vulnerable native decoders. Retain Sharp 0.35.5 for patched libheif and librsvg dependencies until every installed toolchain adopts a patched release.",
           "owner": "HQ maintainers",
-          "reviewedAt": "2026-10-08T16:00:00.000Z",
-          "reviewBy": "2026-11-07T16:00:00.000Z",
+          "reviewedAt": "2026-11-09T21:16:00.000Z",
+          "reviewBy": "2026-12-09T21:16:00.000Z",
           "removeWhen": "Remove the override after every installed Miniflare release stops requesting Sharp 0.35.2, and the regenerated lockfile contains no Sharp version affected by the native decoder advisories."
         },
         {
@@ -77,11 +77,11 @@
           "requested": "6.1.2",
           "replacement": "7.1.6",
           "advisory": "GHSA-rj75-hqrm-r3gf",
-          "vulnerable": "<7.1.6",
-          "reason": "The documentation styling toolchain requests a selector parser with quadratic flat-selector parsing. Version 7 makes insertion during iteration safe and includes the linear parsing fix; verify the documentation CSS and build before adoption.",
+          "vulnerable": "<6.1.5 || >=7.0.0 <7.1.6",
+          "reason": "The installed postcss-nested 6.2.0 dependency permits affected selector-parser releases. Retain the tested 7.1.6 version-scoped override while the installed documentation toolchain is unchanged; newer parent metadata is not repository adoption.",
           "owner": "HQ maintainers",
-          "reviewedAt": "2026-10-08T16:00:00.000Z",
-          "reviewBy": "2026-11-07T16:00:00.000Z",
+          "reviewedAt": "2026-11-09T21:16:00.000Z",
+          "reviewBy": "2026-12-09T21:16:00.000Z",
           "removeWhen": "Remove the override after every installed postcss-nested release requests a patched selector parser and the documentation lockfile contains no affected version."
         }
       ]
