@@ -42,22 +42,8 @@ function forbidden(): never {
     403,
   );
 }
-export async function requireGitHubAppOperator(
-  context: WorkspaceService,
-  workspaceId: string,
-): Promise<GitHubAppOperatorAuthority> {
-  const { principal, env } = context;
-  if (
-    principal.tokenId ||
-    principal.scopes ||
-    principal.sourceId ||
-    principal.reporterId ||
-    (!context.development &&
-      (!principal.access ||
-        principal.access.issuer !== env.ACCESS_ISSUER ||
-        principal.access.audience !== env.ACCESS_AUDIENCE))
-  )
-    forbidden();
+function deploymentPermits(context: WorkspaceService) {
+  const { env } = context;
   let permits: z.infer<typeof permitSchema>[];
   try {
     const raw = env.GITHUB_APP_SETUP_PERMITS;
@@ -76,7 +62,25 @@ export async function requireGitHubAppOperator(
   } catch {
     return forbidden();
   }
-  const permit = permits.find(
+  return permits;
+}
+export async function requireGitHubAppOperator(
+  context: WorkspaceService,
+  workspaceId: string,
+): Promise<GitHubAppOperatorAuthority> {
+  const { principal, env } = context;
+  if (
+    principal.tokenId ||
+    principal.scopes ||
+    principal.sourceId ||
+    principal.reporterId ||
+    (!context.development &&
+      (!principal.access ||
+        principal.access.issuer !== env.ACCESS_ISSUER ||
+        principal.access.audience !== env.ACCESS_AUDIENCE))
+  )
+    forbidden();
+  const permit = deploymentPermits(context).find(
     (entry) =>
       entry.subject === principal.subject &&
       entry.administrativeWorkspaceId === workspaceId &&
@@ -112,6 +116,60 @@ export async function requireGitHubAppOperator(
     ),
     expiresAt: permit.expiresAt,
   };
+}
+export function githubAppIssuerGuard(
+  context: WorkspaceService,
+  authority: GitHubAppOperatorAuthority,
+) {
+  return {
+    sql: `EXISTS(SELECT 1 FROM members WHERE workspace_id=? AND subject=? AND role='owner' AND revision=?)
+      AND ?>? AND ?>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      AND NOT EXISTS(SELECT 1 FROM github_app_setup_revocations WHERE permit_id=? AND permit_revision=?)`,
+    values: [
+      authority.workspaceId,
+      authority.subject,
+      authority.memberRevision,
+      authority.expiresAt,
+      new Date(context.now()).toISOString(),
+      authority.expiresAt,
+      authority.permitId,
+      authority.permitRevision,
+    ],
+  };
+}
+export async function assertGitHubAppIssuer(
+  context: WorkspaceService,
+  input: GitHubAppOperatorAuthority,
+) {
+  const authority = githubAppOperatorAuthoritySchema.parse(input);
+  const permit = deploymentPermits(context).find(
+    (entry) =>
+      entry.id === authority.permitId &&
+      entry.revision === authority.permitRevision &&
+      entry.subject === authority.subject &&
+      entry.administrativeWorkspaceId === authority.workspaceId &&
+      entry.issuer === context.env.ACCESS_ISSUER &&
+      entry.audience === context.env.ACCESS_AUDIENCE,
+  );
+  if (
+    !permit ||
+    authority.expiresAt !== permit.expiresAt ||
+    (await credentialHash(
+      JSON.stringify({
+        deploymentId: context.env.GITHUB_APP_DEPLOYMENT_ID,
+        permit,
+      }),
+    )) !== authority.permitFingerprint
+  )
+    forbidden();
+  const guard = githubAppIssuerGuard(context, authority);
+  if (
+    !(await context.db
+      .prepare(`SELECT 1 WHERE ${guard.sql}`)
+      .bind(...guard.values)
+      .first())
+  )
+    forbidden();
 }
 export function githubAppOperatorGuard(
   context: WorkspaceService,
