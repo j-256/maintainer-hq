@@ -1,4 +1,5 @@
 import { adoptHandoffFile, exportHandoffFile, handoffAdoptFileInput, handoffExportFileInput } from "./hook-handoff";
+import { githubAppFileInput, readGitHubAppInputFile, supplyGitHubAppInput } from "./github-app-input";
 import { Command, CommanderError } from "commander";
 import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -51,6 +52,19 @@ try {
   if (!options.url) throw new ClientError("Provide --url or HQ_URL", 2);
   const configuration = clientConfiguration(options.url, Boolean(options.dev));
   const server = new McpServer({ name: "maintainer-hq", version: "0.1.0" });
+  server.registerTool("github_app_import_file", {
+    title: "Import protected App material from one exact owner-only local file",
+    description: "Trusted local adapter only. Requires an exact live deployment-operator review, verified human session and regular owner-only non-symlink JSON file. Checks review authority before reading material and returns metadata only. Never pass private keys or webhook secrets as arguments. Hosted MCP cannot read a client's files. Reconcile uncertain acceptance through the same review before retrying.",
+    inputSchema: githubAppFileInput,
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: true },
+  }, async input => {
+    try {
+      const { inputFile, ...selection } = input;
+      return { content: [{ type: "text" as const, text: JSON.stringify(await supplyGitHubAppInput(configuration, selection, () => readGitHubAppInputFile(inputFile))) }] };
+    } catch (error) {
+      return { isError: true, content: [{ type: "text" as const, text: error instanceof ClientError ? error.message : "Private App import did not complete; inspect the same review" }] };
+    }
+  });
   server.registerTool("hooks_handoff_adopt_file", {
     title: "Review one legacy repository recovery record from a private local manifest",
     description: "Trusted local adapter only. Reads a regular non-symlink mode-0600 manifest, selects exactly the named active unbound repository, and supplies it through the private owner boundary. Returns safe review metadata only. Does not install hooks or apply the review. Never pass private values as arguments. Hosted MCP cannot read client files.",

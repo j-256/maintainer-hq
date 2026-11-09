@@ -10,6 +10,7 @@ export const GITHUB_APP_LIMITS = Object.freeze({
   TOKEN_MARGIN_MS: 60 * 1000,
   TOKEN_MAX_LIFETIME_MS: 60 * 60 * 1000,
   TOKEN_BYTES: 2048,
+  WEBHOOK_SECRET_BYTES: 2048,
   CACHE_ENTRIES: 100,
   SETUP_TTL_MS: 10 * 60 * 1000,
   RESPONSE_BYTES: 256 * 1024,
@@ -21,6 +22,7 @@ export const GITHUB_APP_LIMITS = Object.freeze({
   SETUP_PERMITS: 100,
   REGISTRATIONS: 100,
   PENDING_REVIEWS: 20,
+  INPUT_REQUEST_TIMEOUT_MS: 25000,
 });
 export const GITHUB_CAPABILITY = Object.freeze({
   COLLECTION: "collection",
@@ -192,16 +194,57 @@ export type GitHubAppRegistrationPlanInput = z.infer<
 export type GitHubAppRegistrationSelection = z.infer<
   typeof githubAppRegistrationSelectionInput
 >;
-export type GitHubAppRegistrationReview = {
+export const githubAppRegistrationReviewSchema = z
+  .object({
+    id: idSchema,
+    registrationId: idSchema,
+    revision: z.number().int().nonnegative(),
+    change: githubAppRegistrationPlanInput.shape.change,
+    fingerprint: githubAppRegistrationSelectionInput.shape.fingerprint,
+    expiresAt: z.iso.datetime(),
+    privateInputRequired: z.boolean(),
+    applied: z.boolean(),
+    expired: z.boolean(),
+    impact: z
+      .object({
+        affectedWorkspaceIds: z
+          .array(idSchema)
+          .max(GITHUB_APP_LIMITS.REGISTRATIONS),
+      })
+      .strict(),
+    registration: githubAppMetadataSchema.nullable(),
+  })
+  .strict();
+export type GitHubAppRegistrationReview = z.infer<
+  typeof githubAppRegistrationReviewSchema
+>;
+export const githubAppManifestStartInput = workspaceInput
+  .extend({
+    registrationId: idSchema,
+    name: githubAppRegistrationFieldsSchema.shape.name,
+    visibility: githubAppRegistrationFieldsSchema.shape.visibility,
+    capabilities: githubCapabilitiesSchema,
+    account: z
+      .object({
+        login: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/),
+        type: z.enum(["User", "Organization"]),
+      })
+      .strict(),
+  })
+  .strict();
+export const githubAppManifestGetInput = workspaceInput
+  .extend({ attemptId: idSchema })
+  .strict();
+export type GitHubAppManifestStartInput = z.infer<
+  typeof githubAppManifestStartInput
+>;
+export type GitHubAppManifestAttempt = {
   id: string;
   registrationId: string;
-  revision: number;
-  change: GitHubAppRegistrationPlanInput["change"];
-  fingerprint: string;
+  state:
+    "pending" | "conversion_claimed" | "complete" | "indeterminate" | "expired";
   expiresAt: string;
-  privateInputRequired: boolean;
-  applied: boolean;
-  expired: boolean;
-  impact: { affectedWorkspaceIds: string[] };
+  browserUrl: string;
   registration: GitHubAppMetadata | null;
+  recovery: "none" | "protected_import_required";
 };

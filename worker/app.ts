@@ -1,4 +1,6 @@
 import { HookHandoff } from "./hook-handoff";
+import { uploadGitHubAppMaterial } from "./github-app-private-input";
+import { renderGitHubAppManifest, completeGitHubAppManifest, githubAppManifestReturn, GITHUB_APP_MANIFEST_CALLBACK, GITHUB_APP_MANIFEST_FORM } from "./github-app-manifest";
 import {
   McpServer,
   WebStandardStreamableHTTPServerTransport,
@@ -146,8 +148,10 @@ export function createApplication(
         return secureResponse(await env.ASSETS.fetch(request), true);
       let response: Response;
       const diagnostic = { operation: "request", started: performance.now() };
+      const appManifestCallback = url.pathname === GITHUB_APP_MANIFEST_CALLBACK && request.method === "GET";
+      if (appManifestCallback) diagnostic.operation = "github_app_manifest_callback";
       try {
-        protectOrigin(request, development);
+        if (!appManifestCallback) protectOrigin(request, development);
         if (url.pathname === "/healthz")
           response = Response.json({ status: "ok" });
         else {
@@ -195,7 +199,18 @@ export function createApplication(
             }
             return result;
           };
-          if (url.pathname === "/api/session" && request.method === "GET") {
+          if (appManifestCallback) {
+            return await completeGitHubAppManifest(request, service);
+          } else if (url.pathname === GITHUB_APP_MANIFEST_FORM && request.method === "GET") {
+            return await renderGitHubAppManifest(request, service);
+          } else if (url.pathname === "/api/github-apps/input" && request.method === "POST") {
+            diagnostic.operation = "github_app_private_input";
+            const result = await uploadGitHubAppMaterial(request, service, Object.fromEntries(url.searchParams) as {workspaceId: string; planId: string});
+            response = Response.json(result);
+            const delivery = Promise.all(result.review.impact.affectedWorkspaceIds.map(workspaceId => deliverWorkspacePush(env, workspaceId)));
+            if (context) context.waitUntil(delivery);
+            else await delivery;
+          } else if (url.pathname === "/api/session" && request.method === "GET") {
             diagnostic.operation = "session";
             response = Response.json(await service.session());
           } else if (url.pathname === "/api/hooks/handoff/private" && request.method === "POST") {
@@ -399,6 +414,11 @@ export function createApplication(
           } else throw new DomainError("not_found", "Endpoint not found", 404);
         }
       } catch (error) {
+        if (appManifestCallback) {
+          const reference = crypto.randomUUID();
+          emitDiagnostic({ event: "hq.github.app.manifest", correlationId: reference, attemptId: null, state: "reauthentication_required", stage: "authenticate", code: "unauthorized", elapsedMs: Math.round(performance.now() - diagnostic.started) });
+          return githubAppManifestReturn(url.origin, "reauthentication_required", { reference });
+        }
         response = errorResponse(error, diagnostic);
       }
       return secureResponse(response);

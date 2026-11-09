@@ -55,7 +55,7 @@ const tokenResponseSchema = z.object({
     .regex(/^[\x21-\x7e]+$/),
   expires_at: z.iso.datetime({ offset: true }),
   permissions: providerPermissionsSchema,
-  repository_selection: z.literal("selected"),
+  repository_selection: z.enum(["all", "selected"]).optional(),
   repositories: z.array(repositorySchema).min(1).max(LIMITS.REPOSITORIES),
 });
 export type GitHubAppClientOptions = {
@@ -125,7 +125,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   return result.success ? result.data : invalidResponse();
 }
-async function responseJson(response: Response) {
+export async function readGitHubAppResponse(response: Response) {
   if (!response.body) invalidResponse();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -171,7 +171,9 @@ export class GitHubAppClient {
   private readonly fetcher: typeof fetch;
   private readonly now: () => number;
   private readonly deadline: number;
-  constructor(private readonly options: GitHubAppClientOptions) {
+  readonly #options: GitHubAppClientOptions;
+  constructor(options: GitHubAppClientOptions) {
+    this.#options = options;
     if (
       !githubProviderIdSchema.safeParse(options.appId).success ||
       (options.budgetMs !== undefined &&
@@ -197,8 +199,8 @@ export class GitHubAppClient {
     const timer = setTimeout(() => controller.abort(), remaining);
     try {
       const jwt = await signGitHubAppJwt(
-        this.options.privateKey,
-        this.options.appId,
+        this.#options.privateKey,
+        this.#options.appId,
         this.now(),
       );
       if (controller.signal.aborted) throw new Error();
@@ -252,7 +254,7 @@ export class GitHubAppClient {
           "GitHub App verification is unavailable. Preserve the review before retrying.",
         );
       }
-      return await responseJson(response);
+      return await readGitHubAppResponse(response);
     } catch (error) {
       if (error instanceof DomainError) throw error;
       throw new GitHubAppProviderError(
@@ -278,7 +280,7 @@ export class GitHubAppClient {
       }),
       await this.request("/app"),
     );
-    if (app.id !== this.options.appId) invalidResponse();
+    if (app.id !== this.#options.appId) invalidResponse();
     return {
       id: app.id,
       slug: app.slug,
@@ -289,7 +291,7 @@ export class GitHubAppClient {
   }
   private installation(value: unknown): GitHubInstallationMetadata {
     const installation = parse(installationSchema, value);
-    if (installation.app_id !== this.options.appId) invalidResponse();
+    if (installation.app_id !== this.#options.appId) invalidResponse();
     return {
       id: installation.id,
       appId: installation.app_id,

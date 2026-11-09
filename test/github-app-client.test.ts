@@ -46,6 +46,10 @@ function client(fetcher: typeof fetch) {
 }
 
 describe("GitHub App fixed-origin client", () => {
+  it("keeps signing material out of serialized client state", () => {
+    const api = client(async () => Response.json({}));
+    expect(JSON.stringify(api).includes("PRIVATE KEY")).toBe(false);
+  });
   it("normalizes the authenticated App and refuses another App's identity", async () => {
     const app = {
       id: 42,
@@ -107,6 +111,25 @@ describe("GitHub App fixed-origin client", () => {
     }
     await expect(
       client(async () => new Response("x".repeat(262145))).mintToken(scope),
+    ).rejects.toMatchObject({ code: "github_app_response_invalid" });
+  });
+
+  it("accepts documented selection labels only with the exact narrowed repository proof", async () => {
+    for (const selection of ["all", undefined]) {
+      const token = await client(async () =>
+        Response.json(tokenResponse({ repository_selection: selection })),
+      ).mintToken(scope);
+      expect(token.repositoryIds).toEqual([101]);
+    }
+    await expect(
+      client(async () =>
+        Response.json(
+          tokenResponse({
+            repository_selection: "all",
+            repositories: [repository, { ...repository, id: 102 }],
+          }),
+        ),
+      ).mintToken(scope),
     ).rejects.toMatchObject({ code: "github_app_response_invalid" });
   });
 

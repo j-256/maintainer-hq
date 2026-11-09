@@ -14,6 +14,7 @@ export interface Env {
   PROVIDER_CREDENTIAL_KEYS?: string;
   GITHUB_APP_DEPLOYMENT_ID?: string;
   GITHUB_APP_SETUP_PERMITS?: string;
+  GITHUB_APP_ORIGIN?: string;
   HOOKRELAY_CREDENTIALS?: string;
   MONITORING_CREDENTIALS?: string;
 }

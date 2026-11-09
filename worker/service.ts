@@ -1,5 +1,6 @@
 import { HookHandoff } from "./hook-handoff";
 import { GitHubApps } from "./github-app-registrations";
+import { GitHubAppManifests } from "./github-app-manifest";
 import { DependabotChanges } from "./dependabot-changes";
 import { DependabotOperations } from "./dependabot-operations";
 import { credentialIsCurrentSql } from "./credential-expiry";
@@ -145,6 +146,8 @@ export class WorkspaceService {
   githubAppRegistrationGet(input: unknown) { return new GitHubApps(this).get(input); }
   githubAppRegistrationApply(input: unknown) { return new GitHubApps(this).apply(input); }
   githubAppSetupPermitRevoke(input: unknown) { return new GitHubApps(this).revokeSetupPermit(input); }
+  githubAppManifestStart(input: unknown) { return new GitHubAppManifests(this).start(input); }
+  githubAppManifestGet(input: unknown) { return new GitHubAppManifests(this).get(input); }
   dependabotChangePlan(input:unknown) { return new DependabotChanges(this).plan(input); }
   dependabotChangeReview(input:unknown) { return new DependabotChanges(this).review(input); }
   dependabotChangeApply(input:unknown) { return new DependabotOperations(this).apply(input); }
