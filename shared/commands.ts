@@ -1,4 +1,5 @@
 import { handoffConnectionInput, handoffRepositoryInput, handoffPlanInput, handoffStatusInput } from "./hook-handoff";
+import { githubAppListInput, githubAppRegistrationPlanInput, githubAppRegistrationSelectionInput, githubAppSetupPermitRevokeInput } from "./github-apps";
 import { dependabotChangeApplyInput, dependabotChangePlanInput, dependabotChangeReviewInput } from "./dependabot-changes";
 import { dependabotOperationInput, dependabotOperationsInput } from "./dependabot-operations";
 import {
@@ -309,6 +310,36 @@ export const commands = {
     method: "fleetReconciliationApply",
     title:
       "Apply only reviewed HQ repository and collection-scope changes atomically without GitHub writes",
+    readOnly: false,
+  },
+  github_apps_list: {
+    schema: githubAppListInput,
+    method: "githubAppList",
+    title: "List authorized GitHub App metadata without private material",
+    readOnly: true,
+  },
+  github_app_registration_plan: {
+    schema: githubAppRegistrationPlanInput,
+    method: "githubAppRegistrationPlan",
+    title: "Review exact deployment App registration, rotation or disconnection",
+    readOnly: false,
+  },
+  github_app_registration_get: {
+    schema: githubAppRegistrationSelectionInput,
+    method: "githubAppRegistrationGet",
+    title: "Read an actor-bound GitHub App registration review or receipt",
+    readOnly: true,
+  },
+  github_app_registration_apply: {
+    schema: githubAppRegistrationSelectionInput,
+    method: "githubAppRegistrationApply",
+    title: "Apply reviewed local App settings without provider effects or private arguments",
+    readOnly: false,
+  },
+  github_app_setup_permit_revoke: {
+    schema: githubAppSetupPermitRevokeInput,
+    method: "githubAppSetupPermitRevoke",
+    title: "Revoke the authenticated deployment setup permit locally",
     readOnly: false,
   },
   provider_credential_verify: {
@@ -1330,6 +1361,8 @@ export function commandAnnotations(name: string, readOnly: boolean) {
       "expectations_apply",
       "expectation_review_complete",
       "provider_credential_apply",
+      "github_app_registration_apply",
+      "github_app_setup_permit_revoke",
       "project_transfer_apply",
       "member_update",
       "member_remove",
@@ -1426,6 +1459,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "expectations_apply",
         "expectation_review_complete",
         "provider_credential_apply",
+        "github_app_registration_apply",
         "project_transfer_plan",
         "project_transfer_apply",
         "metadata_import_apply",
