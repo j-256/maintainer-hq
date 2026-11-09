@@ -1,5 +1,5 @@
 import { handoffConnectionInput, handoffRepositoryInput, handoffPlanInput, handoffStatusInput } from "./hook-handoff";
-import { githubAppListInput, githubAppRegistrationPlanInput, githubAppRegistrationSelectionInput, githubAppSetupPermitRevokeInput } from "./github-apps";
+import { githubAppListInput, githubAppRegistrationPlanInput, githubAppRegistrationSelectionInput, githubAppSetupPermitRevokeInput, githubAppManifestStartInput, githubAppManifestGetInput } from "./github-apps";
 import { dependabotChangeApplyInput, dependabotChangePlanInput, dependabotChangeReviewInput } from "./dependabot-changes";
 import { dependabotOperationInput, dependabotOperationsInput } from "./dependabot-operations";
 import {
@@ -316,6 +316,18 @@ export const commands = {
     schema: githubAppListInput,
     method: "githubAppList",
     title: "List authorized GitHub App metadata without private material",
+    readOnly: true,
+  },
+  github_app_manifest_start: {
+    schema: githubAppManifestStartInput,
+    method: "githubAppManifestStart",
+    title: "Prepare a reviewed GitHub App registration browser ceremony",
+    readOnly: false,
+  },
+  github_app_manifest_get: {
+    schema: githubAppManifestGetInput,
+    method: "githubAppManifestGet",
+    title: "Inspect an actor-bound App registration attempt without private material",
     readOnly: true,
   },
   github_app_registration_plan: {

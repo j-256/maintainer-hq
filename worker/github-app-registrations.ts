@@ -21,6 +21,7 @@ import {
 import type { EncryptedGitHubAppMaterial } from "./github-app-crypto";
 import type { GitHubAppIdentity } from "./github-app-client";
 import type { WorkspaceService } from "./service";
+import { uploadGitHubAppMaterial } from "./github-app-private-input";
 
 export type GitHubAppRegistrationRow = {
   id: string;
@@ -265,9 +266,38 @@ export class GitHubApps {
   async apply(input: unknown): Promise<GitHubAppRegistrationReview> {
     return this.accept(input);
   }
+  upload(request: Request, input: { workspaceId: string; planId: string }) {
+    return uploadGitHubAppMaterial(request, this.context, input);
+  }
+  async privateInputContext(input: unknown) {
+    const { row, captured } = await this.selection(input, true);
+    const review = this.describe(row, captured);
+    const current = await this.registration(captured.request.registrationId);
+    if (
+      !row.applied_at &&
+      (current?.revision ?? 0) !== captured.request.revision
+    )
+      githubAppConflict();
+    const previous =
+      current &&
+      githubAppMetadataSchema.parse(JSON.parse(current.metadata_json));
+    const appId =
+      captured.request.change.kind === "save"
+        ? captured.request.change.fields.appId
+        : previous?.appId;
+    if (!appId || !review.privateInputRequired) githubAppConflict();
+    return {
+      review,
+      appId,
+      registrationId: captured.request.registrationId,
+      keyRevision: (current?.key_revision ?? 0) + 1,
+      webhookRevision: (current?.webhook_revision ?? 0) + 1,
+    };
+  }
   async accept(
     input: unknown,
     material?: GitHubAppAcceptedMaterial,
+    manifestAttemptId?: string,
   ): Promise<GitHubAppRegistrationReview> {
     const { row, captured, authority } = await this.selection(input, true);
     if (row.applied_at) return this.describe(row, captured);
@@ -333,6 +363,8 @@ export class GitHubApps {
       SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${guard.sql}
       AND COALESCE((SELECT revision FROM github_app_registrations WHERE id=?),0)=?
       AND EXISTS(SELECT 1 FROM github_app_reviews WHERE id=? AND applied_at IS NULL AND expires_at>? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      AND (? IS NULL OR EXISTS(SELECT 1 FROM github_app_manifest_attempts WHERE id=? AND workspace_id=? AND actor_subject=? AND state='conversion_claimed' AND expires_at>?
+        AND json_extract(input_json,'$.request.registrationId')=? AND json_extract(input_json,'$.authority.memberRevision')=? AND json_extract(input_json,'$.authority.permitFingerprint')=?))
       AND (? > 0 OR (SELECT count(*) FROM github_app_registrations)<?)
       ON CONFLICT(id) DO UPDATE SET metadata_json=excluded.metadata_json,identity_json=excluded.identity_json,revision=excluded.revision,key_revision=excluded.key_revision,webhook_revision=excluded.webhook_revision,updated_at=excluded.updated_at,write_id=excluded.write_id`,
         )
@@ -352,6 +384,14 @@ export class GitHubApps {
           request.revision,
           row.id,
           now,
+          manifestAttemptId ?? null,
+          manifestAttemptId ?? null,
+          request.workspaceId,
+          this.context.principal.subject,
+          now,
+          request.registrationId,
+          authority.memberRevision,
+          authority.permitFingerprint,
           request.revision,
           LIMITS.REGISTRATIONS,
         ),
@@ -426,6 +466,20 @@ export class GitHubApps {
           writeId,
         ),
     );
+    if (manifestAttemptId)
+      statements.push(
+        this.db
+          .prepare(
+            `UPDATE github_app_manifest_attempts SET state='complete',completed_at=?,registration_id=? WHERE id=? AND state='conversion_claimed' AND ${savedSql}`,
+          )
+          .bind(
+            now,
+            request.registrationId,
+            manifestAttemptId,
+            request.registrationId,
+            writeId,
+          ),
+      );
     const results = await this.db.batch(statements);
     if (!results[0].meta.changes) githubAppConflict();
     return this.get(input);

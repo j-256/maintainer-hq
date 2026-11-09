@@ -23,7 +23,7 @@ export function privateInputError(): never {
 
 export async function readSecretInput(
   request: Request,
-  bounds = {
+  bounds: { bytes: number; timeoutMs: number } = {
     bytes: SECRET_LIMITS.UPLOAD_BYTES,
     timeoutMs: SECRET_LIMITS.INPUT_READ_MS,
   },

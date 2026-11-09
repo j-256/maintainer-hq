@@ -7,6 +7,7 @@ import { callCommand, clientConfiguration, ClientError } from "./client";
 import { LIMITS } from "../shared/domain";
 import { readPrivateValue, supplySecretInput } from "./secret-input";
 import { supplyProviderCredentialInput } from "./provider-credential-input";
+import { readGitHubAppInputFile, supplyGitHubAppInput } from "./github-app-input";
 import { PROVIDER_CREDENTIAL_LIMITS } from "../shared/provider-credentials";
 import { supplyTransientSecretInput } from "./secret-transient-input";
 import { CLOUDFLARE_SECRET_LIMITS } from "../shared/cloudflare-secrets";
@@ -326,6 +327,20 @@ program
       console.log(JSON.stringify(result, null, 2));
     },
   );
+
+program.command("github-app-input")
+  .description("Import a private GitHub App JSON envelope through its exact reviewed boundary")
+  .requiredOption("-w, --workspace <id>", "Administrative workspace from the App review")
+  .requiredOption("-r, --review <id>", "Exact github_app_registration_plan ID")
+  .requiredOption("-p, --fingerprint <sha256:digest>", "Exact reviewed fingerprint")
+  .requiredOption("-i, --input <file>", "Owner-only regular non-symlink JSON file; use - for piped stdin")
+  .addHelpText("after", '\nFile schema: {"version":1,"privateKey":"PEM string","webhookSecret":"optional matching lifecycle secret"}. Use an owner-only private file or stdin, never values in command arguments. The review is checked before the file is read. A missing webhook secret leaves lifecycle ingress unavailable. Output contains metadata only. An interrupted submission must be reconciled through the same review; submitted:false does not compare supplied values. No App is installed and no provider configuration is changed. Exit statuses: 0 success/help, 1 runtime or uncertain result, 2 usage/precondition error.')
+  .action(async (options: {workspace: string; review: string; fingerprint: string; input: string}) => {
+    const global = program.opts<{url?: string; dev?: boolean}>();
+    if (!global.url) throw new ClientError("Provide --url or HQ_URL", 2);
+    const result = await supplyGitHubAppInput(clientConfiguration(global.url, Boolean(global.dev)), { workspaceId: options.workspace, planId: options.review, fingerprint: options.fingerprint }, () => readGitHubAppInputFile(options.input));
+    console.log(JSON.stringify(result, null, 2));
+  });
 
 try {
   await program.parseAsync();

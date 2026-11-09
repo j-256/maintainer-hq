@@ -9,6 +9,8 @@ import { dependabotEvidenceSchema } from "../shared/dependabot";
 
 const identity = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const elapsed = z.number().int().nonnegative().max(86400000);
+const manifestStageSchema = z.enum(["authenticate", "validation", "claim", "exchange", "verify_app", "persist", "complete"]);
+export type GitHubAppManifestStage = z.infer<typeof manifestStageSchema>;
 const context = z.object({
   runId: z.uuid(),
   workspaceId: identity,
@@ -17,6 +19,16 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  z.object({
+    event: z.literal("hq.github.app.manifest"),
+    correlationId: z.uuid(),
+    attemptId: identity.nullable(),
+    state: z.enum(["complete", "indeterminate", "denied", "reauthentication_required"]),
+    stage: manifestStageSchema,
+    code: z.string().regex(/^[a-z_]{1,80}$/).optional(),
+    providerStatus: z.number().int().min(100).max(599).optional(),
+    elapsedMs: elapsed,
+  }).strict(),
   z.object({ event: z.literal("hq.hooks.handoff"), reference: z.uuid(), workspaceId: identity, state: z.enum(["ready", "configured", "conflict", "expired", "unavailable"]), linked: z.boolean() }).strict(),
   z.object({ event: z.literal("hq.hooks.handoff.private"), reference: z.uuid(), workspaceId: identity, action: z.enum(["export", "reveal"]), state: z.literal("accepted"), elapsedMs: elapsed }).strict(),
   z
@@ -199,6 +211,7 @@ export function emitDiagnostic(event: Diagnostic) {
           value.outcome === "failed" ||
           value.upstreamIncomplete)) ||
       value.event === "hq.push.interrupted" ||
+      (value.event === "hq.github.app.manifest" && value.state !== "complete") ||
       value.event === "hq.secrets.cleanup.interrupted" ||
       value.event === "hq.request.failed" ||
       value.event === "hq.monitoring.targets.limited" ||
