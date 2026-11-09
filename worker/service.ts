@@ -1,4 +1,5 @@
 import { HookHandoff } from "./hook-handoff";
+import { GitHubApps } from "./github-app-registrations";
 import { DependabotChanges } from "./dependabot-changes";
 import { DependabotOperations } from "./dependabot-operations";
 import { credentialIsCurrentSql } from "./credential-expiry";
@@ -139,6 +140,11 @@ function repositoryFromRow(row: RepositoryRow): Repository {
 }
 
 export class WorkspaceService {
+  githubAppList(input: unknown) { return new GitHubApps(this).list(input); }
+  githubAppRegistrationPlan(input: unknown) { return new GitHubApps(this).plan(input); }
+  githubAppRegistrationGet(input: unknown) { return new GitHubApps(this).get(input); }
+  githubAppRegistrationApply(input: unknown) { return new GitHubApps(this).apply(input); }
+  githubAppSetupPermitRevoke(input: unknown) { return new GitHubApps(this).revokeSetupPermit(input); }
   dependabotChangePlan(input:unknown) { return new DependabotChanges(this).plan(input); }
   dependabotChangeReview(input:unknown) { return new DependabotChanges(this).review(input); }
   dependabotChangeApply(input:unknown) { return new DependabotOperations(this).apply(input); }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema } from "./domain";
+import { idSchema, workspaceInput } from "./domain";
 
 export const GITHUB_APP_LIMITS = Object.freeze({
   PRIVATE_INPUT_BYTES: 64 * 1024,
@@ -17,6 +17,10 @@ export const GITHUB_APP_LIMITS = Object.freeze({
   REPOSITORIES: 100,
   PAGE_SIZE: 100,
   MAX_PAGE: 10000,
+  SETUP_PERMIT_BYTES: 32768,
+  SETUP_PERMITS: 100,
+  REGISTRATIONS: 100,
+  PENDING_REVIEWS: 20,
 });
 export const GITHUB_CAPABILITY = Object.freeze({
   COLLECTION: "collection",
@@ -138,3 +142,66 @@ export function githubAppPermissions(
   }
   return githubAppPermissionsSchema.parse(result);
 }
+
+export const githubAppRegistrationFieldsSchema = githubAppMetadataSchema.pick({
+  name: true,
+  appId: true,
+  visibility: true,
+  capabilities: true,
+});
+export const githubAppListInput = workspaceInput
+  .extend({
+    scope: z.enum(["administration", "workspace"]),
+  })
+  .strict();
+export const githubAppRegistrationPlanInput = workspaceInput
+  .extend({
+    registrationId: idSchema,
+    revision: z.number().int().nonnegative(),
+    change: z.discriminatedUnion("kind", [
+      z
+        .object({
+          kind: z.literal("save"),
+          fields: githubAppRegistrationFieldsSchema,
+          replaceKey: z.boolean(),
+        })
+        .strict(),
+      z.object({ kind: z.literal("rotate") }).strict(),
+      z.object({ kind: z.literal("disconnect") }).strict(),
+    ]),
+  })
+  .strict();
+export const githubAppRegistrationSelectionInput = workspaceInput
+  .extend({
+    planId: idSchema,
+    fingerprint: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  })
+  .strict();
+export const githubAppSetupPermitRevokeInput = workspaceInput
+  .extend({
+    permitId: idSchema,
+    revision: z.number().int().positive(),
+  })
+  .strict();
+export type GitHubAppRegistrationFields = z.infer<
+  typeof githubAppRegistrationFieldsSchema
+>;
+export type GitHubAppRegistrationPlanInput = z.infer<
+  typeof githubAppRegistrationPlanInput
+>;
+export type GitHubAppRegistrationSelection = z.infer<
+  typeof githubAppRegistrationSelectionInput
+>;
+export type GitHubAppRegistrationReview = {
+  id: string;
+  registrationId: string;
+  revision: number;
+  change: GitHubAppRegistrationPlanInput["change"];
+  fingerprint: string;
+  expiresAt: string;
+  privateInputRequired: boolean;
+  applied: boolean;
+  expired: boolean;
+  impact: { affectedWorkspaceIds: string[] };
+  registration: GitHubAppMetadata | null;
+};
