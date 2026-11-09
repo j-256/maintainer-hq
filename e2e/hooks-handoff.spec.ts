@@ -80,3 +80,22 @@ test("viewers cannot start manual handoff", async ({ page }) => {
   await page.goto(`/hooks?workspace=development&connection=${HOOK_CONNECTION.id}&view=subscriptions`);
   await expect(page.getByRole("button", { name: "New GitHub hook", exact: true })).toBeDisabled();
 });
+
+test("restores opener focus after closing manual handoff", async ({ page }) => {
+  await mockHookPolicies(page);
+  await page.route("**/api/commands/hooks_handoff_configuration", route => route.fulfill({ json: {
+    status: "supported", configuration: { authorityId, revision: 1, mode: "active", canCreate: true, canReveal: true, reason: "ready", observedAt: new Date().toISOString() },
+  } }));
+  await page.goto(`/hooks?workspace=development&connection=${HOOK_CONNECTION.id}&view=subscriptions`);
+  const opener = page.getByRole("button", { name: "New GitHub hook", exact: true });
+  const dialog = page.getByRole("dialog");
+  for (const action of ["escape", "close"]) {
+    await opener.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+    if (action === "escape") await page.keyboard.press("Escape");
+    else await dialog.getByRole("button", { name: "Close", exact: true }).last().click();
+    await expect(dialog).toBeHidden();
+    await expect(opener).toBeFocused();
+  }
+});

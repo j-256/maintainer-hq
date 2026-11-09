@@ -8,7 +8,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { HookDestinations } from "./hook-policy-editor";
-import { HookError, HookTime } from "./hook-components";
+import { HookError, HookTime, restoreHookFocus } from "./hook-components";
 import { HandoffPrivatePanel } from "./hook-handoff-private";
 import type { z } from "zod";
 import "./hook-handoff.css";
@@ -16,7 +16,7 @@ import "./hook-handoff.css";
 const PROFILE_EVENTS = Object.freeze({ activity: "push, workflow_run, pull_request", stars: "star", alerts: "code_scanning_alert, dependabot_alert, secret_scanning_alert" });
 const PROFILE_LABELS = Object.freeze({ activity: "Activity", stars: "Stars", alerts: "Security alerts" });
 type Configuration = z.infer<typeof handoffConfigurationSchema>;
-export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, onReview, onBack, onClose }: { snapshot: Snapshot; connection: HookConnection; planId: string | null; repositoryId: string | null; onReview: (id: string) => void; onBack: () => void; onClose: () => void }) {
+export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, returnFocus, onReview, onBack, onClose }: { snapshot: Snapshot; connection: HookConnection; planId: string | null; repositoryId: string | null; returnFocus: HTMLElement | null; onReview: (id: string) => void; onBack: () => void; onClose: () => void }) {
   const workspaceId = snapshot.workspace.id;
   const owner = snapshot.capabilities.includes(CAPABILITY.SECRETS);
   const contextRepository = snapshot.repositories.find(repository => repository.id === repositoryId);
@@ -71,7 +71,7 @@ export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, 
       void client.invalidateQueries({ queryKey: ["hooks", workspaceId, "history"] });
     } catch (failure) { setError(failure); } finally { setBusy(false); }
   }
-  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="handoff-dialog" onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onInteractOutside={event => { if (busy) event.preventDefault(); }}>
+  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="handoff-dialog" onCloseAutoFocus={event => { event.preventDefault(); restoreHookFocus(returnFocus); }} onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onInteractOutside={event => { if (busy) event.preventDefault(); }}>
     <DialogHeader><DialogTitle>{planId ? "Review GitHub hook" : "New GitHub hook"}</DialogTitle><DialogDescription>Create a receiver for a trusted GitHub repository, then hand its credentials to the repository administrator.</DialogDescription></DialogHeader>
     {connection.id === "handoff-demo" ? <p role="note">Synthetic demonstration. No GitHub hook or notification is created. Provider fixture state resets when the development server restarts.</p> : null}
     {error ? error instanceof Error && !("status" in error) ? <p role="alert">{error.message.startsWith("This ") ? error.message : "Check the repository, project and destination selection. Your draft is preserved."}</p> : <HookError error={error} /> : null}

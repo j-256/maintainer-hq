@@ -1308,7 +1308,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
       ) : null}
       {selected && params.get("handoff") ? <HookHandoffDialog
         key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision].join("/")}
-        snapshot={snapshot} connection={selected} planId={params.get("handoff") === "new" ? null : params.get("handoff")} repositoryId={params.get("repository")}
+        snapshot={snapshot} connection={selected} planId={params.get("handoff") === "new" ? null : params.get("handoff")} repositoryId={params.get("repository")} returnFocus={focus.current}
         onReview={id => navigate({ handoff: id })} onBack={() => navigate({ handoff: "new" })} onClose={() => navigate({ handoff: null })} /> : null}
       {setupReviewId ? (
         <HookSetupReviewDialog
