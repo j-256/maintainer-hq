@@ -22,6 +22,8 @@ export const GITHUB_APP_LIMITS = Object.freeze({
   SETUP_PERMITS: 100,
   REGISTRATIONS: 100,
   PENDING_REVIEWS: 20,
+  GRANTS: 100,
+  CREDENTIAL_CATALOG_BYTES: 512 * 1024,
   INPUT_REQUEST_TIMEOUT_MS: 25000,
 });
 export const GITHUB_CAPABILITY = Object.freeze({
@@ -209,7 +211,7 @@ export const githubAppRegistrationReviewSchema = z
       .object({
         affectedWorkspaceIds: z
           .array(idSchema)
-          .max(GITHUB_APP_LIMITS.REGISTRATIONS),
+          .max(GITHUB_APP_LIMITS.GRANTS + 1),
       })
       .strict(),
     registration: githubAppMetadataSchema.nullable(),
@@ -247,4 +249,101 @@ export type GitHubAppManifestAttempt = {
   browserUrl: string;
   registration: GitHubAppMetadata | null;
   recovery: "none" | "protected_import_required";
+};
+
+export const githubAppInstallationsInput = workspaceInput
+  .extend({
+    registrationId: idSchema,
+    cursor: z
+      .string()
+      .regex(/^[1-9]\d{0,4}$/)
+      .optional(),
+  })
+  .strict();
+export const githubAppConnectionRequestInput = workspaceInput
+  .extend({
+    requestId: idSchema,
+    requestedCapabilities: githubCapabilitiesSchema,
+  })
+  .strict();
+export const githubAppConnectionRequestsInput = workspaceInput
+  .extend({ scope: z.enum(["workspace", "administration"]) })
+  .strict();
+export const githubAppGrantPlanInput = workspaceInput
+  .extend({
+    targetWorkspaceId: idSchema,
+    registrationId: idSchema,
+    installationId: githubProviderIdSchema,
+    grantId: idSchema,
+    revision: z.number().int().nonnegative(),
+    repositoryIds: z
+      .array(githubProviderIdSchema)
+      .min(1)
+      .max(GITHUB_APP_LIMITS.REPOSITORIES)
+      .refine((ids) => new Set(ids).size === ids.length),
+    capabilities: githubCapabilitiesSchema,
+    expiresAt: z.iso.datetime().optional(),
+  })
+  .strict();
+export const githubAppGrantRevokeInput = workspaceInput
+  .extend({
+    grantId: idSchema,
+    revision: z.number().int().positive(),
+    targetWorkspaceId: idSchema.optional(),
+  })
+  .strict();
+export const githubAppGrantListInput = workspaceInput.strict();
+export const githubAppRepositoryIdentitySchema = z
+  .object({
+    id: githubProviderIdSchema,
+    fullName: githubRepositoryNameSchema,
+    ownerId: githubProviderIdSchema,
+    private: z.boolean(),
+  })
+  .strict();
+export const githubAppGrantSchema = z
+  .object({
+    id: idSchema,
+    workspaceId: idSchema,
+    credentialRef: idSchema,
+    registrationId: idSchema,
+    appId: githubProviderIdSchema,
+    appName: z.string().min(1).max(80),
+    installationId: githubProviderIdSchema,
+    account: z
+      .object({
+        id: githubProviderIdSchema,
+        login: z.string().min(1).max(100),
+        type: z.enum(["User", "Organization"]),
+      })
+      .strict(),
+    repositories: z
+      .array(githubAppRepositoryIdentitySchema)
+      .min(1)
+      .max(GITHUB_APP_LIMITS.REPOSITORIES),
+    capabilities: githubCapabilitiesSchema,
+    revision: z.number().int().positive(),
+    state: z.enum(["active", "revoked", "expired"]),
+    expiresAt: z.iso.datetime().nullable(),
+    issuerSubject: z.string().min(1).max(300),
+    acceptedBy: z.string().min(1).max(300),
+    acceptedAt: z.iso.datetime(),
+  })
+  .strict();
+export type GitHubAppGrant = z.infer<typeof githubAppGrantSchema>;
+export type GitHubAppGrantReview = {
+  id: string;
+  fingerprint: string;
+  targetWorkspaceId: string;
+  registrationId: string;
+  installationId: number;
+  grantId: string;
+  revision: number;
+  kind: "offer" | "revoke";
+  repositories: z.infer<typeof githubAppRepositoryIdentitySchema>[];
+  capabilities: GitHubCapability[];
+  expiresAt: string;
+  grantExpiresAt: string | null;
+  state: "offered" | "active" | "revoked" | "expired";
+  grant: GitHubAppGrant | null;
 };

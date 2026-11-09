@@ -1,3 +1,4 @@
+import { GitHubAppGrants } from "./github-app-grants";
 import { HookHandoff } from "./hook-handoff";
 import { GitHubApps } from "./github-app-registrations";
 import { GitHubAppManifests } from "./github-app-manifest";
@@ -141,6 +142,15 @@ function repositoryFromRow(row: RepositoryRow): Repository {
 }
 
 export class WorkspaceService {
+  githubAppInstallationsList(input: unknown) { return new GitHubAppGrants(this).installations(input); }
+  githubAppConnectionRequest(input: unknown) { return new GitHubAppGrants(this).request(input); }
+  githubAppConnectionRequestsList(input: unknown) { return new GitHubAppGrants(this).requests(input); }
+  githubAppGrantPlan(input: unknown) { return new GitHubAppGrants(this).plan(input); }
+  githubAppGrantGet(input: unknown) { return new GitHubAppGrants(this).get(input); }
+  githubAppGrantAccept(input: unknown) { return new GitHubAppGrants(this).accept(input); }
+  githubAppGrantList(input: unknown) { return new GitHubAppGrants(this).list(input); }
+  githubAppGrantRevokePlan(input: unknown) { return new GitHubAppGrants(this).revokePlan(input); }
+
   githubAppList(input: unknown) { return new GitHubApps(this).list(input); }
   githubAppRegistrationPlan(input: unknown) { return new GitHubApps(this).plan(input); }
   githubAppRegistrationGet(input: unknown) { return new GitHubApps(this).get(input); }

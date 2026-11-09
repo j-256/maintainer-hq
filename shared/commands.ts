@@ -1,5 +1,18 @@
 import { handoffConnectionInput, handoffRepositoryInput, handoffPlanInput, handoffStatusInput } from "./hook-handoff";
-import { githubAppListInput, githubAppRegistrationPlanInput, githubAppRegistrationSelectionInput, githubAppSetupPermitRevokeInput, githubAppManifestStartInput, githubAppManifestGetInput } from "./github-apps";
+import {
+  githubAppInstallationsInput,
+  githubAppConnectionRequestInput,
+  githubAppConnectionRequestsInput,
+  githubAppGrantPlanInput,
+  githubAppGrantRevokeInput,
+  githubAppGrantListInput,
+  githubAppListInput,
+  githubAppRegistrationPlanInput,
+  githubAppRegistrationSelectionInput,
+  githubAppSetupPermitRevokeInput,
+  githubAppManifestStartInput,
+  githubAppManifestGetInput,
+} from "./github-apps";
 import { dependabotChangeApplyInput, dependabotChangePlanInput, dependabotChangeReviewInput } from "./dependabot-changes";
 import { dependabotOperationInput, dependabotOperationsInput } from "./dependabot-operations";
 import {
@@ -310,6 +323,54 @@ export const commands = {
     method: "fleetReconciliationApply",
     title:
       "Apply only reviewed HQ repository and collection-scope changes atomically without GitHub writes",
+    readOnly: false,
+  },
+  github_app_installations_list: {
+    schema: githubAppInstallationsInput,
+    method: "githubAppInstallationsList",
+    title: "List bounded installations for an authorized deployment App",
+    readOnly: true,
+  },
+  github_app_connection_request: {
+    schema: githubAppConnectionRequestInput,
+    method: "githubAppConnectionRequest",
+    title: "Request an owner-approved App connection without granting authority",
+    readOnly: false,
+  },
+  github_app_connection_requests_list: {
+    schema: githubAppConnectionRequestsInput,
+    method: "githubAppConnectionRequestsList",
+    title: "List bounded owner connection requests",
+    readOnly: true,
+  },
+  github_app_grant_plan: {
+    schema: githubAppGrantPlanInput,
+    method: "githubAppGrantPlan",
+    title: "Offer verified installation scope to an explicit workspace",
+    readOnly: false,
+  },
+  github_app_grant_get: {
+    schema: githubAppRegistrationSelectionInput,
+    method: "githubAppGrantGet",
+    title: "Read an authorized workspace App grant review or receipt",
+    readOnly: true,
+  },
+  github_app_grant_accept: {
+    schema: githubAppRegistrationSelectionInput,
+    method: "githubAppGrantAccept",
+    title: "Accept an exact App grant or apply its reviewed local revocation",
+    readOnly: false,
+  },
+  github_app_grant_list: {
+    schema: githubAppGrantListInput,
+    method: "githubAppGrantList",
+    title: "List workspace App grants and offered connections",
+    readOnly: true,
+  },
+  github_app_grant_revoke_plan: {
+    schema: githubAppGrantRevokeInput,
+    method: "githubAppGrantRevokePlan",
+    title: "Review revocation of one workspace App grant",
     readOnly: false,
   },
   github_apps_list: {
@@ -1374,6 +1435,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
       "expectation_review_complete",
       "provider_credential_apply",
       "github_app_registration_apply",
+      "github_app_grant_accept",
       "github_app_setup_permit_revoke",
       "project_transfer_apply",
       "member_update",
@@ -1472,6 +1534,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "expectation_review_complete",
         "provider_credential_apply",
         "github_app_registration_apply",
+        "github_app_grant_accept",
         "project_transfer_plan",
         "project_transfer_apply",
         "metadata_import_apply",

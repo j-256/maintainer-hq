@@ -1,3 +1,8 @@
+import { hookActorGuard, authorizeHooks } from "./hook-authority";
+import {
+  githubAppGrantSchema,
+  githubCapabilitiesSchema,
+} from "../shared/github-apps";
 import { z } from "zod";
 import {
   GITHUB_APP_LIMITS as LIMITS,
@@ -30,6 +35,7 @@ export type GitHubAppRegistrationRow = {
   identity_json: string;
   revision: number;
   key_revision: number;
+  grants_revision: number;
   webhook_revision: number | null;
 };
 type ReviewRow = {
@@ -46,7 +52,8 @@ const capturedSchema = z
   .object({
     request: githubAppRegistrationPlanInput,
     authority: githubAppOperatorAuthoritySchema,
-    affectedWorkspaceIds: z.array(z.string()).max(LIMITS.REGISTRATIONS),
+    grantsRevision: z.number().int().nonnegative().default(0),
+    affectedWorkspaceIds: z.array(z.string()).max(LIMITS.GRANTS + 1),
   })
   .strict();
 type Captured = z.infer<typeof capturedSchema>;
@@ -57,7 +64,7 @@ export type GitHubAppAcceptedMaterial = {
   webhookSecret?: { materialId: string; encrypted: EncryptedGitHubAppMaterial };
 };
 const REGISTRATION_COLUMNS =
-  "id,administrative_workspace_id,metadata_json,identity_json,revision,key_revision,webhook_revision";
+  "id,administrative_workspace_id,metadata_json,identity_json,revision,key_revision,webhook_revision,grants_revision";
 const REVIEW_COLUMNS =
   "id,workspace_id,actor_subject,input_json,fingerprint,expires_at,applied_at,result_json";
 export function githubAppConflict(): never {
@@ -113,8 +120,40 @@ export class GitHubApps {
   ): Promise<{ registrations: GitHubAppMetadata[]; limited: boolean }> {
     const { workspaceId, scope } = githubAppListInput.parse(input);
     if (scope === "workspace") {
-      await this.context.authorize(workspaceId);
-      return { registrations: [], limited: false };
+      const memberRevision = await authorizeHooks(this.context, workspaceId);
+      const guard = hookActorGuard(
+        this.context,
+        workspaceId,
+        undefined,
+        memberRevision,
+      );
+      const rows = await this.db
+        .prepare(
+          `SELECT r.metadata_json,g.metadata_json AS grant_json FROM github_app_registrations r JOIN github_app_grants g ON g.registration_id=r.id WHERE g.workspace_id=? AND g.state='active' AND (g.expires_at IS NULL OR g.expires_at>?) AND ${guard.sql} ORDER BY r.id,g.id LIMIT ?`,
+        )
+        .bind(workspaceId, this.timestamp(), ...guard.values, LIMITS.GRANTS + 1)
+        .all<{ metadata_json: string; grant_json: string }>();
+      const registrations = new Map<string, GitHubAppMetadata>();
+      for (const row of rows.results.slice(0, LIMITS.GRANTS)) {
+        const metadata = githubAppMetadataSchema.parse(
+          JSON.parse(row.metadata_json),
+        );
+        const grant = githubAppGrantSchema.parse(JSON.parse(row.grant_json));
+        const previous = registrations.get(metadata.id);
+        registrations.set(metadata.id, {
+          ...metadata,
+          capabilities: githubCapabilitiesSchema.parse([
+            ...new Set([
+              ...(previous?.capabilities ?? []),
+              ...grant.capabilities,
+            ]),
+          ]),
+        });
+      }
+      return {
+        registrations: [...registrations.values()],
+        limited: rows.results.length > LIMITS.GRANTS,
+      };
     }
     const authority = await requireGitHubAppOperator(this.context, workspaceId);
     const guard = githubAppOperatorGuard(this.context, authority);
@@ -163,10 +202,23 @@ export class GitHubApps {
       if (metadata && metadata.appId !== request.change.fields.appId)
         githubAppConflict();
     } else if (!current || metadata?.state !== "active") githubAppConflict();
+    const granted = await this.db
+      .prepare(
+        "SELECT DISTINCT workspace_id FROM github_app_grants WHERE registration_id=? AND state='active' ORDER BY workspace_id LIMIT ?",
+      )
+      .bind(request.registrationId, LIMITS.GRANTS + 1)
+      .all<{ workspace_id: string }>();
+    if (granted.results.length > LIMITS.GRANTS) githubAppConflict();
     const captured: Captured = {
       request,
       authority,
-      affectedWorkspaceIds: [request.workspaceId],
+      grantsRevision: current?.grants_revision ?? 0,
+      affectedWorkspaceIds: [
+        ...new Set([
+          request.workspaceId,
+          ...granted.results.map((row) => row.workspace_id),
+        ]),
+      ],
     };
     const id = crypto.randomUUID();
     const createdAt = this.timestamp();
@@ -188,6 +240,7 @@ export class GitHubApps {
         `INSERT INTO github_app_reviews(id,workspace_id,actor_subject,input_json,fingerprint,created_at,expires_at)
       SELECT ?,?,?,?,?,?,? WHERE ${guard.sql}
       AND COALESCE((SELECT revision FROM github_app_registrations WHERE id=?),0)=?
+      AND COALESCE((SELECT grants_revision FROM github_app_registrations WHERE id=?),0)=?
       AND (SELECT count(*) FROM github_app_reviews WHERE workspace_id=? AND actor_subject=? AND applied_at IS NULL AND expires_at>?)<?`,
       )
       .bind(
@@ -201,6 +254,8 @@ export class GitHubApps {
         ...guard.values,
         request.registrationId,
         request.revision,
+        request.registrationId,
+        captured.grantsRevision,
         request.workspaceId,
         this.context.principal.subject,
         createdAt,
@@ -362,6 +417,7 @@ export class GitHubApps {
           `INSERT INTO github_app_registrations(id,administrative_workspace_id,metadata_json,identity_json,revision,key_revision,webhook_revision,created_at,updated_at,write_id)
       SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${guard.sql}
       AND COALESCE((SELECT revision FROM github_app_registrations WHERE id=?),0)=?
+      AND COALESCE((SELECT grants_revision FROM github_app_registrations WHERE id=?),0)=?
       AND EXISTS(SELECT 1 FROM github_app_reviews WHERE id=? AND applied_at IS NULL AND expires_at>? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       AND (? IS NULL OR EXISTS(SELECT 1 FROM github_app_manifest_attempts WHERE id=? AND workspace_id=? AND actor_subject=? AND state='conversion_claimed' AND expires_at>?
         AND json_extract(input_json,'$.request.registrationId')=? AND json_extract(input_json,'$.authority.memberRevision')=? AND json_extract(input_json,'$.authority.permitFingerprint')=?))
@@ -382,6 +438,8 @@ export class GitHubApps {
           ...guard.values,
           request.registrationId,
           request.revision,
+          request.registrationId,
+          captured.grantsRevision,
           row.id,
           now,
           manifestAttemptId ?? null,
