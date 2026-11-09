@@ -4,6 +4,7 @@ import { sourceFields, sourceInput } from "./sources";
 import { GITHUB_LIMITS, type GitHubEvidence } from "./github-evidence";
 import type { GitHubDiagnostics } from "./github-diagnostics";
 import type { GitHubEvidenceChange } from "./github-refresh-summary";
+import type { GitHubCapability } from "./github-apps";
 
 const ACCEPTANCE_MARGIN_MS = 5000;
 
@@ -111,7 +112,12 @@ export type GitHubSource = Connection & {
   provider: "github";
   github: GitHubConnectionStatus;
 };
-export type GitHubCredentialReference = { id: string; name: string };
+export type GitHubCredentialReference = {
+  id: string;
+  name: string;
+  kind?: "token" | "app";
+  capabilities?: GitHubCapability[];
+};
 export type GitHubRefreshItem = {
   repositoryId: string;
   fullName: string;

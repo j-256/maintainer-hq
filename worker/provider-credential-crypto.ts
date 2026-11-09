@@ -92,7 +92,10 @@ function decode(value: string, limit: number) {
     return unavailable();
   }
 }
-async function key(env: KeyEnvironment, keyId?: string) {
+export async function providerCredentialEncryptionKey(
+  env: KeyEnvironment,
+  keyId?: string,
+) {
   const ring = keyring(env);
   if (!ring) unavailable();
   const selected = ring.keys.find(
@@ -136,7 +139,7 @@ export async function sealProviderCredential(
   }
   const plaintext = encoder.encode(token);
   try {
-    const selected = await key(env);
+    const selected = await providerCredentialEncryptionKey(env);
     const nonce = crypto.getRandomValues(new Uint8Array(LIMITS.NONCE_BYTES));
     const ciphertext = new Uint8Array(
       await crypto.subtle.encrypt(
@@ -168,7 +171,10 @@ export async function openProviderCredential(
 ): Promise<string> {
   let plaintext: Uint8Array | undefined;
   try {
-    const selected = await key(env, encrypted.keyId);
+    const selected = await providerCredentialEncryptionKey(
+      env,
+      encrypted.keyId,
+    );
     const nonce = decode(encrypted.nonce, LIMITS.NONCE_BYTES);
     if (nonce.byteLength !== LIMITS.NONCE_BYTES) unavailable();
     const ciphertext = decode(encrypted.ciphertext, LIMITS.CIPHERTEXT_BYTES);
