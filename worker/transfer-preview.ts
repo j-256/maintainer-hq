@@ -1,3 +1,4 @@
+import { HOOK_HANDOFF_KIND } from "../shared/hook-handoff";
 import {
   CAPABILITY,
   LIMITS,
@@ -173,6 +174,7 @@ export async function buildTransferPreview(
     HOOK_RETRY_KIND,
     HOOK_POLICY_KIND,
     HOOK_SETUP_KIND,
+    HOOK_HANDOFF_KIND,
     MONITOR_OPERATION_KIND,
     MANAGED_CONFIGURATION_OPERATION_KIND,
   ]);

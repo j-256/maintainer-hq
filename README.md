@@ -16,6 +16,7 @@ Read the [Maintainer HQ guide](https://docs.hq.lasers.app), or browse the same M
 - [Projects](docs/projects.md), [repositories](docs/repositories.md), and [reviewed workspace transfers](docs/project-transfers.md)
 - [Activity and exact goals](docs/activity.md), [date/time preferences](docs/preferences.md), and [live updates](docs/push.md)
 - [Integration availability](docs/integrations.md), [Hooks](docs/hooks.md), [Monitoring](docs/monitoring.md), and [Secrets](docs/secrets.md)
+- [Manual GitHub webhook handoff](docs/github-handoff.md) for trusted external repository administrators
 - [Connect GitHub](docs/github.md) and inspect per-repository refresh results
 - [Dependency maintenance](docs/dependencies.md), temporary-override lifecycle checks, reviewed cleanup or renewal PRs, and a [Dependabot schedule timeline](docs/dependencies.md#dependabot-schedules) with reviewed YAML changes
 - [CLI and MCP](docs/commands.md), [automation credentials](docs/automation.md), and [local publishing](docs/publishing.md)

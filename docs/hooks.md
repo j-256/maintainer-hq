@@ -5,6 +5,8 @@ description: Inspect subscriptions, review routing changes, link resources, and 
 
 # Hooks workspace
 
+For trusted third-party repositories whose administrator installs the upstream webhook, use [manual GitHub webhook handoff](github-handoff.md). It provides owner-reviewed receiver creation, private URL/secret retrieval and protected recovery export with existing destinations.
+
 Hooks is a shared workspace surface, not a repository-only attachment. Owners enroll deployment-approved Hookrelay connections, operators review routing changes and retries, and viewers inspect metadata. Connections remain workspace-scoped so several projects can share one provider authority. Each subscription enrolled into HQ requires one explicit primary project, including a project that has no repository. A connection's optional project context is only a suggestion and does not assign its subscriptions. HQ connection settings, project ownership, and repository links do not alter Hookrelay routes, destinations, queue policy, or event retention. Routing changes use the separate reviewed provider operation described below.
 
 A subscription can also be explicitly linked to several repositories through the shared [repository workspace contract](repositories.md). These links are independent of project grouping. The provider screen retains repository context and warns that an operation can affect other linked repositories. HQ captures the selected delivery's trusted subscription and its repository links before submitting a retry; later association edits do not rewrite that operation's Activity scope.

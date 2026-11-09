@@ -1,4 +1,5 @@
 import { hookSetupResults } from "./hook-setup";
+import { handoffResults } from "./hook-handoff";
 import { z } from "zod";
 import { idSchema, workspaceInput } from "./domain";
 
@@ -396,6 +397,7 @@ export const hookSignalSchema = z
       "ingress-rate-limited",
       "ingress-adapter-missing",
       "ingress-authentication-rejected",
+      "ingress-credentials-unavailable",
       "ingress-parse-rejected",
       "ingress-persistence-rejected",
       "delivery-exhausted",
@@ -480,6 +482,7 @@ export const hookDeliveriesSchema = z
   })
   .strict();
 export const hookResultSchemas = {
+  ...handoffResults,
   ...hookSetupResults,
   snapshot: hookSnapshotSchema,
   signals: z

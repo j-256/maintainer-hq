@@ -1,3 +1,4 @@
+import { HookHandoff } from "./hook-handoff";
 import {
   McpServer,
   WebStandardStreamableHTTPServerTransport,
@@ -197,6 +198,11 @@ export function createApplication(
           if (url.pathname === "/api/session" && request.method === "GET") {
             diagnostic.operation = "session";
             response = Response.json(await service.session());
+          } else if (url.pathname === "/api/hooks/handoff/private" && request.method === "POST") {
+            diagnostic.operation = "hooks_handoff_private";
+            const body = z.object({ action: z.enum(["adopt_plan", "reveal", "export"]), input: z.unknown() }).strict().parse(await readJson(request));
+            const handoff = new HookHandoff(service);
+            response = Response.json(body.action === "adopt_plan" ? await handoff.plan(body.input, true) : await handoff.private(body.action, body.input));
           } else if (
             (url.pathname === "/api/secrets/input" ||
               url.pathname === "/api/secrets/transient-input" ||

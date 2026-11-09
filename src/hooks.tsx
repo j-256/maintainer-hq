@@ -1,3 +1,5 @@
+import { HOOK_HANDOFF_KIND } from "../shared/hook-handoff";
+import { HookHandoffDialog } from "./hook-handoff";
 import { HOOK_SETUP_KIND } from "../shared/hook-setup";
 import { HookSetupReviewDialog } from "./hook-resolution";
 import { useRef, useState, type FormEvent } from "react";
@@ -991,6 +993,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
             <Webhook size={28} aria-hidden="true" /> Hooks
           </h1>
         </div>
+        {selected && active ? <Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.SECRETS)} onClick={() => { rememberFocus(); navigate({ handoff: "new" }); }}>New GitHub hook</Button> : null}
         {canAdmin && connections.data?.length ? (
           <Button
             onClick={() => {
@@ -1219,10 +1222,12 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
                   review:
                     kind === HOOK_POLICY_KIND ||
                     kind === HOOK_SETUP_KIND ||
+                    kind === HOOK_HANDOFF_KIND ||
                     kind === HOOK_RESOLUTION_KIND
                       ? null
                       : id,
                   setupReview: kind === HOOK_SETUP_KIND ? id : null,
+                  handoff: kind === HOOK_HANDOFF_KIND ? id : null,
                   disposition: kind === HOOK_RESOLUTION_KIND ? id : null,
                   policyReview: kind === HOOK_POLICY_KIND ? id : null,
                   policy: null,
@@ -1301,6 +1306,10 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
           onReview={(id) => navigate({ policyReview: id })}
         />
       ) : null}
+      {selected && params.get("handoff") ? <HookHandoffDialog
+        key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision].join("/")}
+        snapshot={snapshot} connection={selected} planId={params.get("handoff") === "new" ? null : params.get("handoff")} repositoryId={params.get("repository")}
+        onReview={id => navigate({ handoff: id })} onBack={() => navigate({ handoff: "new" })} onClose={() => navigate({ handoff: null })} /> : null}
       {setupReviewId ? (
         <HookSetupReviewDialog
           snapshot={snapshot}

@@ -1,3 +1,4 @@
+import { handoffConnectionInput, handoffRepositoryInput, handoffPlanInput, handoffStatusInput } from "./hook-handoff";
 import { dependabotChangeApplyInput, dependabotChangePlanInput, dependabotChangeReviewInput } from "./dependabot-changes";
 import { dependabotOperationInput, dependabotOperationsInput } from "./dependabot-operations";
 import {
@@ -784,6 +785,13 @@ export const commands = {
     title: "Read bounded workspace Hooks operation history",
     readOnly: true,
   },
+  hooks_handoff_configuration: { schema: handoffConnectionInput, method: "hooksHandoffConfiguration", title: "Read manual hook readiness and missing grants", readOnly: true },
+  hooks_handoff_repository: { schema: handoffRepositoryInput, method: "hooksHandoffRepository", title: "Read manual GitHub repository ownership and active profiles", readOnly: true },
+  hooks_handoff_status: { schema: handoffStatusInput, method: "hooksHandoffStatus", title: "Read separate routing, authenticated ping and delivery evidence", readOnly: true },
+  hooks_handoff_plan: { schema: handoffPlanInput, method: "hooksHandoffPlan", title: "Review manual GitHub receiver creation for a trusted repository", readOnly: false },
+  hooks_handoff_get: { schema: hookRetryInput, method: "hooksHandoffGet", title: "Read a saved manual hook review and operation", readOnly: true },
+  hooks_handoff_apply: { schema: hookRetryApplyInput, method: "hooksHandoffApply", title: "Apply the exact manual hook review with durable intent", readOnly: false },
+  hooks_handoff_reconcile: { schema: hookRetryInput, method: "hooksHandoffReconcile", title: "Reconcile manual hook configuration without resubmission", readOnly: false },
   hooks_setup_configuration: {
     schema: hookSetupConnectionInput,
     method: "hooksSetupConfiguration",
@@ -1334,6 +1342,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
       "hooks_connection_save",
       "hooks_policy_apply",
       "hooks_setup_apply",
+      "hooks_handoff_apply",
       "monitoring_connection_save",
       "secrets_connection_save",
       "secrets_cancel",
@@ -1361,6 +1370,12 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "provider_credential_verify",
         "hooks_snapshot",
         "hooks_configuration",
+        "hooks_handoff_configuration",
+        "hooks_handoff_repository",
+        "hooks_handoff_status",
+        "hooks_handoff_plan",
+        "hooks_handoff_apply",
+        "hooks_handoff_reconcile",
         "hooks_setup_configuration",
         "hooks_setup_status",
         "hooks_policy_subscriptions",
@@ -1431,6 +1446,9 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "hooks_retry_reconcile",
         "monitoring_apply",
         "hooks_policy_plan",
+        "hooks_handoff_plan",
+        "hooks_handoff_apply",
+        "hooks_handoff_reconcile",
         "hooks_setup_plan",
         "hooks_setup_reconcile",
         "hooks_policy_apply",

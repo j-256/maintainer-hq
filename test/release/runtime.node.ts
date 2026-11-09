@@ -207,7 +207,7 @@ INSERT INTO projects (workspace_id,id,name,description) VALUES ('release-test','
       );
       await expect(page.locator(".goal-objective")).toHaveText(objective);
       const connection = page.getByRole("button", {
-        name: "Connection details",
+        name: /^Connection details:/,
         exact: true,
       });
       await connection.click();

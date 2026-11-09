@@ -90,7 +90,7 @@ for (const theme of ["light", "dark"])
       const reads = requests(page);
       await page.goto(BASE);
       const trigger = page.getByRole("button", {
-        name: "Connection details",
+        name: /^Connection details:/,
         exact: true,
       });
       await expect(trigger).toContainText("Live updates");
@@ -180,7 +180,7 @@ test("fallback and offline recovery remain bounded and explain transport without
   const reads = requests(page);
   await page.goto(BASE);
   const trigger = page.getByRole("button", {
-    name: "Connection details",
+    name: /^Connection details:/,
     exact: true,
   });
   await expect(trigger).toContainText("Live updates");
@@ -235,7 +235,7 @@ test("view refresh errors do not turn a live connection into provider failure or
   await controlledPush(page);
   await page.goto(BASE);
   const trigger = page.getByRole("button", {
-    name: "Connection details",
+    name: /^Connection details:/,
     exact: true,
   });
   await expect(trigger).toContainText("Live updates");

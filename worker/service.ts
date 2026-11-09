@@ -1,3 +1,4 @@
+import { HookHandoff } from "./hook-handoff";
 import { DependabotChanges } from "./dependabot-changes";
 import { DependabotOperations } from "./dependabot-operations";
 import { credentialIsCurrentSql } from "./credential-expiry";
@@ -432,6 +433,13 @@ export class WorkspaceService {
   hooksConfiguration(input: unknown) {
     return new HookPolicies(this).configuration(input);
   }
+  hooksHandoffConfiguration(input: unknown) { return new HookHandoff(this).configuration(input); }
+  hooksHandoffRepository(input: unknown) { return new HookHandoff(this).repository(input); }
+  hooksHandoffStatus(input: unknown) { return new HookHandoff(this).status(input); }
+  hooksHandoffPlan(input: unknown) { return new HookHandoff(this).plan(input); }
+  hooksHandoffGet(input: unknown) { return new HookHandoff(this).get(input); }
+  hooksHandoffApply(input: unknown) { return new HookHandoff(this).apply(input); }
+  hooksHandoffReconcile(input: unknown) { return new HookHandoff(this).reconcile(input); }
   hooksSetupConfiguration(input: unknown) {
     return new HookSetup(this).configuration(input);
   }
