@@ -325,6 +325,22 @@ export class GitHubAppGrants {
         .first()
     )
       githubAppConflict();
+    const existing = await this.db
+      .prepare(
+        "SELECT 1 FROM github_app_credential_references WHERE workspace_id=? AND reference_id=? AND grant_id=?",
+      )
+      .bind(workspaceId, grantId, grantId)
+      .first();
+    if (
+      !existing &&
+      (await this.db
+        .prepare(
+          `SELECT 1 WHERE EXISTS(SELECT 1 FROM connections WHERE workspace_id=? AND credential_ref=?) OR EXISTS(SELECT 1 FROM secret_connections WHERE workspace_id=? AND credential_ref=?)`,
+        )
+        .bind(workspaceId, grantId, workspaceId, grantId)
+        .first())
+    )
+      githubAppConflict();
   }
   private async verify(
     registration: GitHubAppRegistrationRow,

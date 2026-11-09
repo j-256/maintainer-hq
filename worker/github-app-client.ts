@@ -11,6 +11,7 @@ import { signGitHubAppJwt } from "./github-app-crypto";
 
 const API_ORIGIN = "https://api.github.com";
 const API_VERSION = "2022-11-28";
+export const GITHUB_APP_USER_AGENT = "maintainer-hq";
 const accountSchema = z.object({
   id: githubProviderIdSchema,
   login: z.string().min(1).max(100),
@@ -172,6 +173,10 @@ export class GitHubAppClient {
   private readonly now: () => number;
   private readonly deadline: number;
   readonly #options: GitHubAppClientOptions;
+  #requests = 0;
+  get requests() {
+    return this.#requests;
+  }
   constructor(options: GitHubAppClientOptions) {
     this.#options = options;
     if (
@@ -204,10 +209,12 @@ export class GitHubAppClient {
         this.now(),
       );
       if (controller.signal.aborted) throw new Error();
+      this.#requests++;
       const response = await this.fetcher(API_ORIGIN + path, {
         method: body === undefined ? "GET" : "POST",
         headers: {
           Accept: "application/vnd.github+json",
+          "User-Agent": GITHUB_APP_USER_AGENT,
           Authorization: "Bearer " + jwt,
           "X-GitHub-Api-Version": API_VERSION,
           "Content-Type": "application/json",

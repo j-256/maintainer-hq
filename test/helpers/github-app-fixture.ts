@@ -52,6 +52,7 @@ export async function createGitHubAppFixture() {
   await runtime.HQ_DB.batch([
     runtime.HQ_DB.prepare("DELETE FROM workspaces"),
     runtime.HQ_DB.prepare("DELETE FROM github_app_setup_revocations"),
+    runtime.HQ_DB.prepare("DELETE FROM github_cooldowns"),
     runtime.HQ_DB.prepare(
       "INSERT INTO workspaces(id,name,created_at) VALUES ('administration','Administration',?),('alpha','Alpha',?),('beta','Beta',?)",
     ).bind(

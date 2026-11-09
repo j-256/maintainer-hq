@@ -70,12 +70,13 @@ async function prepare() {
 }
 function provider() {
   let exchanges = 0;
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     if (
       url ===
       "https://api.github.com/app-manifests/synthetic-code-canary/conversions"
     ) {
+      expect(new Headers(init?.headers).get("User-Agent")).toBe("maintainer-hq");
       exchanges++;
       return Response.json({
         ...upstream,
