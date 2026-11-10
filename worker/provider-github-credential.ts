@@ -1,3 +1,4 @@
+import { recordGitHubAppResponseCooldown } from "./github-app-authority";
 import { githubAuthorityFenceSchema } from "./github-authority-fence-schema";
 import { combineSqlGuards } from "./authority-sql";
 import { CAPABILITY } from "../shared/domain";
@@ -291,6 +292,12 @@ async function appConfigurationCredential(
         token: lease.token,
         assertLive: assertCaptured,
         rejectCredential: () => evictGitHubAppToken(credentialContext, lease),
+        recordResponse: (response: Response) =>
+          recordGitHubAppResponseCooldown(
+            credentialContext,
+            lease.quotaKey,
+            response,
+          ),
       };
     },
   );

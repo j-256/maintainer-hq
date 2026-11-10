@@ -201,6 +201,12 @@ export class GitHubApps {
         githubAppConflict();
       if (metadata && metadata.appId !== request.change.fields.appId)
         githubAppConflict();
+      if (metadata && metadata.visibility !== request.change.fields.visibility)
+        throw new DomainError(
+          "github_app_visibility_immutable",
+          "HQ does not change GitHub installation visibility. Inspect the App's settings on GitHub; this stored declaration is unverified.",
+          409,
+        );
     } else if (!current || metadata?.state !== "active") githubAppConflict();
     const granted = await this.db
       .prepare(

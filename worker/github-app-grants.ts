@@ -1,3 +1,4 @@
+import { DomainError } from "./errors";
 import {
   githubAppQuotaKey,
   assertGitHubAppCooldown,
@@ -15,6 +16,7 @@ import {
   githubAppGrantListInput,
   githubAppRegistrationSelectionInput,
   githubAppConnectionRequestInput,
+  githubAppConnectionRequestFinishInput,
   githubAppConnectionRequestsInput,
   githubAppInstallationsInput,
   githubAppRepositoriesInput,
@@ -201,6 +203,36 @@ export class GitHubAppGrants {
       githubAppConflict();
     return result;
   }
+  private requestMetadata(row: {
+    id: string;
+    workspace_id: string;
+    capabilities_json: string;
+    state: string;
+    revision: number;
+    created_at: string;
+    expires_at: string | null;
+    grant_id: string | null;
+    closed_at: string | null;
+  }) {
+    return {
+      id: row.id,
+      workspaceId: row.workspace_id,
+      requestedCapabilities: githubCapabilitiesSchema.parse(
+        JSON.parse(row.capabilities_json),
+      ),
+      state:
+        row.state === "requested" &&
+        row.expires_at &&
+        row.expires_at <= this.timestamp()
+          ? "expired"
+          : row.state,
+      revision: row.revision,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      grantId: row.grant_id,
+      closedAt: row.closed_at,
+    };
+  }
   async request(input: unknown) {
     const request = githubAppConnectionRequestInput.parse(input);
     const revision = await authorizeHooks(
@@ -214,90 +246,199 @@ export class GitHubAppGrants {
       CAPABILITY.ADMIN,
       revision,
     );
-    const result = await this.db
+    const capabilities = JSON.stringify(
+      [...request.requestedCapabilities].sort(),
+    );
+    const now = this.timestamp();
+    await this.db
       .prepare(
-        `INSERT INTO github_app_connection_requests(id,workspace_id,actor_subject,capabilities_json,created_at)
-      SELECT ?,?,?,?,? WHERE ${guard.sql} AND (SELECT count(*) FROM github_app_connection_requests WHERE workspace_id=?)<?
-      ON CONFLICT(workspace_id,id) DO NOTHING`,
+        `INSERT INTO github_app_connection_requests(id,workspace_id,actor_subject,capabilities_json,created_at,expires_at)
+      SELECT ?,?,?,?,?,? WHERE ${guard.sql}
+      AND NOT EXISTS(SELECT 1 FROM github_app_connection_requests WHERE workspace_id=? AND actor_subject=? AND capabilities_json=? AND state='requested' AND expires_at>?)
+      AND (SELECT count(*) FROM github_app_connection_requests WHERE workspace_id=? AND state='requested' AND expires_at>?)<? ON CONFLICT(workspace_id,id) DO NOTHING`,
       )
       .bind(
         request.requestId,
         request.workspaceId,
         this.context.principal.subject,
-        JSON.stringify(request.requestedCapabilities),
-        this.timestamp(),
+        capabilities,
+        now,
+        new Date(
+          this.context.now() + LIMITS.CONNECTION_REQUEST_TTL_MS,
+        ).toISOString(),
         ...guard.values,
         request.workspaceId,
+        this.context.principal.subject,
+        capabilities,
+        now,
+        request.workspaceId,
+        now,
         LIMITS.PENDING_REVIEWS,
       )
       .run();
     const row = await this.db
       .prepare(
-        "SELECT actor_subject,capabilities_json FROM github_app_connection_requests WHERE workspace_id=? AND id=?",
+        `SELECT * FROM github_app_connection_requests WHERE workspace_id=? AND (id=? OR (actor_subject=? AND capabilities_json=? AND state='requested' AND expires_at>?)) ORDER BY id=? DESC,created_at,id LIMIT 1`,
       )
-      .bind(request.workspaceId, request.requestId)
-      .first<{ actor_subject: string; capabilities_json: string }>();
+      .bind(
+        request.workspaceId,
+        request.requestId,
+        this.context.principal.subject,
+        capabilities,
+        now,
+        request.requestId,
+      )
+      .first<{
+        id: string;
+        workspace_id: string;
+        actor_subject: string;
+        capabilities_json: string;
+        state: string;
+        revision: number;
+        created_at: string;
+        expires_at: string | null;
+        grant_id: string | null;
+        closed_at: string | null;
+      }>();
+    if (!row)
+      throw new DomainError(
+        "github_app_request_capacity",
+        "Close pending workspace access requests or wait for their expiry before creating another.",
+        409,
+      );
     if (
-      (!result.meta.changes && !row) ||
-      row?.actor_subject !== this.context.principal.subject ||
+      row.actor_subject !== this.context.principal.subject ||
       JSON.stringify(
-        githubCapabilitiesSchema.parse(JSON.parse(row.capabilities_json)),
-      ) !== JSON.stringify(request.requestedCapabilities)
+        [
+          ...githubCapabilitiesSchema.parse(JSON.parse(row.capabilities_json)),
+        ].sort(),
+      ) !== capabilities
     )
       githubAppConflict();
-    return {
-      id: request.requestId,
-      workspaceId: request.workspaceId,
-      requestedCapabilities: request.requestedCapabilities,
-      state: "requested" as const,
-    };
+    return this.requestMetadata(row);
+  }
+  async finishRequest(input: unknown) {
+    const request = githubAppConnectionRequestFinishInput.parse(input);
+    const revision = await authorizeHooks(
+      this.context,
+      request.workspaceId,
+      CAPABILITY.ADMIN,
+    );
+    const guard = hookActorGuard(
+      this.context,
+      request.workspaceId,
+      CAPABILITY.ADMIN,
+      revision,
+    );
+    const state = request.action === "resolve" ? "resolved" : "cancelled";
+    const result = await this.db
+      .prepare(
+        `UPDATE github_app_connection_requests SET state=?,revision=revision+1,closed_at=?,closed_by=?,grant_id=?
+      WHERE workspace_id=? AND id=? AND revision=? AND state='requested' AND expires_at>? AND ${guard.sql}
+      AND (?='cancelled' OR EXISTS(SELECT 1 FROM github_app_grants g WHERE g.workspace_id=github_app_connection_requests.workspace_id AND g.id=? AND g.state='active' AND (g.expires_at IS NULL OR g.expires_at>?)
+        AND NOT EXISTS(SELECT 1 FROM json_each(github_app_connection_requests.capabilities_json) requested WHERE NOT EXISTS(SELECT 1 FROM json_each(g.metadata_json,'$.capabilities') granted WHERE granted.value=requested.value))))`,
+      )
+      .bind(
+        state,
+        this.timestamp(),
+        this.context.principal.subject,
+        request.grantId ?? null,
+        request.workspaceId,
+        request.requestId,
+        request.revision,
+        this.timestamp(),
+        ...guard.values,
+        state,
+        request.grantId ?? null,
+        this.timestamp(),
+      )
+      .run();
+    const row = await this.db
+      .prepare(
+        "SELECT * FROM github_app_connection_requests WHERE workspace_id=? AND id=?",
+      )
+      .bind(request.workspaceId, request.requestId)
+      .first<{
+        id: string;
+        workspace_id: string;
+        capabilities_json: string;
+        state: string;
+        revision: number;
+        created_at: string;
+        expires_at: string | null;
+        grant_id: string | null;
+        closed_at: string | null;
+      }>();
+    if (
+      !row ||
+      (!result.meta.changes &&
+        (row.revision !== request.revision + 1 ||
+          row.state !== state ||
+          row.grant_id !== (request.grantId ?? null)))
+    )
+      githubAppConflict();
+    return this.requestMetadata(row);
   }
   async requests(input: unknown) {
     const request = githubAppConnectionRequestsInput.parse(input);
-    let guard: { sql: string; values: unknown[] };
-    if (request.scope === "administration")
-      guard = githubAppOperatorGuard(
-        this.context,
-        await requireGitHubAppOperator(this.context, request.workspaceId),
-      );
-    else
-      guard = hookActorGuard(
-        this.context,
-        request.workspaceId,
-        CAPABILITY.ADMIN,
-        await authorizeHooks(
-          this.context,
-          request.workspaceId,
-          CAPABILITY.ADMIN,
-        ),
-      );
+    const guard =
+      request.scope === "administration"
+        ? githubAppOperatorGuard(
+            this.context,
+            await requireGitHubAppOperator(this.context, request.workspaceId),
+          )
+        : hookActorGuard(
+            this.context,
+            request.workspaceId,
+            CAPABILITY.ADMIN,
+            await authorizeHooks(
+              this.context,
+              request.workspaceId,
+              CAPABILITY.ADMIN,
+            ),
+          );
+    const cursor = request.cursor;
     const result = await this.db
       .prepare(
-        `SELECT id,workspace_id,capabilities_json,created_at FROM github_app_connection_requests WHERE (?='administration' OR workspace_id=?) AND ${guard.sql} ORDER BY created_at,id LIMIT ?`,
+        `SELECT * FROM github_app_connection_requests WHERE (?='administration' OR workspace_id=?)
+      AND (?='all' OR (state='requested' AND expires_at>?)) AND (? IS NULL OR (created_at,id,workspace_id)>(?,?,?)) AND ${guard.sql} ORDER BY created_at,id,workspace_id LIMIT ?`,
       )
       .bind(
         request.scope,
         request.workspaceId,
+        request.status,
+        this.timestamp(),
+        cursor?.createdAt ?? null,
+        cursor?.createdAt ?? "",
+        cursor?.id ?? "",
+        cursor?.workspaceId ?? "",
         ...guard.values,
-        LIMITS.GRANTS + 1,
+        LIMITS.PAGE_SIZE + 1,
       )
       .all<{
         id: string;
         workspace_id: string;
         capabilities_json: string;
+        state: string;
+        revision: number;
         created_at: string;
+        expires_at: string | null;
+        grant_id: string | null;
+        closed_at: string | null;
       }>();
+    const page = result.results.slice(0, LIMITS.PAGE_SIZE);
+    const last = page.at(-1);
     return {
-      requests: result.results.slice(0, LIMITS.GRANTS).map((row) => ({
-        id: row.id,
-        workspaceId: row.workspace_id,
-        requestedCapabilities: githubCapabilitiesSchema.parse(
-          JSON.parse(row.capabilities_json),
-        ),
-        createdAt: row.created_at,
-        state: "requested" as const,
-      })),
-      limited: result.results.length > LIMITS.GRANTS,
+      requests: page.map((row) => this.requestMetadata(row)),
+      limited: result.results.length > LIMITS.PAGE_SIZE,
+      nextCursor:
+        result.results.length > LIMITS.PAGE_SIZE && last
+          ? {
+              createdAt: last.created_at,
+              id: last.id,
+              workspaceId: last.workspace_id,
+            }
+          : null,
     };
   }
   async list(input: unknown) {

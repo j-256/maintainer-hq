@@ -11,7 +11,7 @@ The browser, CLI, HTTP API, and MCP adapters call the same workspace-scoped serv
 
 The `github_apps_list`, `github_app_registration_*`, `github_app_manifest_*`, `github_app_installations_list`, `github_app_repositories_list`, `github_app_connection_*` and `github_app_grant_*` command families expose bounded metadata through the shared API, CLI and MCP. Use schema discovery for the exact command and inputs. Deployment setup requires a verified human setup permit plus live administrative workspace ownership; a workspace owner accepts its own offered grant independently. Automation credentials cannot become deployment setup operators.
 
-Private signing material uses the dedicated browser file input, CLI `github-app-input` command or local stdio MCP private-file adapter. It never belongs in an ordinary command or MCP argument. See [registration, protected import and recovery](github-apps.md) before submitting private input. Saved metadata review links reopen the same review and never reapply it automatically.
+Private signing material uses the dedicated browser file input, CLI `github-app-input` command or local stdio MCP private-file adapter. It never belongs in an ordinary command or MCP argument. See [registration, protected import and recovery](github-apps.md) before submitting private input. Saved metadata review links reopen the same review and never reapply it automatically. Use `github_app_connection_request_finish` to explicitly link an accepted grant or cancel a pending access request, and use the request list's cursor to page pending work or retained history.
 
 ## Discover exact inputs
 

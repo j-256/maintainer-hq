@@ -389,7 +389,7 @@ export async function reconcileGitHubAppAuthority(
       await db
         .prepare(
           `SELECT g.workspace_id AS workspaceId,g.registration_id AS registrationId,g.installation_id AS installationId,g.id AS grantId,g.revision AS grantRevision,json_extract(repo.value,'$.id') AS repositoryId ${dueSql}
-    GROUP BY r.id,g.installation_id,json_extract(repo.value,'$.id') ORDER BY COALESCE(a.observed_at,''),r.id,g.installation_id,repositoryId LIMIT ?`,
+    GROUP BY r.id,g.installation_id,json_extract(repo.value,'$.id') ORDER BY COALESCE(a.last_reconcile_attempt_at,''),r.id,g.installation_id,repositoryId LIMIT ?`,
         )
         .bind(
           timestamp,
@@ -432,12 +432,13 @@ export async function reconcileGitHubAppAuthority(
       } finally {
         await db
           .prepare(
-            "UPDATE github_app_authority SET reconcile_after=? WHERE registration_id=? AND installation_id=? AND repository_id=?",
+            "UPDATE github_app_authority SET reconcile_after=?,last_reconcile_attempt_at=? WHERE registration_id=? AND installation_id=? AND repository_id=?",
           )
           .bind(
             new Date(
               now + GITHUB_APP_EVENT_LIMITS.RECONCILE_RETRY_MS,
             ).toISOString(),
+            timestamp,
             scope.registrationId,
             scope.installationId,
             scope.repositoryId,

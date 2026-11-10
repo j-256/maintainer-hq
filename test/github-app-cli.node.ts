@@ -18,6 +18,7 @@ test("exposes guided registration and bounded repository selection through share
     "github_app_grant_plan",
     "github_app_grant_accept",
     "github_app_connection_request",
+    "github_app_connection_request_finish",
   ]) {
     assert(list.some((item: { name: string }) => item.name === name));
     const schema = JSON.parse(cli("schema", name));

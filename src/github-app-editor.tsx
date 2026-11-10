@@ -231,6 +231,7 @@ export function GitHubAppRegistrationEditor({
               <select
                 className="github-app-select"
                 value={draft.visibility}
+                disabled={Boolean(initial)}
                 onChange={(event) =>
                   change({
                     visibility: event.target.value as "public" | "private",
@@ -246,6 +247,9 @@ export function GitHubAppRegistrationEditor({
               </select>
             </label>
             <p className="field-help">
+              {mode === "guided"
+                ? "This requests visibility during GitHub registration. "
+                : "This declaration is unverified. Confirm actual visibility in the GitHub App settings. HQ does not change it. "}
               Public installation visibility lets other repository owners
               install this App. It does not make their repositories or HQ
               workspace public.

@@ -485,3 +485,47 @@ async function verify(
     throw error;
   }
 }
+
+export async function recordGitHubAppResponseCooldown(
+  context: GitHubCredentialContext,
+  quotaKey: string,
+  response: Response,
+) {
+  const retry = response.headers.get("retry-after");
+  if (
+    response.status !== 429 &&
+    !(
+      response.status === 403 &&
+      (retry !== null || response.headers.get("x-ratelimit-remaining") === "0")
+    )
+  )
+    return;
+  const now = context.now();
+  const reset = response.headers.get("x-ratelimit-reset");
+  const requested =
+    retry && /^\d{1,10}$/.test(retry)
+      ? now + Number(retry) * 1000
+      : retry && retry.length < 100
+        ? Date.parse(retry)
+        : reset && /^\d{1,13}$/.test(reset)
+          ? Number(reset) * 1000
+          : NaN;
+  const retryAt = new Date(
+    Number.isFinite(requested)
+      ? Math.min(
+          Math.max(now + LIMITS.AUTHORITY_MAX_AGE_MS, requested),
+          now + LIMITS.COOLDOWN_MAX_MS,
+        )
+      : now + LIMITS.AUTHORITY_MAX_AGE_MS,
+  ).toISOString();
+  await recordGitHubAppCooldown(
+    context,
+    quotaKey,
+    new GitHubAppProviderError(
+      "github_app_rate_limited",
+      "The GitHub installation has a shared operation cooldown.",
+      429,
+      retryAt,
+    ),
+  );
+}

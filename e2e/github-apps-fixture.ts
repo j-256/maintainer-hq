@@ -25,6 +25,28 @@ export function appMetadata(): GitHubAppMetadata {
     lifecycleIngress: "ready",
   };
 }
+export function appGrant(): GitHubAppGrant {
+  return {
+    id: "grant-development",
+    workspaceId: "development",
+    credentialRef: "grant-development",
+    registrationId: "synthetic-app",
+    appId: 42,
+    appName: "Repository operator",
+    installationId: 91,
+    account: { id: 50, login: "example", type: "Organization" },
+    repositories: [
+      { id: 101, fullName: "example/project", ownerId: 50, private: true },
+    ],
+    capabilities: ["collection"],
+    revision: 1,
+    state: "active",
+    expiresAt: null,
+    issuerSubject: "operator",
+    acceptedBy: "owner",
+    acceptedAt: new Date().toISOString(),
+  };
+}
 export async function mockGitHubApps(
   page: Page,
   options: { empty?: boolean; offer?: boolean; viewer?: boolean } = {},
@@ -44,6 +66,14 @@ export async function mockGitHubApps(
       : [appMetadata()],
     grants: [] as GitHubAppGrant[],
     offers: [] as GitHubAppGrantReview[],
+    requests: [] as {
+      id: string;
+      workspaceId: string;
+      requestedCapabilities: string[];
+      state: string;
+      revision: number;
+      expiresAt: string;
+    }[],
     conflict: false,
     missingPermission: false,
     calls: [] as { name: string; input: Record<string, unknown> }[],
@@ -83,6 +113,7 @@ export async function mockGitHubApps(
         "github_app_registration_plan",
         "github_app_grant_plan",
         "github_app_grant_accept",
+        "github_app_connection_request_finish",
       ].includes(name)
     )
       return route.fulfill({
@@ -102,10 +133,28 @@ export async function mockGitHubApps(
         result = { grants: state.grants, offers: state.offers, limited: false };
         break;
       case "github_app_connection_requests_list":
-        result = { requests: [], limited: false };
+        result = { requests: state.requests, limited: false, nextCursor: null };
         break;
       case "github_app_connection_request":
-        result = { id: input.requestId, state: "requested" };
+        result = {
+          id: input.requestId,
+          state: "requested",
+          workspaceId: input.workspaceId,
+          requestedCapabilities: input.requestedCapabilities,
+          revision: 1,
+          expiresAt: "2099-01-01T00:00:00.000Z",
+        };
+        state.requests.push(result as (typeof state.requests)[number]);
+        break;
+      case "github_app_connection_request_finish":
+        result = {
+          ...state.requests.find((item) => item.id === input.requestId),
+          state: input.action === "resolve" ? "resolved" : "cancelled",
+          revision: input.revision + 1,
+        };
+        state.requests = state.requests.filter(
+          (item) => item.id !== input.requestId,
+        );
         break;
       case "github_app_grant_plan":
         result = {

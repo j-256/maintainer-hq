@@ -94,3 +94,15 @@
     flex-direction: column;
   }
 }
+.github-app-settings > section {
+  min-width: 0;
+}
+.github-app-row .form-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.github-app-row .github-app-select {
+  max-width: 100%;
+}

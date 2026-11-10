@@ -512,7 +512,10 @@ export class RepositoryOperations<
               return {
                 token: lease.token,
                 ...("rejectCredential" in lease
-                  ? { rejectCredential: lease.rejectCredential }
+                  ? {
+                      rejectCredential: lease.rejectCredential,
+                      recordResponse: lease.recordResponse,
+                    }
                   : {}),
                 assertLive: async () => {
                   const guard = await dependencyReviewGuard(
@@ -774,6 +777,22 @@ export class RepositoryOperations<
     const client = new DependencyGitHub(
       review.basis.repository.fullName,
       credential.token,
+      fetch,
+      LIMITS.REQUEST_MS,
+      Infinity,
+      "recordResponse" in credential
+        ? async () => ({
+            token: credential.token,
+            recordResponse: credential.recordResponse,
+            assertLive: async () => {
+              if (credential.fence)
+                await assertGitHubAuthorityFence(
+                  this.context,
+                  credential.fence,
+                );
+            },
+          })
+        : undefined,
     );
     let observed = false;
     try {

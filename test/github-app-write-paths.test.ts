@@ -395,6 +395,58 @@ describe.each(["token", "app"] as const)(
         );
       },
     );
+    if (mode === "app")
+      it("records an operation rate limit for another workspace sharing the installation", async () => {
+        const beta = await activateGitHubAppFixture(
+          fixture,
+          "beta",
+          "grant-b",
+          { capabilities: [...CAPABILITIES], permissions },
+        );
+        const review = await plan("dependencies");
+        const original = vi.mocked(fetch).getMockImplementation()!;
+        let rejected = 0;
+        vi.mocked(fetch).mockImplementation(async (input, init) => {
+          if (
+            new URL(String(input)).pathname.endsWith("/git/trees") &&
+            init?.method === "POST"
+          ) {
+            rejected++;
+            return Response.json(
+              {},
+              { status: 429, headers: { "Retry-After": "3600" } },
+            );
+          }
+          return original(input, init);
+        });
+        await apply(review);
+        expect(rejected).toBe(1);
+        expect(
+          await fixture.runtime.HQ_DB.prepare(
+            "SELECT count(*) AS total FROM github_cooldowns",
+          ).first<number>("total"),
+        ).toBe(1);
+        const { dependencyCredential } =
+          await import("../worker/dependency-credentials");
+        const before = events.length;
+        await expect(
+          dependencyCredential(
+            fixture.as({ subject: "other", displayName: "Other" }),
+            "beta",
+            "grant-b",
+            beta.repositoryFullName,
+            true,
+            {
+              repositoryId: beta.repositoryId,
+              sourceId: beta.connectionId,
+              sourceRevision: beta.connectionRevision,
+              membershipRevision: 1,
+              phase: "read",
+            },
+          ),
+        ).rejects.toMatchObject({ code: "github_app_rate_limited" });
+        expect(events.length).toBe(before);
+      });
     it("preserves the review and operation identity across routine credential renewal", async () => {
       tokenLifetimeMs = 90000;
       const review = await plan("dependencies");

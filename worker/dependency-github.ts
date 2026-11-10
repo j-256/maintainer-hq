@@ -73,6 +73,7 @@ export class DependencyGitHub {
       token: string;
       assertLive: () => Promise<void>;
       rejectCredential?: () => void;
+      recordResponse?: (response: Response) => Promise<void>;
     }>,
   ) {
     this.#token = token;
@@ -141,6 +142,7 @@ export class DependencyGitHub {
         }),
         signal,
       );
+      await authority?.recordResponse?.(response);
       if (
         response.status === 401 &&
         authority?.rejectCredential &&

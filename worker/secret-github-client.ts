@@ -131,6 +131,7 @@ export class SecretGitHubClient {
       token: string;
       assertLive: () => Promise<void>;
       rejectCredential?: () => void;
+      recordResponse?: (response: Response) => Promise<void>;
     }>,
   ) {}
 
@@ -270,6 +271,7 @@ export class SecretGitHubClient {
         );
       });
       const response = await Promise.race([request, abort]);
+      await authority?.recordResponse?.(response);
       if (
         response.status === 401 &&
         authority?.rejectCredential &&
