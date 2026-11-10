@@ -1,3 +1,4 @@
+import { recordGitHubAppResponseCooldown } from "./github-app-authority";
 import {
   readGitHubAuthReference,
   resolveGitHubCredential,
@@ -90,6 +91,12 @@ export async function dependencyCredential(
       revision: descriptor.revision,
       fence: lease.fence,
       rejectCredential: () => evictGitHubAppToken(credentialContext, lease),
+      recordResponse: (response: Response) =>
+        recordGitHubAppResponseCooldown(
+          credentialContext,
+          lease.quotaKey,
+          response,
+        ),
       settings: {
         providerKind: PROVIDER_CREDENTIAL_KIND.REPOSITORY,
         name: descriptor.name,

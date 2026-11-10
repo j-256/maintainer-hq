@@ -38,14 +38,98 @@ type RegistrationPage = {
   registrations: GitHubAppMetadata[];
   limited: boolean;
 };
+type RequestCursor = { createdAt: string; id: string; workspaceId: string };
 type RequestsPage = {
   requests: {
     id: string;
     workspaceId: string;
     requestedCapabilities: GitHubCapability[];
+    revision: number;
+    state: string;
+    expiresAt: string | null;
   }[];
   limited: boolean;
+  nextCursor?: RequestCursor | null;
 };
+function AccessRequest({
+  item,
+  grants,
+  canClose,
+  busy,
+  onClose,
+}: {
+  item: RequestsPage["requests"][number];
+  grants: GitHubAppGrant[];
+  canClose: boolean;
+  busy: boolean;
+  onClose: (action: "resolve" | "cancel", grantId?: string) => void;
+}) {
+  const [grantId, setGrantId] = useState("");
+  const matching = grants.filter(
+    (grant) =>
+      grant.state === "active" &&
+      (!grant.expiresAt || Date.parse(grant.expiresAt) > Date.now()) &&
+      item.requestedCapabilities.every((capability) =>
+        grant.capabilities.includes(capability),
+      ),
+  );
+  return (
+    <div className="github-app-row">
+      <div>
+        <h3>
+          Request <code>{item.id}</code>
+        </h3>
+        <p>
+          <code>{item.workspaceId}</code>:{" "}
+          {item.requestedCapabilities
+            .map((capability) => GITHUB_CAPABILITY_LABELS[capability])
+            .join(", ")}
+        </p>
+        {canClose ? (
+          <>
+            <label className="form-field">
+              Accepted grant for request {item.id}
+              <select
+                className="github-app-select"
+                value={grantId}
+                disabled={busy}
+                onChange={(event) => setGrantId(event.target.value)}
+              >
+                <option value="">Choose a matching accepted grant</option>
+                {matching.map((grant) => (
+                  <option key={grant.id} value={grant.id}>
+                    {grant.appName}: {grant.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="github-app-actions">
+              <Button
+                disabled={
+                  busy || !matching.some((grant) => grant.id === grantId)
+                }
+                onClick={() => onClose("resolve", grantId)}
+              >
+                Mark request resolved
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => onClose("cancel")}
+              >
+                Cancel access request
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="field-help">
+            The target workspace owner can resolve or cancel this request.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 const textError = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -108,6 +192,10 @@ export function GitHubApps({
   ]);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [requested, setRequested] = useState(false);
+  const [requestCursor, setRequestCursor] = useState<RequestCursor | null>(
+    null,
+  );
+  useEffect(() => setRequestCursor(null), [workspaceId, manage]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -136,12 +224,16 @@ export function GitHubApps({
       command<GrantPage>("github_app_grant_list", { workspaceId }, signal),
   });
   const requests = useQuery({
-    queryKey: ["github-apps", workspaceId, "requests", manage],
-    enabled: owner && manage,
+    queryKey: ["github-apps", workspaceId, "requests", manage, requestCursor],
+    enabled: owner,
     queryFn: ({ signal }) =>
       command<RequestsPage>(
         "github_app_connection_requests_list",
-        { workspaceId, scope: "administration" },
+        {
+          workspaceId,
+          scope: manage ? "administration" : "workspace",
+          cursor: requestCursor,
+        },
         signal,
       ),
     retry: false,
@@ -616,6 +708,7 @@ export function GitHubApps({
                       requestedCapabilities: capabilities,
                     });
                     setRequested(true);
+                    await refresh();
                   })
                 }
               >
@@ -629,6 +722,86 @@ export function GitHubApps({
           </>
         )}
       </section>
+      {owner && requests.data ? (
+        <section aria-labelledby="app-access-requests">
+          <h2 id="app-access-requests">
+            {manage
+              ? "Deployment access requests"
+              : "Workspace access requests"}
+          </h2>
+          {requests.data.requests.length ? (
+            requests.data.requests.map((item) => (
+              <AccessRequest
+                key={item.workspaceId + item.id}
+                item={item}
+                grants={grants.data?.grants ?? []}
+                busy={busy}
+                canClose={item.workspaceId === workspaceId}
+                onClose={(kind, grantId) =>
+                  void action(async () => {
+                    await command("github_app_connection_request_finish", {
+                      workspaceId,
+                      requestId: item.id,
+                      revision: item.revision,
+                      action: kind,
+                      ...(grantId ? { grantId } : {}),
+                    });
+                    setRequested(false);
+                    setRequestId(crypto.randomUUID());
+                    await refresh();
+                  })
+                }
+              />
+            ))
+          ) : (
+            <p>No pending access requests on this page.</p>
+          )}
+          <p className="field-help">
+            Resolve a request by explicitly linking an accepted grant, or cancel
+            it. Pending requests expire after seven days; history remains
+            available through the shared command.
+          </p>
+          <div className="github-app-actions">
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void requests.refetch()}
+            >
+              Refresh access requests
+            </Button>
+            {requestCursor ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setRequestCursor(null)}
+              >
+                First request page
+              </Button>
+            ) : null}
+            {requests.data.nextCursor ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setRequestCursor(requests.data!.nextCursor!)}
+              >
+                Next request page
+              </Button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+      {owner && requests.error ? (
+        <p role="alert" className="source-error">
+          Access requests could not be loaded. {requests.error.message}{" "}
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void requests.refetch()}
+          >
+            Retry access requests
+          </Button>
+        </p>
+      ) : null}
       {manage && owner ? (
         <section aria-labelledby="deployment-app-title">
           <h2 id="deployment-app-title">Deployment Apps</h2>
@@ -677,8 +850,9 @@ export function GitHubApps({
                       <code>{registration.id}</code>
                     </p>
                     <p>
-                      GitHub App {registration.appId}: {registration.visibility}{" "}
-                      installation visibility.{" "}
+                      GitHub App {registration.appId}: declared{" "}
+                      {registration.visibility} installation visibility
+                      (unverified).{" "}
                       {registration.state === "active"
                         ? "Registration active."
                         : "Locally disconnected."}
@@ -764,27 +938,6 @@ export function GitHubApps({
                 </p>
               ) : null}
             </>
-          ) : null}
-          {requests.data?.requests.length ? (
-            <details>
-              <summary>Workspace access requests</summary>
-              {requests.data.requests.map((item) => (
-                <p key={item.workspaceId + item.id}>
-                  <code>{item.workspaceId}</code>:{" "}
-                  {item.requestedCapabilities
-                    .map((capability) => GITHUB_CAPABILITY_LABELS[capability])
-                    .join(", ")}
-                </p>
-              ))}
-              {requests.data.limited ? (
-                <p>Request inventory is partial.</p>
-              ) : null}
-            </details>
-          ) : null}
-          {requests.error ? (
-            <p role="alert" className="source-error">
-              Access requests could not be loaded. {requests.error.message}
-            </p>
           ) : null}
         </section>
       ) : null}

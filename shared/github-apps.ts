@@ -24,6 +24,7 @@ export const GITHUB_APP_LIMITS = Object.freeze({
   SETUP_PERMITS: 100,
   REGISTRATIONS: 100,
   PENDING_REVIEWS: 20,
+  CONNECTION_REQUEST_TTL_MS: 7 * 24 * 60 * 60 * 1000,
   GRANTS: 100,
   CREDENTIAL_CATALOG_BYTES: 512 * 1024,
   INPUT_REQUEST_TIMEOUT_MS: 25000,
@@ -74,7 +75,11 @@ export const githubAppMetadataSchema = z
       .min(1)
       .max(100)
       .regex(/^[a-zA-Z0-9_-]+$/),
-    visibility: z.enum(["private", "public"]),
+    visibility: z
+      .enum(["private", "public"])
+      .describe(
+        "Operator-declared GitHub installation visibility, not verified or changed by HQ",
+      ),
     capabilities: githubCapabilitiesSchema,
     revision: z.number().int().positive(),
     state: z.enum(["active", "disconnected"]),
@@ -276,8 +281,24 @@ export const githubAppConnectionRequestInput = workspaceInput
     requestedCapabilities: githubCapabilitiesSchema,
   })
   .strict();
+export const githubAppConnectionRequestFinishInput = workspaceInput
+  .extend({
+    requestId: idSchema,
+    revision: z.number().int().positive(),
+    action: z.enum(["resolve", "cancel"]),
+    grantId: idSchema.optional(),
+  })
+  .strict()
+  .refine((value) => (value.action === "resolve") === Boolean(value.grantId));
+export const githubAppConnectionRequestCursor = z
+  .object({ createdAt: z.iso.datetime(), id: idSchema, workspaceId: idSchema })
+  .strict();
 export const githubAppConnectionRequestsInput = workspaceInput
-  .extend({ scope: z.enum(["workspace", "administration"]) })
+  .extend({
+    scope: z.enum(["workspace", "administration"]),
+    status: z.enum(["pending", "all"]).default("pending"),
+    cursor: githubAppConnectionRequestCursor.nullable().default(null),
+  })
   .strict();
 export const githubAppGrantPlanInput = workspaceInput
   .extend({

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./test-fixture";
-import { mockGitHubApps } from "./github-apps-fixture";
+import { appGrant, mockGitHubApps } from "./github-apps-fixture";
 const BASE = "/settings/github?workspace=development&view=authentication";
 test("keeps advanced token setup available without an App", async ({
   page,
@@ -395,4 +395,147 @@ test("hides operator review metadata after workspace ownership is lost", async (
     page.getByRole("heading", { name: "Registration review", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("Private App input file")).toHaveCount(0);
+});
+
+test("resolves or cancels an exact pending access request and preserves conflicts", async ({
+  page,
+}) => {
+  const state = await mockGitHubApps(page);
+  state.grants.push(appGrant());
+  await page.goto(BASE);
+  await page.getByText("Request App access", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Send access request", exact: true })
+    .click();
+  await page
+    .getByLabel(/Accepted grant for request/)
+    .selectOption("grant-development");
+  state.conflict = true;
+  await page
+    .getByRole("button", { name: "Mark request resolved", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("changed");
+  await expect(page.getByLabel(/Accepted grant for request/)).toHaveValue(
+    "grant-development",
+  );
+  state.conflict = false;
+  await page
+    .getByRole("button", { name: "Mark request resolved", exact: true })
+    .click();
+  await expect(
+    page.getByText("No pending access requests on this page."),
+  ).toBeVisible();
+  expect(
+    state.calls
+      .filter((call) => call.name === "github_app_connection_request_finish")
+      .at(-1)?.input,
+  ).toMatchObject({
+    revision: 1,
+    action: "resolve",
+    grantId: "grant-development",
+  });
+  await page
+    .getByRole("button", { name: "Send access request", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Cancel access request", exact: true })
+    .click();
+  await expect(
+    page.getByText("No pending access requests on this page."),
+  ).toBeVisible();
+});
+test("labels declared visibility as unverified and disables local restriction changes", async ({
+  page,
+}) => {
+  await mockGitHubApps(page);
+  await page.goto(BASE);
+  await page
+    .getByRole("button", { name: "Manage deployment Apps", exact: true })
+    .click();
+  await expect(
+    page.getByText(/declared public installation visibility \(unverified\)/),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Edit registration", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", {
+      name: "Installation visibility",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(page.getByText(/This declaration is unverified/)).toBeVisible();
+});
+
+for (const theme of ["light", "dark"] as const)
+  test(`keeps pending request controls usable on mobile in ${theme}`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(
+      (value) => localStorage.setItem("hq.theme.v1", value),
+      theme,
+    );
+    const state = await mockGitHubApps(page);
+    state.grants.push(appGrant());
+    state.requests.push({
+      id: "request-" + "identifier".repeat(8),
+      workspaceId: "development",
+      requestedCapabilities: ["collection"],
+      revision: 1,
+      state: "requested",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    await page.goto(BASE);
+    const selection = page.getByRole("combobox", {
+      name: /Accepted grant for request/,
+    });
+    await selection.focus();
+    await expect(selection).toBeFocused();
+    await selection.selectOption("grant-development");
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "Mark request resolved", exact: true }),
+    ).toBeFocused();
+    await page.screenshot({ path: info.outputPath("pending-request.png") });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });
+test("lets a workspace owner retry an unavailable access-request list without deployment authority", async ({
+  page,
+}) => {
+  await mockGitHubApps(page);
+  let unavailable = true;
+  await page.route(
+    "**/api/commands/github_app_connection_requests_list",
+    (route) =>
+      route.fulfill(
+        unavailable
+          ? {
+              status: 503,
+              json: {
+                error: {
+                  code: "unavailable",
+                  message: "Request queue unavailable",
+                },
+              },
+            }
+          : { json: { requests: [], limited: false, nextCursor: null } },
+      ),
+  );
+  await page.goto(BASE);
+  await expect(page.getByRole("alert")).toContainText(
+    "Request queue unavailable",
+  );
+  unavailable = false;
+  await page
+    .getByRole("button", { name: "Retry access requests", exact: true })
+    .click();
+  await expect(
+    page.getByText("No pending access requests on this page."),
+  ).toBeVisible();
 });
