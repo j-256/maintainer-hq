@@ -37,6 +37,8 @@ The package contains the Worker, assets, migrations, projected portable Wrangler
 
 The portable configuration includes the reviewed execution ceiling of 2,000 ms CPU and 1,000 total subrequests per invocation. The generated-config verifier rejects omitted or changed ceilings. These settings require the Workers Standard usage model and are part of the artifact's fail-closed deployment contract, not a hostname or provider mutation.
 
+Release configuration keeps Workers Logs and invocation diagnostics enabled with mandatory query-string redaction. Automatic traces and Issues capture are disabled. The generated and portable configuration checks reject missing redaction, extra telemetry destinations or changed capture policy. Rebuild older artifacts that omit this policy; do not edit a checksum-sealed artifact. This protects platform request URL queries, not arbitrary application messages or independent Access/WAF logs. Follow the [diagnostic privacy checks](diagnostics.md#telemetry-privacy) before sending callback codes through a deployed origin.
+
 CLI results go to stdout and diagnostics go to stderr. Exit statuses are `0` for success/help, `1` for runtime or artifact failure, `2` for usage/profile/review errors, and `3` for missing build dependencies. A failed build can leave an incomplete output directory for inspection; choose a new destination when retrying. Do not deploy concurrently with a build or edit its source while it runs.
 
 ## Goal lifecycle recovery

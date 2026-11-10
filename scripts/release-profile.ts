@@ -19,6 +19,13 @@ export const RELEASE_WORKER_LIMITS = Object.freeze({
   cpu_ms: 2000,
   subrequests: 1000,
 });
+export const RELEASE_OBSERVABILITY = Object.freeze({
+  enabled: true,
+  redact_query_string: true,
+  logs: Object.freeze({ enabled: true, invocation_logs: true, persist: true }),
+  traces: Object.freeze({ enabled: false }),
+  issues: Object.freeze({ enabled: false }),
+});
 export const RELEASE_PUSH_BINDING = {
   name: "WORKSPACE_EVENTS",
   class_name: "WorkspaceEvents",
@@ -150,6 +157,7 @@ export function releaseOverrides(profile: ReleaseProfile) {
     send_metrics: false,
     upload_source_maps: false,
     limits: RELEASE_WORKER_LIMITS,
+    observability: RELEASE_OBSERVABILITY,
     routes: [],
     durable_objects: {
       bindings: profile.workspacePush ? [RELEASE_PUSH_BINDING] : [],
@@ -185,6 +193,7 @@ export function verifyGeneratedConfig(
     "send_metrics",
     "upload_source_maps",
     "limits",
+    "observability",
     "triggers",
     "vars",
     "durable_objects",
@@ -334,7 +343,6 @@ export function verifyGeneratedConfig(
     JSON.stringify(config.compatibility_flags) !== '["nodejs_compat"]' ||
     config.no_bundle !== true ||
     config.main !== "index.js" ||
-    JSON.stringify(config.observability) !== '{"enabled":true}' ||
     JSON.stringify(config.rules) !==
       '[{"type":"ESModule","globs":["**/*.js","**/*.mjs"]}]'
   )
@@ -354,6 +362,5 @@ export function portableConfig(profile: ReleaseProfile) {
       not_found_handling: "single-page-application",
       run_worker_first: RELEASE_WORKER_ROUTES,
     },
-    observability: { enabled: true },
   };
 }
