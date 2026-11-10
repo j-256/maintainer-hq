@@ -25,7 +25,7 @@ export const SETTINGS_SECTIONS = [
     label: "GitHub",
     title: "GitHub",
     description:
-      "Review repository coverage, collection progress and connections.",
+      "Review repository coverage, collection progress, App access and token connections.",
     group: "Evidence sources",
     guide: "github",
     view: "settings-sources",

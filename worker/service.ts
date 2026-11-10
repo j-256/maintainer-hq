@@ -142,6 +142,7 @@ function repositoryFromRow(row: RepositoryRow): Repository {
 }
 
 export class WorkspaceService {
+  githubAppRepositoriesList(input: unknown) { return new GitHubAppGrants(this).repositories(input); }
   githubAppInstallationsList(input: unknown) { return new GitHubAppGrants(this).installations(input); }
   githubAppConnectionRequest(input: unknown) { return new GitHubAppGrants(this).request(input); }
   githubAppConnectionRequestsList(input: unknown) { return new GitHubAppGrants(this).requests(input); }

@@ -483,3 +483,8 @@ it("targets caches without leaking across workspaces or requerying unrelated pro
     workspaceQueryMatches(["workspace", "beta"], "alpha", PUSH_TOPICS),
   ).toBe(false);
 });
+it("refreshes App setup metadata for its workspace without crossing workspace boundaries", () => {
+  for (const topic of ["workspace","sources","access"] as const)
+    expect(workspaceQueryMatches(["github-apps","alpha","grants"],"alpha",[topic])).toBe(true);
+  expect(workspaceQueryMatches(["github-apps","beta","grants"],"alpha",PUSH_TOPICS)).toBe(false);
+});

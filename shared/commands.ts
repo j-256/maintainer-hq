@@ -1,6 +1,7 @@
 import { handoffConnectionInput, handoffRepositoryInput, handoffPlanInput, handoffStatusInput } from "./hook-handoff";
 import {
   githubAppInstallationsInput,
+  githubAppRepositoriesInput,
   githubAppConnectionRequestInput,
   githubAppConnectionRequestsInput,
   githubAppGrantPlanInput,
@@ -324,6 +325,12 @@ export const commands = {
     title:
       "Apply only reviewed HQ repository and collection-scope changes atomically without GitHub writes",
     readOnly: false,
+  },
+  github_app_repositories_list: {
+    schema: githubAppRepositoriesInput,
+    method: "githubAppRepositoriesList",
+    title: "List a bounded installation repository page for an authorized setup operator",
+    readOnly: true,
   },
   github_app_installations_list: {
     schema: githubAppInstallationsInput,

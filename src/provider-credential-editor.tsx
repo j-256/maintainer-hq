@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useRef, useState, type FormEvent } from "react";
 import { Shield } from "lucide-react";
 import type { Snapshot } from "../shared/domain";
@@ -196,6 +197,23 @@ export function ProviderCredentialEditor({
                   placeholder="Production Workers or product repositories"
                 />
               </label>
+              {draft.providerKind !== SECRET_PROVIDER_KIND.CLOUDFLARE ? (
+                <p className="hook-muted">
+                  This is advanced manual token configuration. To use a GitHub
+                  App,{" "}
+                  <Link
+                    className="quiet-link"
+                    to={
+                      "/settings/github?workspace=" +
+                      encodeURIComponent(snapshot.workspace.id) +
+                      "&view=authentication"
+                    }
+                  >
+                    configure workspace App access
+                  </Link>
+                  , then select that grant in the provider connection.
+                </p>
+              ) : null}
               <div className="hook-field">
                 <label htmlFor="credential-provider">Provider</label>
                 <Select

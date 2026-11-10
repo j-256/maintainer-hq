@@ -1,0 +1,96 @@
+.github-app-settings {
+  display: grid;
+  gap: 28px;
+  min-width: 0;
+}
+.github-app-settings h2 {
+  font-size: var(--hq-text-heading);
+  font-weight: 600;
+}
+.github-app-settings h3 {
+  font-size: var(--hq-text-body);
+  font-weight: 600;
+}
+.github-app-settings p {
+  max-width: 72ch;
+  margin-block: 10px;
+}
+.github-app-settings code,
+.github-app-settings li {
+  overflow-wrap: anywhere;
+}
+.github-app-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 20px;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.github-app-row > div {
+  min-width: 0;
+}
+.github-app-form {
+  padding-block: 20px;
+  border-top: 1px solid var(--border);
+}
+.github-app-fields {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  max-width: 44rem;
+  padding-block: 16px;
+}
+.github-app-select {
+  min-height: 36px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+.github-app-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.github-app-choices {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-block: 12px;
+}
+.github-app-choices legend {
+  font-weight: 500;
+}
+.github-app-choices label,
+.github-app-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.github-app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-block: 12px;
+}
+.github-app-settings details {
+  margin-block: 16px;
+}
+.github-app-settings summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  .github-app-row {
+    flex-direction: column;
+  }
+  .github-app-settings .source-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

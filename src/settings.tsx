@@ -71,6 +71,17 @@ const GROUP_LABELS = {
 
 function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
   const suffix = "?workspace=" + encodeURIComponent(snapshot.workspace.id);
+  const location = useLocation();
+  const callback = new URLSearchParams(location.search);
+  const callbackOutcome = callback.get("githubAppOutcome");
+  const callbackWorkspace =
+    callback.get("githubAppWorkspace") ?? snapshot.workspace.id;
+  const callbackAttempt = callback.get("githubAppAttempt");
+  const callbackQuery = new URLSearchParams({
+    workspace: callbackWorkspace,
+    view: "authentication",
+  });
+  if (callbackAttempt) callbackQuery.set("githubAppAttempt", callbackAttempt);
   return (
     <>
       <div className="page-heading">
@@ -81,6 +92,25 @@ function SettingsHome({ snapshot }: { snapshot: Snapshot }) {
           </h1>
         </div>
       </div>
+      {callbackOutcome ? (
+        <section
+          className="settings-card"
+          aria-label="GitHub App registration return"
+        >
+          <h2>GitHub App registration</h2>
+          <p>
+            GitHub registration returned to HQ. Inspect the saved attempt for
+            its verified status before linking access or supplying recovery
+            material.
+          </p>
+          <Link
+            className="quiet-link"
+            to={"/settings/github?" + callbackQuery.toString()}
+          >
+            Inspect App registration
+          </Link>
+        </section>
+      ) : null}
       <div className="settings-index">
         {GROUPS.map((group) => (
           <section className="settings-group" key={group}>

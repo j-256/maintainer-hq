@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -68,6 +68,10 @@ import {
 import { SOURCE_REQUEST_TIMEOUT_MS } from "./source-editor";
 import "./sources.css";
 import "./github.css";
+
+const GitHubApps = lazy(() =>
+  import("./github-apps").then((module) => ({ default: module.GitHubApps })),
+);
 
 const RECEIPT_JUMP_LIMIT = 5;
 const receiptNeedsAttention = (
@@ -840,8 +844,13 @@ export function GitHubRefreshDialog({
 export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
   const [editor, setEditor] = useState<GitHubSource | "new" | null>(null);
   const [params, setParams] = useSearchParams();
+  const [appEditing, setAppEditing] = useState(false);
   const view =
-    params.get("view") === "connections" ? "connections" : "coverage";
+    params.get("view") === "authentication"
+      ? "authentication"
+      : params.get("view") === "connections"
+        ? "connections"
+        : "coverage";
   const sourceId = params.get("source");
   const refreshId = params.get("refresh");
   const validReference =
@@ -885,7 +894,9 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
           </h1>
         </div>
         <Button
-          disabled={!snapshot.capabilities.includes(CAPABILITY.ADMIN)}
+          disabled={
+            !snapshot.capabilities.includes(CAPABILITY.ADMIN) || appEditing
+          }
           onClick={() => {
             remember();
             setEditor("new");
@@ -895,32 +906,41 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
           Connect GitHub
         </Button>
       </div>
-      <nav className="filter-tabs" aria-label="GitHub evidence views">
-        {(["coverage", "connections"] as const).map((value) => (
-          <Button
-            key={value}
-            variant="ghost"
-            aria-pressed={view === value}
-            aria-current={view === value ? "page" : undefined}
-            onClick={() =>
-              setParams((before) => {
-                const after = new URLSearchParams(before);
-                if (value === "coverage") after.delete("view");
-                else after.set("view", value);
-                after.delete("source");
-                after.delete("refresh");
-                return after;
-              })
-            }
-          >
-            {value === "coverage" ? (
-              <ShieldCheck size={16} aria-hidden="true" />
-            ) : (
-              <Link2 size={16} aria-hidden="true" />
-            )}
-            {value === "coverage" ? "Coverage" : "Connections"}
-          </Button>
-        ))}
+      <nav
+        className="filter-tabs github-settings-tabs"
+        aria-label="GitHub evidence views"
+      >
+        {(["coverage", "connections", "authentication"] as const).map(
+          (value) => (
+            <Button
+              key={value}
+              variant="ghost"
+              aria-pressed={view === value}
+              aria-current={view === value ? "page" : undefined}
+              onClick={() =>
+                setParams((before) => {
+                  const after = new URLSearchParams(before);
+                  if (value === "coverage") after.delete("view");
+                  else after.set("view", value);
+                  after.delete("source");
+                  after.delete("refresh");
+                  return after;
+                })
+              }
+            >
+              {value === "coverage" ? (
+                <ShieldCheck size={16} aria-hidden="true" />
+              ) : (
+                <Link2 size={16} aria-hidden="true" />
+              )}
+              {value === "coverage"
+                ? "Coverage"
+                : value === "connections"
+                  ? "Connections"
+                  : "Authentication"}
+            </Button>
+          ),
+        )}
       </nav>
       {!snapshot.capabilities.includes(CAPABILITY.ADMIN) ? (
         <p className="permission-notice">
@@ -959,7 +979,11 @@ export function GitHubSources({ snapshot }: { snapshot: Snapshot }) {
           </p>
         </div>
       ) : null}
-      {view === "coverage" ? (
+      {view === "authentication" ? (
+        <Suspense fallback={<p role="status">Opening authentication...</p>}>
+          <GitHubApps snapshot={snapshot} onEditingChange={setAppEditing} />
+        </Suspense>
+      ) : view === "coverage" ? (
         <GitHubCoverageView
           snapshot={snapshot}
           edit={(id) => {

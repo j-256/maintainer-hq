@@ -267,7 +267,14 @@ export function SecretConnectionEditor({
             ) : null}
             {provider ? (
               <p className="hook-muted">
-                Credential expires <SecretTime value={provider.expiresAt} />.{" "}
+                {provider.expiresAt ? (
+                  <>
+                    Credential expires <SecretTime value={provider.expiresAt} />
+                    .{" "}
+                  </>
+                ) : (
+                  <>No local credential expiry. </>
+                )}
                 {provider.writable
                   ? "Declared writable; provider permissions are checked during each operation."
                   : "Configuration reads only. Secret distribution is unavailable."}

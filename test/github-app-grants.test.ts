@@ -483,3 +483,88 @@ describe("GitHub App workspace grants", () => {
     );
   });
 });
+it("lists one bounded installation repository page only for the setup operator", async () => {
+  const original = provider.getMockImplementation()!;
+  provider.mockImplementation(async (input: unknown, init?: RequestInit) => {
+    if (String(input).includes("/installation/repositories?")) {
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer synthetic-ephemeral-token",
+      );
+      return Response.json({
+        total_count: 101,
+        repositories: Array.from({ length: 100 }, (_, index) => ({
+          ...repository,
+          id: 101 + index,
+          full_name: "example/project" + index,
+        })),
+      });
+    }
+    return original(input, init);
+  });
+  const input = {
+    workspaceId: "administration",
+    registrationId: "app-a",
+    installationId: 91,
+  };
+  const result = await fixture.operator.githubAppRepositoriesList(input);
+  expect(result.items).toHaveLength(100);
+  expect(result.nextCursor).toBe("2");
+  expect(JSON.stringify(result)).not.toContain("synthetic-ephemeral-token");
+  const mint = provider.mock.calls.find(([url]: [unknown]) =>
+    String(url).includes("/access_tokens"),
+  )!;
+  expect(JSON.parse(String(mint[1]?.body))).toEqual({
+    permissions: { metadata: "read" },
+  });
+  provider.mockClear();
+  for (const principal of [
+    githubAppTestPrincipal("other"),
+    githubAppTestPrincipal("viewer"),
+  ])
+    await expect(
+      fixture.as(principal).githubAppRepositoriesList(input),
+    ).rejects.toThrow();
+  expect(provider).not.toHaveBeenCalled();
+  expect(commands.github_app_repositories_list.readOnly).toBe(true);
+});
+it("refuses repository inventory if registration authority changes during the provider request", async () => {
+  const original = provider.getMockImplementation()!;
+  provider.mockImplementation(async (input: unknown, init?: RequestInit) => {
+    if (String(input).includes("/installation/repositories?")) {
+      await fixture.runtime.HQ_DB.prepare(
+        "UPDATE github_app_registrations SET revision=revision+1 WHERE id='app-a'",
+      ).run();
+      return Response.json({ total_count: 1, repositories: [repository] });
+    }
+    return original(input, init);
+  });
+  await expect(
+    fixture.operator.githubAppRepositoriesList({
+      workspaceId: "administration",
+      registrationId: "app-a",
+      installationId: 91,
+    }),
+  ).rejects.toMatchObject({ code: "github_app_conflict" });
+});
+it("shares installation cooldowns between privileged inventory and grant verification", async () => {
+  provider.mockResolvedValue(
+    Response.json({}, { status: 429, headers: { "retry-after": "60" } }),
+  );
+  const input = {
+    workspaceId: "administration",
+    registrationId: "app-a",
+    installationId: 91,
+  };
+  await expect(
+    fixture.operator.githubAppRepositoriesList(input),
+  ).rejects.toMatchObject({ code: "github_app_rate_limited" });
+  provider.mockClear();
+  await expect(
+    fixture.operator.githubAppRepositoriesList(input),
+  ).rejects.toMatchObject({ code: "github_app_rate_limited" });
+  expect(provider).not.toHaveBeenCalled();
+  await expect(offer()).rejects.toMatchObject({
+    code: "github_app_rate_limited",
+  });
+  expect(provider).not.toHaveBeenCalled();
+});

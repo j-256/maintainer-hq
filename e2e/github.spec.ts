@@ -92,7 +92,7 @@ test("GitHub connection form validates, saves without credentials, and retains c
   await dialog.getByLabel("Evidence stale after", { exact: true }).fill("30");
   await expect(
     dialog.getByText(
-      /A server administrator must add a read-only GitHub credential/,
+      /Choose an accepted GitHub App grant or use advanced token configuration/,
     ),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Save connection" }).click();
