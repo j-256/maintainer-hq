@@ -35,6 +35,7 @@ export const storedDependencyReviewSchema = z
     credentialRef: z.string(),
     credentialHash: z.string(),
     readFence: githubAuthorityFenceSchema.optional(),
+    writerFence: githubAuthorityFenceSchema.optional(),
     writerIdentity: z.string().nullable().default(null),
   })
   .strict();
@@ -126,6 +127,13 @@ export class DependencyChanges {
           workspaceId,
           fields.credentialId,
           result.repository.fullName,
+          true,
+          {
+            repositoryId,
+            sourceId,
+            sourceRevision: result.source.revision,
+            membershipRevision: memberRevision,
+          },
         )
       : null;
     const stored: StoredDependencyReview = {
@@ -137,6 +145,7 @@ export class DependencyChanges {
         ? { readFence: captured.authority.fence }
         : {}),
       writerIdentity: writer?.identity ?? null,
+      ...(writer && "fence" in writer ? { writerFence: writer.fence } : {}),
       review: {
         workspaceId,
         actor: this.context.principal.displayName,
@@ -263,7 +272,9 @@ export class DependencyChanges {
   async review(input: unknown): Promise<DependencyChangeReview> {
     const { workspaceId, planId } = dependencyChangeReviewInput.parse(input);
     const { row, stored } = await this.load(workspaceId, planId);
-    const guard = await dependencyReviewGuard(this.context, stored);
+    const guard = await dependencyReviewGuard(this.context, stored, {
+      refresh: true,
+    });
     const matches = await this.context.db
       .prepare(`SELECT 1 WHERE ${guard.sql}`)
       .bind(...guard.values)

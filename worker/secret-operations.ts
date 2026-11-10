@@ -1,3 +1,4 @@
+import { ProviderWriteNotSentError } from "./provider-effect-errors";
 import { z } from "zod";
 import { CAPABILITY } from "../shared/domain";
 import {
@@ -299,14 +300,19 @@ export class SecretOperations {
     result:
       | SecretWriteResult
       | { status: "not-sent"; reason: SecretReceipt["reason"] },
-  ) {
+    knownUnsent = false,
+  ): Promise<boolean> {
     const lease = this.leaseGuard(row, leaseId);
+    const authority =
+      result.status === "accepted" && result.reason !== "authority_changed"
+        ? this.reviews.guard(row)
+        : { sql: "1", values: [] };
     const writeId = crypto.randomUUID();
     const saved = await this.db.batch([
       this.db
         .prepare(
           `UPDATE secret_receipts SET phase='finished',write_status=?,reason=?,updated_at=?,revision=revision+1,write_id=?
-        WHERE workspace_id=? AND review_id=? AND destination_index=? AND phase=? AND ${lease.sql}`,
+        WHERE workspace_id=? AND review_id=? AND destination_index=? AND phase=? AND ${lease.sql} AND ${authority.sql}`,
         )
         .bind(
           result.status,
@@ -316,8 +322,11 @@ export class SecretOperations {
           row.workspace_id,
           row.id,
           index,
-          result.status === "not-sent" ? "preparing" : "submitted",
+          result.status === "not-sent" && !knownUnsent
+            ? "preparing"
+            : "submitted",
           ...lease.values,
+          ...authority.values,
         ),
       ...this.audit(
         row,
@@ -333,6 +342,15 @@ export class SecretOperations {
               : "Provider acceptance is uncertain. Metadata reconciliation cannot prove which stored value is present.",
       ),
     ]);
+    if (
+      result.status === "accepted" &&
+      result.reason !== "authority_changed" &&
+      !saved[0]!.meta.changes
+    )
+      return this.writeResult(row, index, leaseId, {
+        status: "accepted",
+        reason: "authority_changed",
+      });
     return Boolean(saved[0]!.meta.changes);
   }
   private async observation(
@@ -341,7 +359,8 @@ export class SecretOperations {
     status: SecretReceipt["observationStatus"],
     metadata: SecretMetadata | null,
     leaseId?: string,
-  ) {
+    providerAuthority?: { sql: string; values: unknown[] },
+  ): Promise<void> {
     const guard = actorGuard(
       this.context,
       row.workspace_id,
@@ -353,12 +372,16 @@ export class SecretOperations {
           sql: "NOT EXISTS (SELECT 1 FROM secret_operations WHERE workspace_id=? AND review_id=? AND lease_expires_at>?)",
           values: [row.workspace_id, row.id, this.timestamp()],
         };
+    const observed =
+      providerAuthority && status !== "unavailable"
+        ? providerAuthority
+        : { sql: "1", values: [] };
     const writeId = crypto.randomUUID();
-    await this.db.batch([
+    const saved = await this.db.batch([
       this.db
         .prepare(
           `UPDATE secret_receipts SET observation_status=?,metadata_json=?,observed_at=?,updated_at=?,revision=revision+1,write_id=?
-        WHERE workspace_id=? AND review_id=? AND destination_index=? AND phase='finished' AND revision=? AND ${guard.sql} AND ${lease.sql}`,
+        WHERE workspace_id=? AND review_id=? AND destination_index=? AND phase='finished' AND revision=? AND ${guard.sql} AND ${lease.sql} AND ${observed.sql}`,
         )
         .bind(
           status,
@@ -372,6 +395,7 @@ export class SecretOperations {
           receipt.revision,
           ...guard.values,
           ...lease.values,
+          ...observed.values,
         ),
       ...this.audit(
         row,
@@ -395,6 +419,8 @@ export class SecretOperations {
           writeId,
         ),
     ]);
+    if (providerAuthority && status !== "unavailable" && !saved[0].meta.changes)
+      await this.observation(row, receipt, "unavailable", null, leaseId);
   }
   async run(input: unknown) {
     return this.execute(input);
@@ -578,7 +604,11 @@ export class SecretOperations {
             ),
       );
       recorded = await this.writeResult(row, destinationIndex, leaseId, result);
-      if (recorded && result.status === "accepted") {
+      if (
+        recorded &&
+        result.status === "accepted" &&
+        result.reason !== "authority_changed"
+      ) {
         const written = await this.receipt(row, destinationIndex);
         try {
           await this.selected(workspaceId, reviewId);
@@ -589,12 +619,18 @@ export class SecretOperations {
             metadata ? "present" : "absent",
             metadata,
             leaseId,
+            provider.authorityGuard?.(),
           );
         } catch {
           await this.observation(row, written, "unavailable", null, leaseId);
         }
       }
-    } catch {
+    } catch (error) {
+      const knownUnsent = error instanceof ProviderWriteNotSentError;
+      if (knownUnsent) {
+        submitted = false;
+        refusal = error.reason;
+      }
       if (!recorded)
         await this.writeResult(
           row,
@@ -603,6 +639,7 @@ export class SecretOperations {
           submitted
             ? { status: "indeterminate", reason: "provider_result_uncertain" }
             : { status: "not-sent", reason: refusal },
+          knownUnsent,
         );
     } finally {
       await this.release(row, leaseId);
@@ -647,7 +684,14 @@ export class SecretOperations {
       // Read failures do not overwrite the recorded provider acceptance
     }
     await authorize(this.context, workspaceId, CAPABILITY.SECRETS);
-    await this.observation(row, receipt, status, metadata);
+    await this.observation(
+      row,
+      receipt,
+      status,
+      metadata,
+      undefined,
+      provider.authorityGuard?.(),
+    );
     return this.reviews.get({ workspaceId, reviewId });
   }
 }

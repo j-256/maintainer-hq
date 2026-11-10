@@ -42,6 +42,7 @@ export const storedDependabotReviewSchema = z
     credentialRef: z.string(),
     credentialHash: z.string(),
     readFence: githubAuthorityFenceSchema.optional(),
+    writerFence: githubAuthorityFenceSchema.optional(),
     writerIdentity: z.string().nullable(),
   })
   .strict();
@@ -127,6 +128,13 @@ export class DependabotChanges {
           workspaceId,
           fields.credentialId,
           result.repository.fullName,
+          true,
+          {
+            repositoryId,
+            sourceId,
+            sourceRevision: result.source.revision,
+            membershipRevision: memberRevision,
+          },
         )
       : null;
     const stored: StoredDependabotReview = {
@@ -138,6 +146,7 @@ export class DependabotChanges {
         ? { readFence: captured.authority.fence }
         : {}),
       writerIdentity: writer?.identity ?? null,
+      ...(writer && "fence" in writer ? { writerFence: writer.fence } : {}),
       review: {
         workspaceId,
         actor: this.context.principal.displayName,
@@ -300,9 +309,11 @@ export class DependabotChanges {
     if (!saved[1].meta.changes) conflict();
     return this.review({ workspaceId, planId });
   }
-  private async assert(stored: StoredDependabotReview) {
+  private async assert(stored: StoredDependabotReview, refresh = false) {
     const catalog = this.context.env.GITHUB_CREDENTIALS;
-    const guard = await repositoryReviewGuard(this.context, stored);
+    const guard = await repositoryReviewGuard(this.context, stored, {
+      refresh,
+    });
     const found = await this.context.db
       .prepare(`SELECT 1 WHERE ${guard.sql}`)
       .bind(...guard.values)
@@ -353,7 +364,7 @@ export class DependabotChanges {
     const { row, stored } = await this.load(workspaceId, planId);
     let matches = true;
     try {
-      await this.assert(stored);
+      await this.assert(stored, true);
     } catch {
       matches = false;
     }

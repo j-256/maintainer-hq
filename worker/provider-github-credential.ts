@@ -1,3 +1,5 @@
+import { githubAuthorityFenceSchema } from "./github-authority-fence-schema";
+import { combineSqlGuards } from "./authority-sql";
 import { CAPABILITY } from "../shared/domain";
 import {
   GITHUB_CAPABILITY,
@@ -14,6 +16,9 @@ import {
   assertGitHubAuthorityFence,
   resolveGitHubCredential,
   readGitHubAuthReference,
+  resolveGitHubReadAuthority,
+  githubAuthorityFenceSql,
+  evictGitHubAppToken,
 } from "./github-credential-resolver";
 import type { GitHubAuthorityFence } from "./github-app-types";
 import { DomainError } from "./errors";
@@ -175,6 +180,38 @@ async function appConfigurationCredential(
     CAPABILITY.SECRETS,
   );
   const fences: GitHubAuthorityFence[] = [];
+  let pinned: GitHubAuthorityFence[] = [];
+  const captureGitHubAuthority = () => [
+    ...new Map(
+      [...pinned, ...fences].map((fence) => [
+        JSON.stringify(githubAuthorityFenceSchema.parse(fence)),
+        fence,
+      ]),
+    ).values(),
+  ];
+  const assertCaptured = async () => {
+    for (const fence of captureGitHubAuthority())
+      await assertGitHubAuthorityFence(context, fence);
+  };
+  const pinGitHubAuthority = async (expected: GitHubAuthorityFence[]) => {
+    for (const fence of expected) {
+      if (
+        fence.kind !== "app" ||
+        fence.workspaceId !== workspaceId ||
+        app.reference.kind !== "app" ||
+        fence.grantId !== app.reference.grantId
+      )
+        providerCredentialUnavailable();
+      await resolveGitHubReadAuthority(context, {
+        ...fence,
+        reference: app.reference,
+        permissions: { metadata: "read" },
+        phase: "read",
+      });
+      await assertGitHubAuthorityFence(context, fence);
+    }
+    pinned = expected;
+  };
   const descriptor: {
     workspaceId: string;
     name: string;
@@ -192,11 +229,14 @@ async function appConfigurationCredential(
     writable: app.capabilities.includes(GITHUB_CAPABILITY.CONFIGURATION_WRITE),
   };
   const authorityGuard = () =>
-    githubCredentialDescriptorGuard(workspaceId, app);
+    combineSqlGuards([
+      githubCredentialDescriptorGuard(workspaceId, app),
+      ...captureGitHubAuthority().map(githubAuthorityFenceSql),
+    ]);
   const client = new SecretGitHubClient(
     descriptor,
     fetch,
-    async (path, method) => {
+    async (path, method, remainingBudgetMs) => {
       const url = new URL(path, "https://api.github.com");
       const match = /^\/repos\/([^/]+)\/([^/]+)(.*)$/.exec(url.pathname);
       if (!match) providerCredentialUnavailable();
@@ -217,7 +257,14 @@ async function appConfigurationCredential(
         !app.capabilities.includes(GITHUB_CAPABILITY.CONFIGURATION_READ)
           ? GITHUB_CAPABILITY.CONFIGURATION_WRITE
           : GITHUB_CAPABILITY.CONFIGURATION_READ;
-      const lease = await resolveGitHubCredential(context, {
+      const credentialContext = {
+        env: context.env,
+        db: context.db,
+        now: context.now,
+        principal: context.principal,
+        remainingBudgetMs,
+      };
+      const lease = await resolveGitHubCredential(credentialContext, {
         workspaceId,
         reference: app.reference,
         repositoryId: repository.id,
@@ -239,15 +286,20 @@ async function appConfigurationCredential(
         phase: effect ? "effect" : "read",
       });
       fences.push(lease.fence);
-      await assertGitHubAuthorityFence(context, lease.fence);
+      await assertCaptured();
       return {
         token: lease.token,
-        assertLive: async () => {
-          for (const fence of fences)
-            await assertGitHubAuthorityFence(context, fence);
-        },
+        assertLive: assertCaptured,
+        rejectCredential: () => evictGitHubAppToken(credentialContext, lease),
       };
     },
   );
-  return { descriptor, identity: app.hash, client, authorityGuard };
+  return {
+    descriptor,
+    identity: app.hash,
+    client,
+    authorityGuard,
+    captureGitHubAuthority,
+    pinGitHubAuthority,
+  };
 }

@@ -1,5 +1,16 @@
-import { GITHUB_CAPABILITY } from "../shared/github-apps";
-import { githubAppCredentialReferences } from "./github-credential-descriptors";
+import {
+  readGitHubAuthReference,
+  resolveGitHubCredential,
+  evictGitHubAppToken,
+} from "./github-credential-resolver";
+import {
+  GITHUB_CAPABILITY,
+  type GitHubAppPermissions,
+} from "../shared/github-apps";
+import {
+  githubAppCredentialReferences,
+  githubCredentialDescriptor,
+} from "./github-credential-descriptors";
 import { CAPABILITY } from "../shared/domain";
 import { PROVIDER_CREDENTIAL_KIND } from "../shared/provider-credentials";
 import { dependencyWriteAccessInput } from "../shared/dependency-changes";
@@ -7,19 +18,87 @@ import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import {
   describeProviderCredential,
   managedProviderCredential,
+  managedCredentialReference,
   managedProviderCredentialRows,
   providerCredentialUnavailable,
 } from "./provider-credential-store";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
 
+export type RepositoryWriterScope = {
+  repositoryId: string;
+  sourceId: string;
+  sourceRevision: number;
+  membershipRevision: number;
+  phase?: "read" | "effect";
+  permissions?: GitHubAppPermissions;
+  remainingBudgetMs?: () => number;
+};
 export async function dependencyCredential(
   context: WorkspaceService,
   workspaceId: string,
   credentialId: string,
   repository: string,
   writable = true,
+  scope?: RepositoryWriterScope,
 ) {
+  if (!managedCredentialReference(credentialId)) {
+    const reference = await readGitHubAuthReference(
+      context,
+      workspaceId,
+      credentialId,
+    );
+    if (reference.kind !== "app" || !scope) providerCredentialUnavailable();
+    const descriptor = await githubCredentialDescriptor(
+      context,
+      workspaceId,
+      credentialId,
+    );
+    if (
+      !descriptor?.available ||
+      !descriptor.capabilities.includes(GITHUB_CAPABILITY.MAINTENANCE)
+    )
+      providerCredentialUnavailable();
+    const credentialContext = {
+      env: context.env,
+      db: context.db,
+      now: context.now,
+      principal: context.principal,
+      remainingBudgetMs: scope.remainingBudgetMs,
+    };
+    const lease = await resolveGitHubCredential(credentialContext, {
+      workspaceId,
+      reference,
+      repositoryId: scope.repositoryId,
+      repositoryFullName: repository,
+      capability: GITHUB_CAPABILITY.MAINTENANCE,
+      connectionId: scope.sourceId,
+      connectionRevision: scope.sourceRevision,
+      actorCapability: CAPABILITY.OPERATE,
+      binding: {
+        kind: "actor",
+        subject: context.principal.subject,
+        tokenId: context.principal.tokenId ?? null,
+        membershipRevision: scope.membershipRevision,
+      },
+      phase: scope.phase ?? "read",
+      permissions: scope.permissions,
+    });
+    return {
+      token: lease.token,
+      identity: lease.authorityIdentity,
+      revision: descriptor.revision,
+      fence: lease.fence,
+      rejectCredential: () => evictGitHubAppToken(credentialContext, lease),
+      settings: {
+        providerKind: PROVIDER_CREDENTIAL_KIND.REPOSITORY,
+        name: descriptor.name,
+        expiresAt: descriptor.expiresAt,
+        writable: true,
+        scope: { repositoryNames: descriptor.repositoryNames! },
+      },
+    };
+  }
   const credential = await managedProviderCredential(
     context,
     workspaceId,

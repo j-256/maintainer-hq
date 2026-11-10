@@ -1,3 +1,4 @@
+import { ProviderWriteNotSentError } from "./provider-effect-errors";
 import { CAPABILITY } from "../shared/domain";
 import {
   SECRET_LIMITS,
@@ -488,14 +489,19 @@ export class SecretCleanup {
     result:
       | SecretWriteResult
       | { status: "not-sent"; reason: SecretCleanupReceipt["reason"] },
-  ) {
+    knownUnsent = false,
+  ): Promise<boolean> {
     const lease = this.leaseGuard(row, leaseId);
+    const authority =
+      result.status === "accepted" && result.reason !== "authority_changed"
+        ? this.guard(row, leaseId)
+        : { sql: "1", values: [] };
     const writeId = crypto.randomUUID();
     const saved = await this.db.batch([
       this.db
         .prepare(
           `UPDATE secret_cleanup_reviews SET phase='finished',write_status=?,reason=?,updated_at=?,revision=revision+1,write_id=?
-        WHERE workspace_id=? AND id=? AND phase=? AND lease_id=? AND ${lease.sql}`,
+        WHERE workspace_id=? AND id=? AND phase=? AND lease_id=? AND ${lease.sql} AND ${authority.sql}`,
         )
         .bind(
           result.status,
@@ -504,9 +510,12 @@ export class SecretCleanup {
           writeId,
           row.workspace_id,
           row.id,
-          result.status === "not-sent" ? "preparing" : "submitted",
+          result.status === "not-sent" && !knownUnsent
+            ? "preparing"
+            : "submitted",
           leaseId,
           ...lease.values,
+          ...authority.values,
         ),
       ...this.audit(
         row,
@@ -522,6 +531,15 @@ export class SecretCleanup {
               : "Source-removal acceptance is uncertain. An absent name cannot prove which request removed it.",
       ),
     ]);
+    if (
+      result.status === "accepted" &&
+      result.reason !== "authority_changed" &&
+      !saved[0]!.meta.changes
+    )
+      return this.record(row, leaseId, {
+        status: "accepted",
+        reason: "authority_changed",
+      });
     return Boolean(saved[0]!.meta.changes);
   }
   private async observe(
@@ -529,7 +547,8 @@ export class SecretCleanup {
     metadata: SecretMetadata | null,
     status: SecretCleanupReceipt["observationStatus"],
     leaseId: string | null,
-  ) {
+    providerAuthority?: { sql: string; values: unknown[] },
+  ): Promise<void> {
     const authority = actorGuard(
       this.context,
       row.workspace_id,
@@ -541,12 +560,16 @@ export class SecretCleanup {
           sql: "NOT EXISTS (SELECT 1 FROM secret_cleanup_reviews WHERE workspace_id=? AND id=? AND lease_expires_at>?)",
           values: [row.workspace_id, row.id, this.timestamp()],
         };
+    const observed =
+      providerAuthority && status !== "unavailable"
+        ? providerAuthority
+        : { sql: "1", values: [] };
     const writeId = crypto.randomUUID();
-    await this.db.batch([
+    const saved = await this.db.batch([
       this.db
         .prepare(
           `UPDATE secret_cleanup_reviews SET observation_status=?,metadata_json=?,observed_at=?,updated_at=?,revision=revision+1,write_id=?
-        WHERE workspace_id=? AND id=? AND phase='finished' AND revision=? AND ${authority.sql} AND ${lease.sql}`,
+        WHERE workspace_id=? AND id=? AND phase='finished' AND revision=? AND ${authority.sql} AND ${lease.sql} AND ${observed.sql}`,
         )
         .bind(
           status,
@@ -559,6 +582,7 @@ export class SecretCleanup {
           row.revision,
           ...authority.values,
           ...lease.values,
+          ...observed.values,
         ),
       ...this.audit(
         row,
@@ -568,6 +592,8 @@ export class SecretCleanup {
         "Recorded source metadata separately from the deletion receipt. Absence does not prove acceptance of an uncertain deletion.",
       ),
     ]);
+    if (providerAuthority && status !== "unavailable" && !saved[0].meta.changes)
+      await this.observe(row, null, "unavailable", leaseId);
   }
   async apply(input: unknown) {
     const { workspaceId, cleanupId, fingerprint } =
@@ -673,7 +699,11 @@ export class SecretCleanup {
         ),
       );
       recorded = await this.record(row, leaseId, result);
-      if (recorded && result.status === "accepted") {
+      if (
+        recorded &&
+        result.status === "accepted" &&
+        result.reason !== "authority_changed"
+      ) {
         const written = await this.row(workspaceId, cleanupId);
         try {
           await authorize(this.context, workspaceId, CAPABILITY.SECRETS);
@@ -686,19 +716,26 @@ export class SecretCleanup {
             metadata,
             metadata ? "present" : "absent",
             leaseId,
+            provider.authorityGuard?.(),
           );
         } catch {
           await this.observe(written, null, "unavailable", leaseId);
         }
       }
-    } catch {
+    } catch (error) {
+      const knownUnsent = error instanceof ProviderWriteNotSentError;
+      if (knownUnsent) submitted = false;
       if (!recorded)
         await this.record(
           row,
           leaseId,
           submitted
             ? { status: "indeterminate", reason: "provider_result_uncertain" }
-            : { status: "not-sent", reason: "preflight_changed" },
+            : {
+                status: "not-sent",
+                reason: knownUnsent ? error.reason : "preflight_changed",
+              },
+          knownUnsent,
         );
     } finally {
       await this.release(row, leaseId);
@@ -730,7 +767,13 @@ export class SecretCleanup {
       /* Preserve unknown evidence without replaying DELETE */
     }
     await authorize(this.context, workspaceId, CAPABILITY.SECRETS);
-    await this.observe(row, metadata, status, null);
+    await this.observe(
+      row,
+      metadata,
+      status,
+      null,
+      provider.authorityGuard?.(),
+    );
     return this.get({ workspaceId, cleanupId });
   }
 }

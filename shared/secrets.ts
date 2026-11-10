@@ -328,6 +328,7 @@ export const secretWriteResultSchema = z
         "rate_limited",
         "provider_rejected",
         "provider_result_uncertain",
+        "authority_changed",
       ])
       .nullable(),
   })

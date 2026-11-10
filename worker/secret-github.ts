@@ -166,6 +166,12 @@ export const githubSecretAdapter: SecretAdapter = {
       ...("authorityGuard" in provider
         ? { authorityGuard: provider.authorityGuard }
         : {}),
+      ...("captureGitHubAuthority" in provider
+        ? {
+            captureGitHubAuthority: provider.captureGitHubAuthority,
+            pinGitHubAuthority: provider.pinGitHubAuthority,
+          }
+        : {}),
       writable: provider.descriptor.writable,
       selectResources,
       async checkResources(resources) {
