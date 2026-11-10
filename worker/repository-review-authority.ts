@@ -1,7 +1,12 @@
 import { CAPABILITY } from "../shared/domain";
 import type { DependencyChangeReview } from "../shared/dependency-changes";
 import { hookActorGuard } from "./hook-authority";
-import { githubCredentialIdentity } from "./github-credentials";
+import {
+  githubCredentialDescriptor,
+  manualGitHubCredentialDescriptor,
+} from "./github-credential-descriptors";
+import { githubAuthorityFenceSql } from "./github-credential-resolver";
+import type { GitHubAuthorityFence } from "./github-app-types";
 import { providerCredentialGuard } from "./provider-credential-store";
 import { PROVIDER_CREDENTIAL_KIND } from "../shared/provider-credentials";
 import type { WorkspaceService } from "./service";
@@ -24,6 +29,7 @@ export type StoredRepositoryReview = {
   credentialRef: string;
   credentialHash: string;
   writerIdentity: string | null;
+  readFence?: GitHubAuthorityFence;
 };
 export async function repositoryReviewGuard(
   context: WorkspaceService,
@@ -31,11 +37,18 @@ export async function repositoryReviewGuard(
 ) {
   const { review } = stored;
   const { basis, workspaceId } = review;
-  const credential = await githubCredentialIdentity(
-    context.env,
-    workspaceId,
-    stored.credentialRef,
-  );
+  const credential =
+    stored.readFence?.kind === "app"
+      ? await githubCredentialDescriptor(
+          context,
+          workspaceId,
+          stored.credentialRef,
+        )
+      : await manualGitHubCredentialDescriptor(
+          context,
+          workspaceId,
+          stored.credentialRef,
+        );
   const actor = hookActorGuard(
     context,
     workspaceId,
@@ -51,14 +64,21 @@ export async function repositoryReviewGuard(
           stored.writerIdentity,
         )
       : { sql: "1", values: [] };
+  const observed = stored.readFence
+    ? githubAuthorityFenceSql(stored.readFence)
+    : {
+        sql: "NOT EXISTS(SELECT 1 FROM github_app_credential_references WHERE workspace_id=? AND reference_id=?)",
+        values: [workspaceId, stored.credentialRef],
+      };
   return {
-    sql: `${actor.sql} AND ${writer.sql} AND ?=1 AND EXISTS (
+    sql: `${actor.sql} AND ${writer.sql} AND ${observed.sql} AND ?=1 AND EXISTS (
       SELECT 1 FROM repositories r JOIN source_repositories sr ON sr.workspace_id=r.workspace_id AND sr.repository_id=r.id
       JOIN connections s ON s.workspace_id=sr.workspace_id AND s.id=sr.source_id
       WHERE r.workspace_id=? AND r.id=? AND r.full_name=? AND r.revision=? AND s.id=? AND s.revision=? AND s.enabled=1 AND s.provider='github' AND s.credential_ref=?)`,
     values: [
       ...actor.values,
       ...writer.values,
+      ...observed.values,
       Number(
         credential?.hash === stored.credentialHash &&
           stored.tokenId === (context.principal.tokenId ?? null),

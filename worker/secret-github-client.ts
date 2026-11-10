@@ -113,8 +113,15 @@ export async function secretProvider(
 
 export class SecretGitHubClient {
   constructor(
-    readonly credential: SecretCredential,
+    readonly credential: Omit<SecretCredential, "token" | "expiresAt"> & {
+      token?: string;
+      expiresAt: string | null;
+    },
     readonly request: typeof fetch = fetch,
+    readonly authorizeRequest?: (
+      path: string,
+      method: string,
+    ) => Promise<{ token: string; assertLive: () => Promise<void> }>,
   ) {}
 
   private path(repository: string, environment?: string | null) {
@@ -191,12 +198,23 @@ export class SecretGitHubClient {
       SECRET_LIMITS.REQUEST_MS,
     );
     try {
+      const authority = this.authorizeRequest
+        ? await this.authorizeRequest(path, method)
+        : null;
+      controller.signal.throwIfAborted();
+      const token = authority?.token ?? this.credential.token;
+      if (!token)
+        throw new DomainError(
+          "secret_provider_unavailable",
+          "The selected GitHub credential is unavailable.",
+          503,
+        );
       const request = this.request(SECRET_PROVIDER.ORIGIN + path, {
         method,
         redirect: "manual",
         signal: controller.signal,
         headers: {
-          Authorization: "Bearer " + this.credential.token,
+          Authorization: "Bearer " + token,
           Accept: "application/vnd.github+json",
           "X-GitHub-Api-Version": SECRET_PROVIDER.API_VERSION,
           "User-Agent": "maintainer-hq",
@@ -212,6 +230,7 @@ export class SecretGitHubClient {
         );
       });
       const response = await Promise.race([request, abort]);
+      if (authority) await authority.assertLive();
       const rateLimited =
         response.status === 429 ||
         (response.status === 403 &&
@@ -248,12 +267,14 @@ export class SecretGitHubClient {
         bytes.set(chunk, offset);
         offset += chunk.byteLength;
       }
+      if (authority) await authority.assertLive();
       return {
         status: response.status,
         body: JSON.parse(new TextDecoder().decode(bytes)) as unknown,
         rateLimited,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof DomainError) throw error;
       throw new DomainError(
         "secret_provider_interrupted",
         "The GitHub request was interrupted. Metadata is not confirmed and submitted writes require receipt review.",
@@ -427,10 +448,7 @@ export class SecretGitHubClient {
     page: number,
   ) {
     this.checkPage(page);
-    if (
-      entryKind === SECRET_ENTRY_KIND.SECRET &&
-      scope.kind !== "organization"
-    )
+    if (entryKind === SECRET_ENTRY_KIND.SECRET && scope.kind !== "organization")
       return this.inventory(
         repository,
         scope.kind === "environment" ? scope.name : null,
@@ -463,11 +481,7 @@ export class SecretGitHubClient {
     ))!;
     return this.page(result.variables, result.total_count, page);
   }
-  async variable(
-    repository: string,
-    environment: string | null,
-    name: string,
-  ) {
+  async variable(repository: string, environment: string | null, name: string) {
     const scope: SecretScope = environment
       ? { kind: "environment", name: environment }
       : { kind: "repository" };
@@ -571,11 +585,7 @@ export class SecretGitHubClient {
       { name: canonical, value: this.variableValue(value) },
     );
   }
-  removeVariable(
-    repository: string,
-    environment: string | null,
-    name: string,
-  ) {
+  removeVariable(repository: string, environment: string | null, name: string) {
     return this.write(
       this.variableCollectionPath(repository, environment) +
         "/" +

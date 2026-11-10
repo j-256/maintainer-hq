@@ -13,7 +13,8 @@ import {
 import { credentialHash } from "./credential-hash";
 import { DomainError } from "./errors";
 import { githubActorGuard, type GitHubContext } from "./github-authority";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptor } from "./github-credential-descriptors";
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
 import { GitHubSources } from "./github-sources";
 import type { Env } from "./types";
 import type { GitHubCollection } from "./github-client";
@@ -264,12 +265,15 @@ export class GitHubJobs {
         "An owner must repair this GitHub source's settings",
         409,
       );
-    const credential = await githubCredentialIdentity(
-      this.context.env,
+    const credential = await githubCredentialDescriptor(
+      this.context,
       workspaceId,
       source.credential_ref,
     );
-    if (!credential)
+    if (
+      !credential?.available ||
+      !credential.capabilities.includes(GITHUB_CAPABILITY.COLLECTION)
+    )
       throw new DomainError(
         "not_configured",
         "No workspace-bound GitHub credential is configured for this source",
@@ -291,7 +295,7 @@ export class GitHubJobs {
       .prepare(
         "SELECT retry_at FROM github_cooldowns WHERE credential_hash = ? AND retry_at > ?",
       )
-      .bind(credential.hash, now)
+      .bind(credential.quotaKey, now)
       .first<{ retry_at: string }>();
     if (cooldown)
       throw new DomainError(
@@ -299,7 +303,21 @@ export class GitHubJobs {
         "GitHub requested a cooldown. Inspect the source's retry time before refreshing.",
         429,
       );
-    const guard = scheduled
+    const memberRevision = scheduled
+      ? null
+      : await this.db
+          .prepare(
+            "SELECT revision FROM members WHERE workspace_id=? AND subject=?",
+          )
+          .bind(workspaceId, this.context.principal.subject)
+          .first<number>("revision");
+    if (!scheduled && !memberRevision)
+      throw new DomainError(
+        "forbidden",
+        "Your live workspace access changed before collection was queued.",
+        403,
+      );
+    const guard: { sql: string; values: unknown[] } = scheduled
       ? { sql: "1", values: [] }
       : githubActorGuard(
           workspaceId,
@@ -307,14 +325,23 @@ export class GitHubJobs {
           this.context.principal.tokenId ?? null,
           now,
         );
+    if (!scheduled) {
+      guard.sql +=
+        " AND EXISTS(SELECT 1 FROM members WHERE workspace_id=? AND subject=? AND revision=?)";
+      guard.values.push(
+        workspaceId,
+        this.context.principal.subject,
+        memberRevision!,
+      );
+    }
     const writeId = crypto.randomUUID();
     const results = await this.db.batch([
       this.db
         .prepare(
           [
             "INSERT INTO github_refreshes (workspace_id, id, source_id, source_revision, credential_ref, credential_hash,",
-            "actor_subject, actor_name, actor_token_id, trigger, input_hash, status, summary, created_at, write_id)",
-            "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ? WHERE",
+            "actor_subject, actor_name, actor_token_id, credential_kind, quota_key, actor_member_revision, trigger, input_hash, status, summary, created_at, write_id)",
+            "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ? WHERE",
             guard.sql,
             "AND EXISTS (SELECT 1 FROM connections s WHERE s.workspace_id = ? AND s.id = ?",
             "AND s.provider = 'github' AND s.enabled = 1 AND s.revision = ?",
@@ -334,6 +361,9 @@ export class GitHubJobs {
           this.context.principal.subject,
           this.context.principal.displayName,
           this.context.principal.tokenId ?? null,
+          credential.kind,
+          credential.quotaKey,
+          memberRevision,
           trigger,
           hash,
           source.name + ": refresh queued",
@@ -348,7 +378,7 @@ export class GitHubJobs {
           ).toISOString(),
           workspaceId,
           sourceId,
-          credential.hash,
+          credential.quotaKey,
           now,
         ),
       this.db
@@ -499,7 +529,9 @@ export async function scheduleGitHubSources(
     )
       .bind(
         stamp,
-        new Date(now() - GITHUB_REFRESH_LIMITS.MANUAL_INTERVAL_MS).toISOString(),
+        new Date(
+          now() - GITHUB_REFRESH_LIMITS.MANUAL_INTERVAL_MS,
+        ).toISOString(),
         GITHUB_REFRESH_LIMITS.DUE_SOURCES,
       )
       .all<{

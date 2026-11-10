@@ -12,7 +12,9 @@ import {
 } from "../shared/dependency-changes";
 import { readRepositoryDependencies } from "./dependencies";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptor } from "./github-credential-descriptors";
+import { githubAuthorityFenceSchema } from "./github-authority-fence-schema";
+import type { GitHubCredentialLease } from "./github-app-types";
 import { dependencyHash } from "./dependency-client";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
@@ -32,6 +34,7 @@ export const storedDependencyReviewSchema = z
     tokenId: z.string().nullable(),
     credentialRef: z.string(),
     credentialHash: z.string(),
+    readFence: githubAuthorityFenceSchema.optional(),
     writerIdentity: z.string().nullable().default(null),
   })
   .strict();
@@ -55,12 +58,21 @@ export class DependencyChanges {
       workspaceId,
       CAPABILITY.OPERATE,
     );
-    const result = await readRepositoryDependencies(this.context, {
-      workspaceId,
-      sourceId,
-      repositoryId,
-      ...(fields.pullNumber ? { pullNumber: fields.pullNumber } : {}),
-    });
+    const captured = {
+      authority: null as Omit<GitHubCredentialLease, "token"> | null,
+    };
+    const result = await readRepositoryDependencies(
+      this.context,
+      {
+        workspaceId,
+        sourceId,
+        repositoryId,
+        ...(fields.pullNumber ? { pullNumber: fields.pullNumber } : {}),
+      },
+      (authority) => {
+        captured.authority = authority;
+      },
+    );
     const evidence = result.evidence;
     const now = this.context.now();
     if (
@@ -100,13 +112,14 @@ export class DependencyChanges {
       .bind(workspaceId, sourceId, result.source.revision)
       .first<{ credential_ref: string }>();
     const credential = source
-      ? await githubCredentialIdentity(
-          this.context.env,
+      ? await githubCredentialDescriptor(
+          this.context,
           workspaceId,
           source.credential_ref,
         )
       : null;
-    if (!credential || !source) dependencyReviewConflict();
+    if (!credential?.available || !source || !captured.authority)
+      dependencyReviewConflict();
     const writer = fields.credentialId
       ? await dependencyCredential(
           this.context,
@@ -120,6 +133,9 @@ export class DependencyChanges {
       tokenId: this.context.principal.tokenId ?? null,
       credentialRef: source.credential_ref,
       credentialHash: credential.hash,
+      ...(captured.authority.fence.kind === "app"
+        ? { readFence: captured.authority.fence }
+        : {}),
       writerIdentity: writer?.identity ?? null,
       review: {
         workspaceId,
@@ -192,7 +208,7 @@ export class DependencyChanges {
             result.repository.fullName,
             result.repository.revision,
             result.source.revision,
-            credential.hash,
+            captured.authority.authorityIdentity,
             ...(fields.pullNumber ? [fields.pullNumber] : []),
           ]),
           fields.headSha,

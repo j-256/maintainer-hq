@@ -29,6 +29,7 @@ import {
   describeProviderCredential,
   managedProviderCredential,
   providerCredentialBinding,
+  providerCredentialUnavailable,
   type ProviderCredentialRow,
 } from "./provider-credential-store";
 import { readSecretInput } from "./secret-private-input";
@@ -248,10 +249,7 @@ export class ProviderCredentials {
       else await provider.client.state(resourceName);
       expiresAt = provider.descriptor.expiresAt;
     } else if (row.provider_kind === PROVIDER_CREDENTIAL_KIND.REPOSITORY) {
-      if (
-        scope.kind !== "repository" ||
-        entryKind !== SECRET_ENTRY_KIND.SECRET
-      )
+      if (scope.kind !== "repository" || entryKind !== SECRET_ENTRY_KIND.SECRET)
         throw new DomainError(
           "validation",
           "Choose repository read access for a maintenance credential.",
@@ -315,6 +313,7 @@ export class ProviderCredentials {
         entryKind,
         1,
       );
+      if (!provider.descriptor.expiresAt) providerCredentialUnavailable();
       expiresAt = provider.descriptor.expiresAt;
     }
     const current = await this.current(workspaceId, credentialId);

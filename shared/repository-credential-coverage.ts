@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { idSchema, repositoryFields, workspaceInput } from "./domain";
+import { GITHUB_APP_LIMITS } from "./github-apps";
 import { PROVIDER_CREDENTIAL_LIMITS } from "./provider-credentials";
 import { SOURCE_LIMITS } from "./sources";
 
@@ -25,7 +26,7 @@ const credentials = z
   .number()
   .int()
   .min(0)
-  .max(PROVIDER_CREDENTIAL_LIMITS.WORKSPACE);
+  .max(PROVIDER_CREDENTIAL_LIMITS.WORKSPACE + GITHUB_APP_LIMITS.GRANTS);
 export const repositoryCredentialCoverageSchema = z
   .object({
     generatedAt: z.iso.datetime(),

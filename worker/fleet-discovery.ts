@@ -1,3 +1,4 @@
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
 import {
   CAPABILITY,
   LIMITS as WORKSPACE_LIMITS,
@@ -27,7 +28,7 @@ import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
 import { SOURCE_LIMITS } from "../shared/sources";
 import { githubConfigurationSchema } from "../shared/github";
-import { githubCredential } from "./github-credentials";
+import { githubCredentialDescriptors } from "./github-credential-descriptors";
 
 export async function fleetInventory(
   authority: FleetAuthority,
@@ -181,14 +182,22 @@ export class FleetDiscoveryService {
         credential_ref: string | null;
         configuration_json: string;
       }>();
+    const credentials = await githubCredentialDescriptors(
+      this.context,
+      workspaceId,
+      rows.results.map((row) => row.credential_ref),
+    );
     const sources = rows.results.map((row) => {
       let configured = false;
       try {
         configured = Boolean(
-          githubCredential(this.context.env, workspaceId, row.credential_ref) &&
-            githubConfigurationSchema.safeParse(
-              JSON.parse(row.configuration_json),
-            ).success,
+          credentials.get(row.credential_ref)?.available &&
+          credentials
+            .get(row.credential_ref)
+            ?.capabilities.includes(GITHUB_CAPABILITY.COLLECTION) &&
+          githubConfigurationSchema.safeParse(
+            JSON.parse(row.configuration_json),
+          ).success,
         );
       } catch {
         configured = false;
@@ -240,8 +249,12 @@ export class FleetDiscoveryService {
         })),
       },
       fleetProviderResultSchema,
-      (token) =>
-        collectFleetDiscovery(scope, lookups, token, { now: this.context.now }),
+      async (token) =>
+        authority.restrictProviderResult(
+          await collectFleetDiscovery(scope, lookups, token, {
+            now: this.context.now,
+          }),
+        ),
       () => assertFleetLookups(authority, lookups),
     );
     let inventory = await fleetInventory(authority);

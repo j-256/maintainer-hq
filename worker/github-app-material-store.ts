@@ -1,5 +1,5 @@
 import { githubAppMetadataSchema } from "../shared/github-apps";
-import { GitHubAppClient } from "./github-app-client";
+import { GitHubAppClient, githubAppRemainingBudget } from "./github-app-client";
 import {
   normalizeGitHubAppKey,
   openGitHubAppMaterial,
@@ -13,6 +13,7 @@ export async function openGitHubAppClient(
   context: GitHubCredentialContext,
   registration: GitHubAppRegistrationRow,
 ) {
+  githubAppRemainingBudget(context.remainingBudgetMs);
   const metadata = githubAppMetadataSchema.parse(
     JSON.parse(registration.metadata_json),
   );
@@ -59,6 +60,8 @@ export async function openGitHubAppClient(
       appId: metadata.appId,
       privateKey: key.pkcs8,
       now: context.now,
+      fetch: context.fetch,
+      budgetMs: githubAppRemainingBudget(context.remainingBudgetMs),
     });
   } finally {
     bytes.fill(0);

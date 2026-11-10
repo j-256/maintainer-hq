@@ -217,12 +217,14 @@ export class SecretsService {
     const writeId = crypto.randomUUID();
     const eventId = crypto.randomUUID();
     const now = new Date(this.context.now()).toISOString();
-    const credentialGuard = providerCredentialGuard(
-      workspaceId,
-      connection.providerKind,
-      connection.providerRef,
-      provider.identity,
-    );
+    const credentialGuard =
+      provider.authorityGuard?.() ??
+      providerCredentialGuard(
+        workspaceId,
+        connection.providerKind,
+        connection.providerRef,
+        provider.identity,
+      );
     const result = await this.db.batch([
       this.db
         .prepare(
@@ -341,6 +343,7 @@ export class SecretsService {
       this.context,
       workspaceId,
       row.credential_ref,
+      { id: row.id, revision: row.revision },
     );
     await provider.checkResources([resource]);
     return { row, resource, adapter, provider };
@@ -431,10 +434,7 @@ export class SecretsService {
             WHERE d.workspace_id=? AND m.state='active'
               AND d.destination_key IN (SELECT value FROM json_each(?))`,
             )
-            .bind(
-              workspaceId,
-              JSON.stringify(managedKeys),
-            )
+            .bind(workspaceId, JSON.stringify(managedKeys))
             .all<{ destinationKey: string; configurationId: string }>()
         ).results
       : [];
@@ -478,6 +478,7 @@ export class SecretsService {
       this.context,
       workspaceId,
       current.credential_ref,
+      { id: current.id, revision: current.revision },
     );
     if (provider.identity !== providerIdentity)
       throw new DomainError(

@@ -1,3 +1,4 @@
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
 import { CAPABILITY } from "../shared/domain";
 import { githubConfigurationSchema } from "../shared/github";
 import type { z } from "zod";
@@ -9,7 +10,18 @@ import {
 } from "../shared/github-context";
 import { DomainError } from "./errors";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptor } from "./github-credential-descriptors";
+import {
+  readGitHubAuthReference,
+  resolveGitHubCredential,
+  resolveGitHubReadAuthority,
+  assertGitHubAuthorityFence,
+  githubAuthorityFenceSql,
+} from "./github-credential-resolver";
+import type {
+  GitHubCredentialRequest,
+  GitHubCredentialLease,
+} from "./github-app-types";
 import type { WorkspaceService } from "./service";
 import { deliverWorkspacePush } from "./workspace-push";
 
@@ -52,6 +64,9 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
     responseBytes: number;
     cachedOnly?: boolean;
     identitySuffix?: number;
+    captureAuthority?: (
+      authority: Omit<GitHubCredentialLease, "token">,
+    ) => void;
     collect: (
       fullName: string,
       token: string,
@@ -106,20 +121,22 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
     return row;
   }
   const original = await scope();
-  const credential = await githubCredentialIdentity(
-    context.env,
+  const credential = await githubCredentialDescriptor(
+    context,
     workspaceId,
     original.credential_ref,
   );
-  const identity = JSON.stringify([
+  let authority: Omit<GitHubCredentialLease, "token"> | null = null;
+  let credentialRequest: GitHubCredentialRequest | null = null;
+  let identity = JSON.stringify([
     original.full_name,
     original.repository_revision,
     original.source_revision,
     credential?.hash ?? null,
     ...(adapter.identitySuffix === undefined ? [] : [adapter.identitySuffix]),
   ]);
-  const pin = `EXISTS (${SCOPE} AND r.revision = ? AND s.revision = ? AND s.enabled = 1 AND s.credential_ref IS ? AND ${actor.sql})`;
-  const pinValues = [
+  let pin = `EXISTS (${SCOPE} AND r.revision = ? AND s.revision = ? AND s.enabled = 1 AND s.credential_ref IS ? AND ${actor.sql})`;
+  const pinValues: unknown[] = [
     ...keys,
     original.repository_revision,
     original.source_revision,
@@ -132,12 +149,13 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
     stored: string | null,
   ): Promise<GitHubContextResult<T>> {
     const catalog = context.env.GITHUB_CREDENTIALS;
-    const latestCredential = await githubCredentialIdentity(
-      context.env,
+    const latestCredential = await githubCredentialDescriptor(
+      context,
       workspaceId,
       original.credential_ref,
     );
     const latest = await scope();
+    if (authority) await assertGitHubAuthorityFence(context, authority.fence);
     if (
       catalog !== context.env.GITHUB_CREDENTIALS ||
       JSON.stringify(latest) !== JSON.stringify(original) ||
@@ -188,10 +206,68 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
     configuration = null;
   }
   if (
-    !credential ||
+    !credential?.available ||
     !githubConfigurationSchema.safeParse(configuration).success
   )
     return finish("not_configured", null, null);
+  credentialRequest = {
+    workspaceId,
+    repositoryId,
+    repositoryFullName: original.full_name,
+    connectionId: sourceId,
+    connectionRevision: original.source_revision,
+    capability: GITHUB_CAPABILITY.COLLECTION,
+    reference: await readGitHubAuthReference(
+      context,
+      workspaceId,
+      original.credential_ref!,
+    ),
+    binding: {
+      kind: "actor",
+      subject: context.principal.subject,
+      tokenId: context.principal.tokenId ?? null,
+      membershipRevision: memberRevision,
+    },
+    phase: "read",
+    optionalPermissions:
+      adapter.kind === "work"
+        ? {
+            pull_requests: "read",
+            issues: "read",
+            checks: "read",
+            statuses: "read",
+          }
+        : adapter.kind === "releases"
+          ? { deployments: "read" }
+          : adapter.kind === "dependencyCandidates"
+            ? { pull_requests: "read" }
+            : undefined,
+  };
+  try {
+    authority = await resolveGitHubReadAuthority(
+      context,
+      credentialRequest,
+      adapter.cachedOnly,
+    );
+  } catch (error) {
+    if (
+      error instanceof DomainError &&
+      error.code === "github_app_authority_unverified"
+    )
+      return finish("waiting", null, null);
+    throw error;
+  }
+  adapter.captureAuthority?.(authority);
+  identity = JSON.stringify([
+    original.full_name,
+    original.repository_revision,
+    original.source_revision,
+    authority.authorityIdentity,
+    ...(adapter.identitySuffix === undefined ? [] : [adapter.identitySuffix]),
+  ]);
+  const authorityGuard = githubAuthorityFenceSql(authority.fence);
+  pin += ` AND ${authorityGuard.sql}`;
+  pinValues.push(...authorityGuard.values);
   const now = context.now();
   const timestamp = new Date(now).toISOString();
   const cached = await context.db
@@ -218,7 +294,7 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
     .prepare(
       "SELECT retry_at FROM github_cooldowns WHERE credential_hash = ? AND retry_at > ?",
     )
-    .bind(credential.hash, timestamp)
+    .bind(authority.quotaKey, timestamp)
     .first<string>("retry_at");
   if (cooldown)
     return finish(
@@ -239,7 +315,7 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
       ON CONFLICT(credential_hash) DO UPDATE SET window_start = excluded.window_start, reads = 0
       WHERE github_context_budgets.window_start < excluded.window_start`,
       )
-      .bind(credential.hash, windowStart, ...pinValues),
+      .bind(authority.quotaKey, windowStart, ...pinValues),
     context.db
       .prepare(
         `INSERT INTO ${table}
@@ -259,10 +335,10 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
         leaseUntil,
         nextReadAt,
         ...pinValues,
-        credential.hash,
+        authority.quotaKey,
         windowStart,
         LIMITS.READS_PER_WINDOW,
-        credential.hash,
+        authority.quotaKey,
         timestamp,
         timestamp,
         timestamp,
@@ -272,7 +348,7 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
         `UPDATE github_context_budgets SET reads = reads + 1 WHERE credential_hash = ? AND window_start = ?
       AND EXISTS (${CACHE} AND lease_id = ?)`,
       )
-      .bind(credential.hash, windowStart, ...keys, lease),
+      .bind(authority.quotaKey, windowStart, ...keys, lease),
   ]);
   const claimed = await context.db
     .prepare(CACHE)
@@ -296,8 +372,18 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
   }
   // Recheck live authority after the cache lease and before provider I/O
   await finish("collecting", nextReadAt, null);
+  const providerCredential = await resolveGitHubCredential(
+    context,
+    credentialRequest,
+  );
+  if (providerCredential.authorityIdentity !== authority.authorityIdentity)
+    throw new DomainError(
+      "conflict",
+      "App authority changed before this repository read. Reload the saved scope.",
+      409,
+    );
   const evidence = adapter.schema.parse(
-    await adapter.collect(original.full_name, credential.token, {
+    await adapter.collect(original.full_name, providerCredential.token, {
       now: context.now,
     }),
   );
@@ -316,7 +402,7 @@ export async function readGitHubContext<T extends { retryAt: string | null }>(
           `INSERT INTO github_cooldowns (credential_hash, retry_at)
     SELECT ?, ? WHERE ${pin} ON CONFLICT(credential_hash) DO UPDATE SET retry_at = MAX(github_cooldowns.retry_at, excluded.retry_at)`,
         )
-        .bind(credential.hash, evidence.retryAt, ...pinValues),
+        .bind(authority.quotaKey, evidence.retryAt, ...pinValues),
     );
   statements.push(
     context.db

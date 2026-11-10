@@ -12,7 +12,11 @@ import {
   PROVIDER_CREDENTIAL_LIMITS,
 } from "../shared/provider-credentials";
 import { SOURCE_LIMITS } from "../shared/sources";
-import { githubCredentialReferences } from "./github-credentials";
+import {
+  githubCredentialReferences,
+  githubAppCredentialReferences,
+} from "./github-credential-descriptors";
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import {
   describeProviderCredential,
@@ -134,6 +138,8 @@ export async function repositoryCredentialCoverage(
   const retained = JSON.stringify(captured.map((result) => result.results));
   if (encoder.encode(retained).byteLength > LIMITS.METADATA_BYTES)
     unavailable();
+  const references = await githubCredentialReferences(context, workspaceId);
+  const apps = await githubAppCredentialReferences(context, workspaceId);
   const latestRevision = await authorizeHooks(context, workspaceId);
   checkExpiry();
   if (latestRevision !== memberRevision) conflict();
@@ -148,9 +154,7 @@ export async function repositoryCredentialCoverage(
   let rows: RepositoryCredentialCoverage["rows"];
   try {
     const readReferences = new Set(
-      githubCredentialReferences(context.env, workspaceId).map(
-        (entry) => entry.id,
-      ),
+      references.filter((entry) => entry.available).map((entry) => entry.id),
     );
     const credentials = (captured[1].results as ProviderCredentialRow[]).map(
       (row) => describeProviderCredential(context, row),
@@ -183,7 +187,15 @@ export async function repositoryCredentialCoverage(
           collection.invalidConfiguration++;
         else if (
           !source.credentialRef ||
-          !readReferences.has(source.credentialRef)
+          !readReferences.has(source.credentialRef) ||
+          apps.some(
+            (app) =>
+              app.id === source.credentialRef &&
+              !app.repositoryNames?.some(
+                (name) =>
+                  name.toLowerCase() === repository.fullName.toLowerCase(),
+              ),
+          )
         )
           collection.credentialUnavailable++;
         else collection.configured++;
@@ -214,6 +226,18 @@ export async function repositoryCredentialCoverage(
         else if (credential.status !== "available") unavailable();
         else if (!credential.settings.writable) maintenance.readOnly++;
         else maintenance.configuredForWrites++;
+      }
+      for (const app of apps) {
+        if (
+          !app.capabilities.includes(GITHUB_CAPABILITY.MAINTENANCE) ||
+          !app.repositoryNames?.some(
+            (name) => name.toLowerCase() === repository.fullName.toLowerCase(),
+          )
+        )
+          continue;
+        if (app.expiresAt && Date.parse(app.expiresAt) <= context.now())
+          maintenance.expired++;
+        else if (app.available) maintenance.configuredForWrites++;
       }
       return { repository, collection, maintenance };
     });

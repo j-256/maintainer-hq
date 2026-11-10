@@ -110,6 +110,18 @@ export class GitHubAppProviderError extends DomainError {
     super(code, message, status);
   }
 }
+export function githubAppRemainingBudget(remainingBudgetMs?: () => number) {
+  const remaining = Math.min(
+    LIMITS.REQUEST_TIMEOUT_MS,
+    remainingBudgetMs?.() ?? LIMITS.REQUEST_TIMEOUT_MS,
+  );
+  if (!Number.isFinite(remaining) || remaining <= 0)
+    throw new GitHubAppProviderError(
+      "github_app_budget_exhausted",
+      "App verification exceeded its execution budget. Retry through the saved scope.",
+    );
+  return remaining;
+}
 function invalidInput(): never {
   throw new DomainError(
     "github_app_input_invalid",

@@ -11,6 +11,8 @@ export type GitHubCredentialContext = {
   db: D1Database;
   now: () => number;
   principal?: Principal;
+  fetch?: typeof fetch;
+  remainingBudgetMs?: () => number;
 };
 export type GitHubRequestBinding =
   | {
@@ -24,7 +26,7 @@ export type GitHubAuthorityFence = {
   workspaceId: string;
   connectionId: string;
   connectionRevision: number;
-  connectionKind: "source" | "configuration";
+  connectionKind: "source" | "configuration" | "configuration-admission";
   repositoryId: string | null;
   repositoryFullName: string;
   capability: GitHubCapability;
@@ -66,8 +68,9 @@ export type GitHubCredentialRequest = {
   connectionId: string;
   connectionRevision: number;
   binding: GitHubRequestBinding;
-  connectionKind?: "source" | "configuration";
+  connectionKind?: "source" | "configuration" | "configuration-admission";
   actorCapability?: Capability;
   permissions?: GitHubAppPermissions;
+  optionalPermissions?: GitHubAppPermissions;
   phase: "read" | "effect";
 };

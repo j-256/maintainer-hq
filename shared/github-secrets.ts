@@ -41,11 +41,13 @@ export const secretMetadataSchema = z
     (value) => Date.parse(value.updated_at) >= Date.parse(value.created_at),
   );
 export const secretVariableMetadataSchema = secretMetadataSchema.safeExtend({
-  value: z.string().refine(
-    (value) =>
-      new TextEncoder().encode(value).byteLength <=
-      GITHUB_SECRET_LIMITS.VALUE_BYTES,
-  ),
+  value: z
+    .string()
+    .refine(
+      (value) =>
+        new TextEncoder().encode(value).byteLength <=
+        GITHUB_SECRET_LIMITS.VALUE_BYTES,
+    ),
 });
 export const secretPublicKeySchema = z.object({
   key_id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
@@ -79,7 +81,7 @@ export type SecretProviderReference = {
   revision: number;
   repositoryNames: string[];
   writable: boolean;
-  expiresAt: string;
+  expiresAt: string | null;
   available: boolean;
 };
 export type SecretPage<T> = {

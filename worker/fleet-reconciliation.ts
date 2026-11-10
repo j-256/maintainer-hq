@@ -29,7 +29,12 @@ import { compareFleetRecords } from "./fleet-comparison";
 import { assertFleetLookups, fleetInventory } from "./fleet-discovery";
 import { collectFleetDiscovery } from "./fleet-discovery-client";
 import { credentialHash } from "./credential-hash";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptor } from "./github-credential-descriptors";
+import {
+  assertGitHubDiscoveryAuthority,
+  githubDiscoveryAuthoritySql,
+  type GitHubDiscoveryAuthority,
+} from "./github-credential-resolver";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
 
@@ -48,6 +53,7 @@ type Reviewed = {
   memberRevision: number;
   tokenId: string | null;
   observedAt: string;
+  discoveryAuthority?: GitHubDiscoveryAuthority;
 };
 const verificationSchema = z
   .object({
@@ -131,8 +137,11 @@ export class FleetReconciliationService {
     const actor = this.actorGuard(workspaceId, reviewed.memberRevision);
     const changes = JSON.stringify(reviewed.changes);
     const selections = JSON.stringify(reviewed.fields.selections);
+    const observed = reviewed.discoveryAuthority
+      ? githubDiscoveryAuthoritySql(reviewed.discoveryAuthority)
+      : { sql: "1", values: [] };
     return {
-      sql: `${actor.sql}
+      sql: `${actor.sql} AND ${observed.sql}
         AND EXISTS(SELECT 1 FROM connections WHERE workspace_id=? AND id=? AND provider='github' AND revision=? AND enabled=1 AND credential_ref=? AND configuration_json=?)
         AND (SELECT count(*) FROM source_repositories WHERE workspace_id=? AND source_id=?)=?
         AND NOT EXISTS(SELECT 1 FROM json_each(?) selected WHERE NOT EXISTS(SELECT 1 FROM source_repositories sr WHERE sr.workspace_id=? AND sr.source_id=? AND sr.repository_id=selected.value))
@@ -152,6 +161,7 @@ export class FleetReconciliationService {
         AND (SELECT count(*) FROM repositories WHERE workspace_id=?)+?<=?`,
       values: [
         ...actor.values,
+        ...observed.values,
         workspaceId,
         reviewed.source.id,
         reviewed.source.revision,
@@ -178,12 +188,22 @@ export class FleetReconciliationService {
     };
   }
   private async matching(workspaceId: string, reviewed: Reviewed) {
-    const credential = await githubCredentialIdentity(
-      this.context.env,
+    const credential = await githubCredentialDescriptor(
+      this.context,
       workspaceId,
       reviewed.credentialRef,
     );
     if (credential?.hash !== reviewed.credentialHash) return false;
+    if (reviewed.discoveryAuthority) {
+      try {
+        await assertGitHubDiscoveryAuthority(
+          this.context,
+          reviewed.discoveryAuthority,
+        );
+      } catch {
+        return false;
+      }
+    }
     const guard = this.boundary(workspaceId, reviewed);
     return Boolean(
       await this.db
@@ -357,11 +377,13 @@ export class FleetReconciliationService {
             FLEET_DISCOVERY_LIMITS.REQUEST_TIMEOUT_MS,
           ),
         };
-        const nodeReads = await collectFleetDiscovery(
-          { kind: "enrolled", cursor: null },
-          nodes,
-          token,
-          options,
+        const nodeReads = authority.restrictProviderResult(
+          await collectFleetDiscovery(
+            { kind: "enrolled", cursor: null },
+            nodes,
+            token,
+            options,
+          ),
         );
         await assertFleetLookups(authority, lookups);
         await this.authorize(workspaceId);
@@ -370,11 +392,13 @@ export class FleetReconciliationService {
           names.length &&
           nodeReads.read.state === "observed" &&
           !nodeReads.retryAt
-            ? await collectFleetDiscovery(
-                { kind: "enrolled", cursor: null },
-                names,
-                token,
-                options,
+            ? authority.restrictProviderResult(
+                await collectFleetDiscovery(
+                  { kind: "enrolled", cursor: null },
+                  names,
+                  token,
+                  options,
+                ),
               )
             : null;
         return {
@@ -537,6 +561,9 @@ export class FleetReconciliationService {
         beforeCount: sourceScope.length,
         afterCount,
       },
+      ...(authority.discoveryAuthority
+        ? { discoveryAuthority: authority.discoveryAuthority }
+        : {}),
       credentialHash: authority.credential.hash,
       credentialRef: authority.source.credential_ref,
       sourceConfiguration: authority.source.configuration_json,

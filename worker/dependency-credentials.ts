@@ -1,3 +1,5 @@
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
+import { githubAppCredentialReferences } from "./github-credential-descriptors";
 import { CAPABILITY } from "../shared/domain";
 import { PROVIDER_CREDENTIAL_KIND } from "../shared/provider-credentials";
 import { dependencyWriteAccessInput } from "../shared/dependency-changes";
@@ -59,23 +61,48 @@ export async function dependencyWriteAccess(
     workspaceId,
     PROVIDER_CREDENTIAL_KIND.REPOSITORY,
   );
-  const result = rows
-    .map((row) => describeProviderCredential(context, row))
-    .filter(
-      (item) =>
-        item.settings.providerKind === PROVIDER_CREDENTIAL_KIND.REPOSITORY &&
-        item.settings.scope.repositoryNames.some(
-          (name) => name.toLowerCase() === repository.toLowerCase(),
-        ),
-    )
-    .map((item) => ({
-      id: item.id,
-      revision: item.revision,
-      name: item.settings.name,
-      expiresAt: item.settings.expiresAt,
-      writable: item.settings.writable,
-      status: item.status,
-    }));
+  const apps = await githubAppCredentialReferences(context, workspaceId);
+  const result: import("../shared/dependency-changes").DependencyWriteAccess["credentials"] =
+    rows
+      .map((row) => describeProviderCredential(context, row))
+      .filter(
+        (item) =>
+          item.settings.providerKind === PROVIDER_CREDENTIAL_KIND.REPOSITORY &&
+          item.settings.scope.repositoryNames.some(
+            (name) => name.toLowerCase() === repository.toLowerCase(),
+          ),
+      )
+      .map((item) => ({
+        id: item.id,
+        revision: item.revision,
+        name: item.settings.name,
+        expiresAt: item.settings.expiresAt,
+        writable: item.settings.writable,
+        status: item.status,
+      }));
+  result.push(
+    ...apps
+      .filter(
+        (app) =>
+          app.capabilities.includes(GITHUB_CAPABILITY.MAINTENANCE) &&
+          app.repositoryNames?.some(
+            (name) => name.toLowerCase() === repository.toLowerCase(),
+          ),
+      )
+      .map((app) => ({
+        id: app.id,
+        revision: app.revision,
+        name: app.name,
+        expiresAt: app.expiresAt,
+        writable: true,
+        kind: "app" as const,
+        status: app.available
+          ? ("available" as const)
+          : app.expiresAt && Date.parse(app.expiresAt) <= context.now()
+            ? ("expired" as const)
+            : ("unavailable" as const),
+      })),
+  );
   await authorizeHooks(context, workspaceId, CAPABILITY.OPERATE);
   return { credentials: result };
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "./domain";
 import {
   githubContextInput,
   githubContextResultSchema,
@@ -6,7 +7,6 @@ import {
 } from "./github-context";
 import { githubBranchSchema } from "./github-evidence";
 import { dependencyDigestSchema } from "./dependency-report";
-import { providerCredentialIdSchema } from "./provider-credentials";
 import {
   dependencyChangeReviewInput,
   dependencyChangeApplyInput,
@@ -26,7 +26,7 @@ export const dependabotChangePlanInput = githubContextInput
   .extend({
     headSha: githubShaSchema,
     fileDigest: dependencyDigestSchema,
-    credentialId: providerCredentialIdSchema.optional(),
+    credentialId: idSchema.optional(),
     edits: dependabotEditsSchema,
   })
   .strict();

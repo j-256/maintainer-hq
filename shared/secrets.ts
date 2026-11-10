@@ -58,9 +58,7 @@ const opaqueName = z
   .max(255)
   .refine((name) => !/[\x00-\x1f\x7f]/.test(name));
 export const secretScopeSchema = z.discriminatedUnion("kind", [
-  z
-    .object({ kind: z.literal("organization"), name: opaqueName })
-    .strict(),
+  z.object({ kind: z.literal("organization"), name: opaqueName }).strict(),
   z.object({ kind: z.literal("repository") }).strict(),
   z.object({ kind: z.literal("environment"), name: opaqueName }).strict(),
   z.object({ kind: z.literal("worker") }).strict(),
@@ -203,7 +201,7 @@ export type SecretProviderReference = {
   resources: SecretResource[];
   available: boolean;
   writable: boolean;
-  expiresAt: string;
+  expiresAt: string | null;
   capabilities: SecretCapabilities;
 };
 export type SecretConnection = z.infer<typeof secretConnectionFields> & {

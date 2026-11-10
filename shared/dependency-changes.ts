@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { idSchema, workspaceInput } from "./domain";
-import { providerCredentialIdSchema } from "./provider-credentials";
+import { GITHUB_APP_LIMITS } from "./github-apps";
+import { PROVIDER_CREDENTIAL_LIMITS } from "./provider-credentials";
 import {
   githubContextInput,
   githubContextResultSchema,
@@ -44,7 +45,7 @@ export const dependencyChangeSchema = z.discriminatedUnion("kind", [
 export type DependencyChange = z.infer<typeof dependencyChangeSchema>;
 export const dependencyChangePlanInput = githubContextInput
   .extend({
-    credentialId: providerCredentialIdSchema.optional(),
+    credentialId: idSchema.optional(),
     pullNumber: z.number().int().positive().max(2147483647).optional(),
     headSha: githubShaSchema,
     policyDigest: dependencyDigestSchema,
@@ -61,23 +62,26 @@ export const dependencyWriteAccessSchema = z
       .array(
         z
           .object({
-            id: providerCredentialIdSchema,
+            id: idSchema,
             revision: z.number().int().positive(),
             name: z.string().max(80),
-            expiresAt: z.iso.datetime(),
+            expiresAt: z.iso.datetime().nullable(),
+            kind: z.enum(["app", "token"]).optional(),
             writable: z.boolean(),
             status: z.enum([
               "available",
               "expired",
               "retired",
               "key-unavailable",
+              "unavailable",
             ]),
           })
           .strict(),
       )
-      .max(20),
+      .max(PROVIDER_CREDENTIAL_LIMITS.WORKSPACE + GITHUB_APP_LIMITS.GRANTS),
   })
   .strict();
+export type DependencyWriteAccess = z.infer<typeof dependencyWriteAccessSchema>;
 export const dependencyWriterSchema =
   dependencyWriteAccessSchema.shape.credentials.element.pick({
     id: true,
