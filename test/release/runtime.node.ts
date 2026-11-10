@@ -38,11 +38,22 @@ test(
     for (const config of [
       join(workerOutput, "wrangler.json"),
       join(artifact, "wrangler.json"),
-    ])
+    ]) {
       assert.equal(
         JSON.parse(await readFile(config, "utf8")).upload_source_maps,
         false,
       );
+      assert.deepEqual(
+        JSON.parse(await readFile(config, "utf8")).observability,
+        {
+          enabled: true,
+          redact_query_string: true,
+          logs: { enabled: true, invocation_logs: true, persist: true },
+          traces: { enabled: false },
+          issues: { enabled: false },
+        },
+      );
+    }
     assert.equal(
       (await readdir(workerOutput)).some((name) => name.endsWith(".map")),
       false,

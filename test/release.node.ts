@@ -103,6 +103,31 @@ test("release config requires disabled source-map uploads", () => {
     );
 });
 
+test("release logs retain diagnostics while rejecting missing redaction and extra capture", () => {
+  const config = {
+    ...portableConfig(fixture),
+    main: "index.js",
+    rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
+  };
+  assert.deepEqual(config.observability, {
+    enabled: true,
+    redact_query_string: true,
+    logs: { enabled: true, invocation_logs: true, persist: true },
+    traces: { enabled: false },
+    issues: { enabled: false },
+  });
+  for (const observability of [
+    undefined,
+    { enabled: true },
+    { ...config.observability, redact_query_string: false },
+    { ...config.observability, enabled: false },
+    { ...config.observability, traces: { enabled: true } },
+    { ...config.observability, issues: { enabled: true } },
+    { ...config.observability, logs: { enabled: true, destinations: ["unreviewed"] } },
+  ])
+    assert.throws(() => verifyGeneratedConfig({ ...config, observability }, fixture));
+});
+
 test("private monitoring bindings are exact reviewed authority alongside hooks", () => {
   const enabled = releaseProfileSchema.parse({
     ...fixture,

@@ -19,6 +19,12 @@ API failures include a server-generated support reference. Browser and CLI messa
 
 Disabled sources, missing credentials, provider cooldowns, stale evidence, and overdue scheduling are distinct states. Schedule warnings use the workspace snapshot's server time and allow for bounded queue draining. A delay warning is a prompt to inspect progress, not proof that the collector is stuck. Browser closure does not stop hosted collection.
 
+## Telemetry privacy
+
+Production builds retain structured application and invocation logs while requiring `observability.redact_query_string: true`. Automatic traces and Issues capture are disabled, and the checked release contract rejects policy changes and extra destinations. Cloudflare documents query removal from request URLs in logs and traces in its [configuration reference](https://developers.cloudflare.com/cf/projects/config-explorer/), verified on 2026-11-10. This does not sanitize custom messages, exception text, headers, bodies, URL path segments or telemetry held by another service. Keep the application field allowlist in place and keep secret-bearing paths out of generic request logging.
+
+Before real GitHub App registration, read back the selected serving version's logging policy and exercise a non-secret synthetic callback marker. Inspect invocation and application log metadata, failure paths and every configured export for the marker. Confirm that status, correlation references and timings remain available. Review Access, WAF, proxy and request tracing separately; Worker redaction does not change those policies. Local artifact tests establish configuration integrity, not hosted metadata redaction. Restrict log readers and use the platform retention and sampling budget described below; neither sampling nor short retention makes secret capture acceptable.
+
 ## Find the corresponding logs
 
 Inspect the exact serving Worker with Cloudflare Fleet first. In Workers Observability, enumerate available fields, then filter the relevant time window by the Worker and one of these application fields:
