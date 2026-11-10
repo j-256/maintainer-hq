@@ -1,3 +1,4 @@
+import { handleGitHubAppLifecycle, reconcileGitHubAppAuthority } from "./github-app-events";
 import { HookHandoff } from "./hook-handoff";
 import { uploadGitHubAppMaterial } from "./github-app-private-input";
 import { renderGitHubAppManifest, completeGitHubAppManifest, githubAppManifestReturn, GITHUB_APP_MANIFEST_CALLBACK, GITHUB_APP_MANIFEST_FORM } from "./github-app-manifest";
@@ -114,10 +115,11 @@ export function createApplication(
 ) {
   return {
     async scheduled(_controller: ScheduledController, env: Env) {
-      const [cleanup, collection, hooks] = await Promise.allSettled([
+      const [cleanup, collection, hooks, apps] = await Promise.allSettled([
         reapSecretInputs(env),
         runGitHubScheduled(env),
         runHookCoverageScheduled(env),
+        reconcileGitHubAppAuthority(env, Date.now()),
       ]);
       if (cleanup.status === "rejected")
         emitDiagnostic({
@@ -127,7 +129,8 @@ export function createApplication(
       if (
         cleanup.status === "rejected" ||
         collection.status === "rejected" ||
-        hooks.status === "rejected"
+        hooks.status === "rejected" ||
+        apps.status === "rejected"
       ) {
         throw new Error(
           "Scheduled maintenance interrupted; inspect structured cleanup and collection diagnostics and durable receipts",
@@ -146,6 +149,8 @@ export function createApplication(
         url.pathname !== "/healthz"
       )
         return secureResponse(await env.ASSETS.fetch(request), true);
+      if (/^\/api\/github-apps\/events\/[^/]+$/.test(url.pathname))
+        return secureResponse(await handleGitHubAppLifecycle(request, env));
       let response: Response;
       const diagnostic = { operation: "request", started: performance.now() };
       const appManifestCallback = url.pathname === GITHUB_APP_MANIFEST_CALLBACK && request.method === "GET";

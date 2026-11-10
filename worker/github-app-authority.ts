@@ -129,9 +129,10 @@ export async function invalidateGitHubAppAuthority(
 ) {
   await context.db
     .prepare(
-      "UPDATE github_app_authority SET generation=generation+1,state='unknown',digest=NULL,observation_json=NULL,observed_at=NULL,valid_until=NULL,write_id=? WHERE registration_id=? AND (? IS NULL OR installation_id=?)",
+      "UPDATE github_app_authority SET generation=generation+1,state='unknown',digest=NULL,observation_json=NULL,observed_at=NULL,valid_until=NULL,invalidated_at=?,reconcile_after=NULL,write_id=? WHERE registration_id=? AND (? IS NULL OR installation_id=?)",
     )
     .bind(
+      new Date(context.now()).toISOString(),
       crypto.randomUUID(),
       registrationId,
       installationId ?? null,
@@ -420,7 +421,7 @@ async function verify(
     ).toISOString();
     const result = await context.db
       .prepare(
-        `UPDATE github_app_authority SET generation=?,state='allowed',registration_revision=?,key_revision=?,digest=?,observation_json=?,observed_at=?,valid_until=?,write_id=?
+        `UPDATE github_app_authority SET generation=?,state='allowed',registration_revision=?,key_revision=?,digest=?,observation_json=?,observed_at=?,valid_until=?,invalidated_at=NULL,write_id=?
       WHERE registration_id=? AND installation_id=? AND repository_id=? AND generation=?
       AND EXISTS(SELECT 1 FROM github_app_registrations WHERE id=? AND revision=? AND key_revision=? AND json_extract(metadata_json,'$.state')='active')
       AND EXISTS(SELECT 1 FROM github_app_grants WHERE id=? AND workspace_id=? AND revision=? AND state='active' AND (expires_at IS NULL OR expires_at>?))`,
@@ -457,7 +458,7 @@ async function verify(
       const observedAt = new Date(context.now()).toISOString();
       await context.db
         .prepare(
-          "UPDATE github_app_authority SET generation=generation+1,state='denied',digest=NULL,observation_json=NULL,observed_at=?,valid_until=?,write_id=? WHERE registration_id=? AND installation_id=? AND repository_id=? AND generation=?",
+          "UPDATE github_app_authority SET generation=generation+1,state='denied',digest=NULL,observation_json=NULL,observed_at=?,valid_until=?,invalidated_at=NULL,write_id=? WHERE registration_id=? AND installation_id=? AND repository_id=? AND generation=?",
         )
         .bind(
           observedAt,
