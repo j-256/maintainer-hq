@@ -97,4 +97,3 @@ BEGIN
     WHERE s.workspace_id=NEW.workspace_id AND s.source_id=NEW.source_id)
     WHERE workspace_id=NEW.workspace_id AND source_id=NEW.source_id AND resource_type=NEW.resource_type AND resource_id=NEW.resource_id;
 END;
-
