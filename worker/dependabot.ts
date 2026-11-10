@@ -9,7 +9,10 @@ import {
 } from "../shared/dependabot";
 import { CAPABILITY } from "../shared/domain";
 import { githubConfigurationSchema } from "../shared/github";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptors } from "./github-credential-descriptors";
+import { githubSourceCacheAuthority } from "./github-source-cache-authority";
+import { assertGitHubAuthorityFence } from "./github-credential-resolver";
+import type { GitHubAuthorityFence } from "./github-app-types";
 import { readGitHubContext } from "./github-context";
 import { inspectDependabotFile } from "./dependabot-client";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
@@ -20,11 +23,18 @@ import type { WorkspaceService } from "./service";
 export async function readRepositoryDependabot(
   context: WorkspaceService,
   input: unknown,
+  captureAuthority?: (
+    authority: Omit<
+      import("./github-app-types").GitHubCredentialLease,
+      "token"
+    >,
+  ) => void,
 ) {
   const { refresh, ...scope } = dependabotInspectionInput.parse(input);
   const attempt = { evidence: null as DependabotEvidence | null };
   const result = await readGitHubContext(context, scope, {
     kind: "dependabot",
+    captureAuthority,
     schema: dependabotEvidenceSchema,
     responseBytes: LIMITS.EVIDENCE_BYTES + 4096,
     cachedOnly: !refresh,
@@ -120,23 +130,16 @@ export async function listDependabotSchedules(
     context.db.prepare(totalsSql).bind(...totalsValues),
     context.db.prepare(pageSql).bind(...pageValues),
   ]);
-  const credentials = new Map<
-    string | null,
-    Awaited<ReturnType<typeof githubCredentialIdentity>>
-  >();
+  const credentials = await githubCredentialDescriptors(
+    context,
+    workspaceId,
+    (initial[1].results as Row[]).map((row) => row.credential_ref),
+  );
+  const fences: GitHubAuthorityFence[] = [];
   const rows = [];
   for (const row of initial[1].results as Row[]) {
     let result: DependabotResult | null = null;
     if (row.source_id) {
-      if (!credentials.has(row.credential_ref))
-        credentials.set(
-          row.credential_ref,
-          await githubCredentialIdentity(
-            context.env,
-            workspaceId,
-            row.credential_ref,
-          ),
-        );
       const credential = credentials.get(row.credential_ref);
       result = {
         repository: {
@@ -151,7 +154,7 @@ export async function listDependabotSchedules(
         },
         state: !row.enabled
           ? "disabled"
-          : !credential
+          : !credential?.available
             ? "not_configured"
             : "waiting",
         nextReadAt: null,
@@ -164,11 +167,22 @@ export async function listDependabotSchedules(
           ).success
         )
           result.state = "not_configured";
+        const authority =
+          credential?.available && result.state === "waiting"
+            ? await githubSourceCacheAuthority(
+                context,
+                workspaceId,
+                memberRevision,
+                row,
+                credential,
+              )
+            : null;
+        if (authority?.fence) fences.push(authority.fence);
         const identity = JSON.stringify([
           row.full_name,
           row.repository_revision,
           row.source_revision,
-          credential?.hash ?? null,
+          authority?.authorityIdentity ?? null,
         ]);
         if (result.state === "waiting" && identity === row.identity) {
           result.nextReadAt = row.next_read_at;
@@ -229,6 +243,20 @@ export async function listDependabotSchedules(
       "Schedule inventory or access changed. Reload schedules",
       409,
     );
+  const latestCredentials = await githubCredentialDescriptors(
+    context,
+    workspaceId,
+    [...credentials.keys()],
+  );
+  for (const [reference, original] of credentials) {
+    if (latestCredentials.get(reference)?.hash !== original?.hash)
+      throw new DomainError(
+        "conflict",
+        "GitHub access changed. Reload repository maintenance.",
+        409,
+      );
+  }
+  for (const fence of fences) await assertGitHubAuthorityFence(context, fence);
   const totals = final[1].results[0] as { total: number; revision: number };
   const result = dependabotPageSchema.parse({
     page,

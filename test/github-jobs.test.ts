@@ -241,8 +241,8 @@ describe("Workspace-owned GitHub sources", () => {
   it("restricts credential references to owners and the selected workspace without exposing custody", async () => {
     expect(await service.githubCredentials({ workspaceId: WORKSPACE })).toEqual(
       [
-        { id: "personal", name: "Personal GitHub" },
-        { id: "alias", name: "Same provider grant" },
+        { id: "personal", name: "Personal GitHub", kind: "token", capabilities: ["collection"], available: true },
+        { id: "alias", name: "Same provider grant", kind: "token", capabilities: ["collection"], available: true },
       ],
     );
     const snapshots = JSON.stringify(
@@ -669,7 +669,7 @@ describe("Durable GitHub refresh work", () => {
     await runGitHubScheduled(measured, { now: () => now, fetch });
     expect(fetch).not.toHaveBeenCalled();
     expect(sql.count()).toBe(9);
-    expect(observed.every((statements) => statements <= 300)).toBe(true);
+    expect(Math.max(...observed)).toBeLessThanOrEqual(300);
     now += 2 * LIMITS.MINUTE_MS;
     await runGitHubScheduled(measured, { now: () => now, fetch });
     expect(await service.githubRefreshes(sourceInput)).toHaveLength(2);

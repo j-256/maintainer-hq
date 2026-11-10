@@ -10,7 +10,10 @@ import {
 } from "../shared/dependencies";
 import { CAPABILITY } from "../shared/domain";
 import { githubConfigurationSchema } from "../shared/github";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptors } from "./github-credential-descriptors";
+import { githubSourceCacheAuthority } from "./github-source-cache-authority";
+import { assertGitHubAuthorityFence } from "./github-credential-resolver";
+import type { GitHubAuthorityFence } from "./github-app-types";
 import { readGitHubContext } from "./github-context";
 import { collectDependencies } from "./dependency-client";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
@@ -21,12 +24,19 @@ import { emitDiagnostic } from "./diagnostics";
 export async function readRepositoryDependencies(
   context: WorkspaceService,
   input: unknown,
+  captureAuthority?: (
+    authority: Omit<
+      import("./github-app-types").GitHubCredentialLease,
+      "token"
+    >,
+  ) => void,
 ) {
   const { refresh, checkUpstream, pullNumber, ...scope } =
     dependencyInspectionInput.parse(input);
   const attempt = { evidence: null as DependencyEvidence | null };
   const result = await readGitHubContext(context, scope, {
     kind: pullNumber ? "dependencyCandidates" : "dependencies",
+    captureAuthority,
     identitySuffix: pullNumber,
     schema: dependencyEvidenceSchema,
     responseBytes: DEPENDENCIES_LIMITS.RESPONSE_BYTES,
@@ -141,23 +151,16 @@ export async function listDependencies(
     result_json: string | null;
     next_read_at: string | null;
   };
-  const credentials = new Map<
-    string | null,
-    Awaited<ReturnType<typeof githubCredentialIdentity>>
-  >();
+  const credentials = await githubCredentialDescriptors(
+    context,
+    workspaceId,
+    (result[1].results as Row[]).map((row) => row.credential_ref),
+  );
+  const fences: GitHubAuthorityFence[] = [];
   const rows = [];
   for (const row of result[1].results as Row[]) {
     let cached: DependencyResult | null = null;
     if (row.source_id) {
-      if (!credentials.has(row.credential_ref))
-        credentials.set(
-          row.credential_ref,
-          await githubCredentialIdentity(
-            context.env,
-            workspaceId,
-            row.credential_ref,
-          ),
-        );
       const credential = credentials.get(row.credential_ref);
       cached = {
         repository: {
@@ -172,7 +175,7 @@ export async function listDependencies(
         },
         state: !row.enabled
           ? "disabled"
-          : !credential
+          : !credential?.available
             ? "not_configured"
             : "waiting",
         nextReadAt: null,
@@ -185,11 +188,22 @@ export async function listDependencies(
           ).success
         )
           cached.state = "not_configured";
+        const authority =
+          credential?.available && cached.state === "waiting"
+            ? await githubSourceCacheAuthority(
+                context,
+                workspaceId,
+                memberRevision,
+                row,
+                credential,
+              )
+            : null;
+        if (authority?.fence) fences.push(authority.fence);
         const identity = JSON.stringify([
           row.full_name,
           row.repository_revision,
           row.source_revision,
-          credential?.hash ?? null,
+          authority?.authorityIdentity ?? null,
         ]);
         if (
           cached.state === "waiting" &&
@@ -230,19 +244,20 @@ export async function listDependencies(
       "Workspace access changed. Reload dependency maintenance.",
       409,
     );
+  const latestCredentials = await githubCredentialDescriptors(
+    context,
+    workspaceId,
+    [...credentials.keys()],
+  );
   for (const [reference, original] of credentials) {
-    const current = await githubCredentialIdentity(
-      context.env,
-      workspaceId,
-      reference,
-    );
-    if (current?.hash !== original?.hash)
+    if (latestCredentials.get(reference)?.hash !== original?.hash)
       throw new DomainError(
         "conflict",
-        "GitHub access changed. Reload dependency maintenance.",
+        "GitHub access changed. Reload repository maintenance.",
         409,
       );
   }
+  for (const fence of fences) await assertGitHubAuthorityFence(context, fence);
   return dependenciesPageSchema.parse({
     page,
     total: Number((result[0].results[0] as { total: number }).total),

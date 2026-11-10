@@ -1,9 +1,24 @@
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
 import type { z } from "zod";
 import { CAPABILITY, type Capability } from "../shared/domain";
 import { githubConfigurationSchema } from "../shared/github";
 import { GITHUB_CONTEXT_LIMITS as LIMITS } from "../shared/github-context";
-import { FLEET_DISCOVERY_LIMITS } from "../shared/fleet-discovery";
-import { githubCredentialIdentity } from "./github-credentials";
+import {
+  type FleetProviderResult,
+  FLEET_DISCOVERY_LIMITS,
+} from "../shared/fleet-discovery";
+import {
+  githubCredentialDescriptor,
+  type GitHubCredentialDescriptor,
+} from "./github-credential-descriptors";
+import {
+  resolveGitHubDiscoveryAuthority,
+  resolveGitHubDiscoveryToken,
+  resolveGitHubManualCollectionToken,
+  assertGitHubDiscoveryAuthority,
+  githubDiscoveryAuthoritySql,
+  type GitHubDiscoveryAuthority,
+} from "./github-credential-resolver";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
@@ -15,7 +30,7 @@ type Source = {
   credential_ref: string | null;
   configuration_json: string;
 };
-type Credential = Awaited<ReturnType<typeof githubCredentialIdentity>>;
+type Credential = GitHubCredentialDescriptor | null;
 type Cache = {
   identity: string;
   lease_id: string | null;
@@ -80,6 +95,7 @@ export async function authorizeFleet(
 }
 
 export class FleetAuthority {
+  discoveryAuthority: GitHubDiscoveryAuthority | null = null;
   private constructor(
     readonly context: WorkspaceService,
     readonly workspaceId: string,
@@ -123,8 +139,8 @@ export class FleetAuthority {
         "GitHub source settings changed. Reload the source before reviewing enrollment.",
         409,
       );
-    const credential = await githubCredentialIdentity(
-      context.env,
+    const credential = await githubCredentialDescriptor(
+      context,
       workspaceId,
       source.credential_ref,
     );
@@ -142,10 +158,11 @@ export class FleetAuthority {
   get configured() {
     try {
       return Boolean(
-        this.credential &&
-          githubConfigurationSchema.safeParse(
-            JSON.parse(this.source.configuration_json),
-          ).success,
+        this.credential?.available &&
+        this.credential.capabilities.includes(GITHUB_CAPABILITY.COLLECTION) &&
+        githubConfigurationSchema.safeParse(
+          JSON.parse(this.source.configuration_json),
+        ).success,
       );
     } catch {
       return false;
@@ -158,8 +175,11 @@ export class FleetAuthority {
       CAPABILITY.ADMIN,
       this.memberRevision,
     );
+    const observed = this.discoveryAuthority
+      ? githubDiscoveryAuthoritySql(this.discoveryAuthority)
+      : { sql: "1", values: [] };
     return {
-      sql: `EXISTS (${SOURCE} AND revision=? AND enabled=? AND credential_ref IS ? AND configuration_json=? AND ${actor.sql})`,
+      sql: `EXISTS (${SOURCE} AND revision=? AND enabled=? AND credential_ref IS ? AND configuration_json=? AND ${actor.sql}) AND ${observed.sql}`,
       values: [
         this.workspaceId,
         this.sourceId,
@@ -168,8 +188,86 @@ export class FleetAuthority {
         this.source.credential_ref,
         this.source.configuration_json,
         ...actor.values,
+        ...observed.values,
       ],
     };
+  }
+  async prepareRead() {
+    if (this.credential?.kind !== "app") return;
+    this.discoveryAuthority = await resolveGitHubDiscoveryAuthority(
+      this.context,
+      {
+        workspaceId: this.workspaceId,
+        reference: this.credential.reference,
+        connectionId: this.sourceId,
+        connectionRevision: this.source.revision,
+        binding: {
+          kind: "actor",
+          subject: this.context.principal.subject,
+          tokenId: this.context.principal.tokenId ?? null,
+          membershipRevision: this.memberRevision,
+        },
+      },
+    );
+  }
+  restrictProviderResult(result: FleetProviderResult): FleetProviderResult {
+    if (!this.discoveryAuthority) return result;
+    const names = new Set(
+      this.discoveryAuthority.repositories.map((repository) =>
+        repository.fullName.toLowerCase(),
+      ),
+    );
+    let denied = false;
+    const records = result.records.flatMap((record) => {
+      if (
+        (!record.lookupFullName ||
+          names.has(record.lookupFullName.toLowerCase())) &&
+        (!record.repository ||
+          names.has(record.repository.fullName.toLowerCase()))
+      )
+        return [record];
+      denied = true;
+      return record.repositoryId === null
+        ? []
+        : [
+            {
+              ...record,
+              repository: null,
+              read: {
+                state: "unavailable" as const,
+                reason: "permission" as const,
+              },
+            },
+          ];
+    });
+    return {
+      ...result,
+      records,
+      total: result.owner ? null : result.total,
+      read: denied
+        ? {
+            state: records.length ? "limited" : "unavailable",
+            reason: "permission",
+          }
+        : result.read,
+    };
+  }
+  async privateToken() {
+    if (!this.credential || !this.source.credential_ref)
+      throw new DomainError(
+        "not_configured",
+        "Choose a GitHub credential.",
+        409,
+      );
+    await this.assertLive();
+    return this.discoveryAuthority
+      ? resolveGitHubDiscoveryToken(this.context, this.discoveryAuthority)
+      : resolveGitHubManualCollectionToken(
+          this.context,
+          this.workspaceId,
+          this.source.credential_ref,
+          this.credential.hash,
+        );
   }
   async assertLive() {
     const { context, workspaceId, sourceId } = this;
@@ -192,12 +290,14 @@ export class FleetAuthority {
         409,
       );
     }
-    const credential = await githubCredentialIdentity(
-      context.env,
+    const credential = await githubCredentialDescriptor(
+      context,
       workspaceId,
       latest.credential_ref,
     );
     assertSession(context);
+    if (this.discoveryAuthority)
+      await assertGitHubDiscoveryAuthority(context, this.discoveryAuthority);
     if (
       JSON.stringify(latest) !== JSON.stringify(this.source) ||
       credential?.hash !== this.credential?.hash
@@ -251,9 +351,13 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
   if (!authority.configured || !authority.credential)
     return finish("not_configured", null, null);
   const credential = authority.credential;
+  await authority.prepareRead();
+  const authorityIdentity =
+    authority.discoveryAuthority?.authorityIdentity ?? credential.hash;
+  const quotaKey = credential.quotaKey;
   const identity = JSON.stringify([
     authority.source.revision,
-    credential.hash,
+    authorityIdentity,
     key,
   ]);
   if (
@@ -285,7 +389,7 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
     .prepare(
       "SELECT retry_at FROM github_cooldowns WHERE credential_hash=? AND retry_at>?",
     )
-    .bind(credential.hash, timestamp)
+    .bind(quotaKey, timestamp)
     .first<string>("retry_at");
   if (cooldown)
     return finish(
@@ -307,7 +411,7 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
         `INSERT INTO github_context_budgets(credential_hash,window_start,reads) SELECT ?,?,0 WHERE ${guard.sql}
       ON CONFLICT(credential_hash) DO UPDATE SET window_start=excluded.window_start,reads=0 WHERE github_context_budgets.window_start<excluded.window_start`,
       )
-      .bind(credential.hash, windowStart, ...guard.values),
+      .bind(quotaKey, windowStart, ...guard.values),
     db
       .prepare(
         `INSERT INTO github_discovery_cache(workspace_id,source_id,identity,lease_id,lease_until,next_read_at,result_json)
@@ -324,10 +428,10 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
         leaseUntil,
         nextReadAt,
         ...guard.values,
-        credential.hash,
+        quotaKey,
         windowStart,
         LIMITS.READS_PER_WINDOW,
-        credential.hash,
+        quotaKey,
         timestamp,
         timestamp,
         timestamp,
@@ -336,7 +440,7 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
       .prepare(
         `UPDATE github_context_budgets SET reads=reads+1 WHERE credential_hash=? AND window_start=? AND EXISTS(${CACHE} AND lease_id=?)`,
       )
-      .bind(credential.hash, windowStart, ...keys, lease),
+      .bind(quotaKey, windowStart, ...keys, lease),
   ]);
   const claimed = await db
     .prepare(CACHE)
@@ -362,7 +466,7 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
   }
   await validate();
   await authority.assertLive();
-  const evidence = schema.parse(await collect(credential.token));
+  const evidence = schema.parse(await collect(await authority.privateToken()));
   const stored = JSON.stringify(evidence);
   if (
     new TextEncoder().encode(stored).byteLength >
@@ -387,7 +491,7 @@ export async function readFleetProvider<T extends { retryAt: string | null }>(
           `INSERT INTO github_cooldowns(credential_hash,retry_at) SELECT ?,? WHERE ${guard.sql}
       ON CONFLICT(credential_hash) DO UPDATE SET retry_at=MAX(github_cooldowns.retry_at,excluded.retry_at)`,
         )
-        .bind(credential.hash, evidence.retryAt, ...guard.values),
+        .bind(quotaKey, evidence.retryAt, ...guard.values),
     );
   statements.push(
     db

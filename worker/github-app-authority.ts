@@ -167,9 +167,9 @@ export async function readGitHubAppAuthorityScope(
 export async function verifyGitHubAppAuthority(
   context: GitHubCredentialContext,
   scope: GitHubAppAuthorityScope,
-  freshness: "bounded_read" | "fresh_effect",
+  freshness: "bounded_read" | "fresh_effect" | "cached_only",
 ): Promise<GitHubAuthorityObservation> {
-  if (freshness === "fresh_effect") return verify(context, scope, freshness);
+  if (freshness !== "bounded_read") return verify(context, scope, freshness);
   let pending = checks.get(context.env);
   if (!pending) {
     pending = new Map();
@@ -192,10 +192,64 @@ export async function verifyGitHubAppAuthority(
     if (pending.get(key) === promise) pending.delete(key);
   }
 }
+type AuthorityBundle = {
+  installation: GitHubInstallationMetadata;
+  token: Awaited<ReturnType<GitHubAppClient["mintToken"]>>;
+};
+type AuthorityPreparation = {
+  prepare: () => Promise<AuthorityBundle>;
+  requests: () => number;
+};
+export async function verifyGitHubAppAuthoritySet(
+  context: GitHubCredentialContext,
+  scopes: GitHubAppAuthorityScope[],
+) {
+  const first = scopes[0];
+  if (
+    !first ||
+    scopes.length > LIMITS.REPOSITORIES ||
+    new Set(scopes.map((scope) => scope.repositoryId)).size !== scopes.length ||
+    scopes.some(
+      (scope) =>
+        scope.workspaceId !== first.workspaceId ||
+        scope.registrationId !== first.registrationId ||
+        scope.installationId !== first.installationId ||
+        scope.grantId !== first.grantId ||
+        scope.grantRevision !== first.grantRevision,
+    )
+  )
+    githubAppConflict();
+  let bundle: AuthorityBundle | null = null;
+  const prepared = { client: null as GitHubAppClient | null };
+  const prepare = async (): Promise<AuthorityBundle> => {
+    if (bundle) return bundle;
+    const registration = await readGitHubAppAuthorityScope(context, first);
+    const client = await openGitHubAppClient(context, registration);
+    prepared.client = client;
+    const installation = await client.getInstallation(first.installationId);
+    const token = await client.mintToken({
+      installationId: first.installationId,
+      repositoryIds: scopes.map((scope) => scope.repositoryId),
+      permissions: { metadata: "read" },
+    });
+    bundle = { installation, token };
+    return bundle;
+  };
+  const observations: GitHubAuthorityObservation[] = [];
+  for (const scope of scopes)
+    observations.push(
+      await verify(context, scope, "bounded_read", {
+        prepare,
+        requests: () => prepared.client?.requests ?? 0,
+      }),
+    );
+  return observations;
+}
 async function verify(
   context: GitHubCredentialContext,
   scope: GitHubAppAuthorityScope,
-  freshness: "bounded_read" | "fresh_effect",
+  freshness: "bounded_read" | "fresh_effect" | "cached_only",
+  prepare?: AuthorityPreparation,
 ): Promise<GitHubAuthorityObservation> {
   const registration = await readGitHubAppAuthorityScope(context, scope);
   const metadata = githubAppMetadataSchema.parse(
@@ -211,24 +265,32 @@ async function verify(
     metadata.appId,
     scope.installationId,
   );
-  await assertGitHubAppCooldown(context, quotaKey);
   const keys = [scope.registrationId, scope.installationId, scope.repositoryId];
-  await context.db
-    .prepare(
-      "INSERT OR IGNORE INTO github_app_authority(registration_id,installation_id,repository_id,state,write_id) VALUES (?,?,?,'unknown',?)",
-    )
-    .bind(...keys, crypto.randomUUID())
-    .run();
+  if (freshness !== "cached_only")
+    await context.db
+      .prepare(
+        "INSERT OR IGNORE INTO github_app_authority(registration_id,installation_id,repository_id,state,write_id) VALUES (?,?,?,'unknown',?)",
+      )
+      .bind(...keys, crypto.randomUUID())
+      .run();
   const original = await context.db
     .prepare(
       "SELECT registration_revision,key_revision,generation,state,digest,observation_json,observed_at,valid_until FROM github_app_authority WHERE registration_id=? AND installation_id=? AND repository_id=?",
     )
     .bind(...keys)
     .first<AuthorityRow>();
-  if (!original) githubAppConflict();
+  if (!original) {
+    if (freshness === "cached_only")
+      throw new DomainError(
+        "github_app_authority_unverified",
+        "Refresh this repository to verify its App authority before using cached evidence.",
+        409,
+      );
+    githubAppConflict();
+  }
   const now = new Date(context.now()).toISOString();
   if (
-    freshness === "bounded_read" &&
+    freshness !== "fresh_effect" &&
     original.registration_revision === registration.revision &&
     original.key_revision === registration.key_revision &&
     original.valid_until &&
@@ -266,9 +328,17 @@ async function verify(
         };
     }
   }
+  if (freshness === "cached_only")
+    throw new DomainError(
+      "github_app_authority_unverified",
+      "Refresh this repository to verify its App authority before using cached evidence.",
+      409,
+    );
+  await assertGitHubAppCooldown(context, quotaKey);
   const writeId = crypto.randomUUID();
   const started = performance.now();
   let client: GitHubAppClient | null = null;
+  const startingRequests = prepare?.requests() ?? 0;
   const diagnostic = (
     state: "verified" | "denied" | "limited" | "conflict" | "unavailable",
     generation: number,
@@ -285,26 +355,33 @@ async function verify(
       freshness,
       state,
       generation,
-      requests: client?.requests ?? 0,
+      requests: prepare
+        ? prepare.requests() - startingRequests
+        : (client?.requests ?? 0),
       code,
       elapsedMs: Math.max(0, Math.round(performance.now() - started)),
     });
   try {
-    client = await openGitHubAppClient(context, registration);
-    const installation = await client.getInstallation(scope.installationId);
+    const bundle = prepare ? await prepare.prepare() : null;
+    if (!bundle) client = await openGitHubAppClient(context, registration);
+    const installation =
+      bundle?.installation ??
+      (await client!.getInstallation(scope.installationId));
     if (installation.suspendedAt)
       throw new GitHubAppProviderError(
         "github_app_denied",
         "The selected GitHub installation is suspended.",
         403,
       );
-    const token = await client.mintToken({
-      installationId: scope.installationId,
-      repositoryIds: [scope.repositoryId],
-      permissions: { metadata: "read" },
-    });
+    const token =
+      bundle?.token ??
+      (await client!.mintToken({
+        installationId: scope.installationId,
+        repositoryIds: [scope.repositoryId],
+        permissions: { metadata: "read" },
+      }));
     const repository = githubAppRepositoryIdentitySchema.parse(
-      token.repositories[0],
+      token.repositories.find((value) => value.id === scope.repositoryId),
     );
     if (
       !expected ||

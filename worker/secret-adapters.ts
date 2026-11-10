@@ -14,9 +14,7 @@ import {
   type SecretWriteResult,
 } from "../shared/secrets";
 import type { WorkspaceService } from "./service";
-import type {
-  ManagedProviderSnapshot,
-} from "../shared/managed-configurations";
+import type { ManagedProviderSnapshot } from "../shared/managed-configurations";
 
 export const secretResourceBindingSchema = z
   .object({
@@ -43,6 +41,7 @@ export function describeSecretResource(binding: SecretResourceBinding) {
 export interface ConnectedSecretProvider {
   identity: string;
   writable: boolean;
+  authorityGuard?: () => { sql: string; values: unknown[] };
   selectResources(ids: string[]): Promise<SecretResourceBinding[]>;
   checkResources(resources: SecretResourceBinding[]): Promise<void>;
   scopes(resource: SecretResourceBinding, page: number): Promise<SecretScopes>;
@@ -111,5 +110,6 @@ export interface SecretAdapter {
     context: WorkspaceService,
     workspaceId: string,
     reference: string,
+    connection?: { id: string; revision: number },
   ): Promise<ConnectedSecretProvider>;
 }

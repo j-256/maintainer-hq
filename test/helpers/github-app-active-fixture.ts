@@ -1,3 +1,7 @@
+import type {
+  GitHubCapability,
+  GitHubAppPermissions,
+} from "../../shared/github-apps";
 import { DEFAULT_EXPECTATIONS } from "../../shared/domain";
 import { GitHubApps } from "../../worker/github-app-registrations";
 import { sealGitHubAppMaterial } from "../../worker/github-app-crypto";
@@ -41,9 +45,29 @@ export async function activateGitHubAppFixture(
   fixture: GitHubAppFixture,
   workspaceId = "alpha",
   grantId = "grant-a",
+  options: {
+    capabilities?: GitHubCapability[];
+    permissions?: GitHubAppPermissions;
+  } = {},
 ) {
   if (!(await new GitHubApps(fixture.operator).registration("app-a"))) {
-    const review = await fixture.plan();
+    const review = options.capabilities
+      ? await fixture.operator.githubAppRegistrationPlan({
+          workspaceId: "administration",
+          registrationId: "app-a",
+          revision: 0,
+          change: {
+            kind: "save",
+            fields: {
+              name: "Repository operator",
+              appId: 42,
+              visibility: "public",
+              capabilities: options.capabilities,
+            },
+            replaceKey: true,
+          },
+        })
+      : await fixture.plan();
     const key = await githubAppTestKey();
     const encrypted = await sealGitHubAppMaterial(
       {
@@ -69,7 +93,8 @@ export async function activateGitHubAppFixture(
           name: "Upstream App",
           slug: "repository-operator",
           account: appInstallationFixture.account,
-          permissions: appInstallationFixture.permissions,
+          permissions:
+            options.permissions ?? appInstallationFixture.permissions,
         },
         fingerprint: key.fingerprint,
         privateKey: { materialId: "signing-key", encrypted },
@@ -84,7 +109,7 @@ export async function activateGitHubAppFixture(
     grantId,
     revision: 0,
     repositoryIds: [101],
-    capabilities: ["collection"],
+    capabilities: options.capabilities ?? ["collection"],
   });
   const owner = fixture.as({
     subject: workspaceId === "alpha" ? "owner" : "other",

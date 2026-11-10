@@ -49,7 +49,7 @@ export function githubActorGuard(
 export const GITHUB_JOB_AUTHORITY_SQL = [
   "(j.trigger = 'scheduled' OR EXISTS (SELECT 1 FROM members m",
   "WHERE m.workspace_id = j.workspace_id AND m.subject = j.actor_subject",
-  "AND m.role IN ('owner', 'operator') AND (j.actor_token_id IS NULL OR EXISTS",
+  "AND m.role IN ('owner', 'operator') AND (j.actor_member_revision IS NULL OR m.revision=j.actor_member_revision) AND (j.actor_token_id IS NULL OR EXISTS",
   "(SELECT 1 FROM credentials c WHERE c.id = j.actor_token_id",
   "AND c.workspace_id = j.workspace_id AND c.owner_subject = j.actor_subject",
   "AND c.revoked_at IS NULL AND c.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",

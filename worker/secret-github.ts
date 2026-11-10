@@ -106,8 +106,13 @@ export const githubSecretAdapter: SecretAdapter = {
       }),
     );
   },
-  async connect(context, workspaceId, reference) {
-    const provider = await githubCredential(context, workspaceId, reference);
+  async connect(context, workspaceId, reference, connection) {
+    const provider = await githubCredential(
+      context,
+      workspaceId,
+      reference,
+      connection,
+    );
     async function local(resource: SecretResourceBinding) {
       const repository = await context.repository({
         workspaceId,
@@ -158,6 +163,9 @@ export const githubSecretAdapter: SecretAdapter = {
     }
     return {
       identity: provider.identity,
+      ...("authorityGuard" in provider
+        ? { authorityGuard: provider.authorityGuard }
+        : {}),
       writable: provider.descriptor.writable,
       selectResources,
       async checkResources(resources) {
@@ -388,7 +396,10 @@ export const githubSecretAdapter: SecretAdapter = {
         const environmentIdentity =
           scope.kind !== "environment"
             ? null
-            : await provider.client.environment(repository.fullName, scope.name);
+            : await provider.client.environment(
+                repository.fullName,
+                scope.name,
+              );
         const organizationIdentity =
           scope.kind === "organization" ? organization(identity, scope) : null;
         const result = await provider.client.configurationInventory(

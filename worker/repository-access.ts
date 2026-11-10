@@ -15,7 +15,10 @@ import {
   type RepositoryAccess,
 } from "../shared/repository-access";
 import { SOURCE_LIMITS } from "../shared/sources";
-import { githubCredential } from "./github-credentials";
+import {
+  githubCredentialDescriptors,
+  githubCredentialCoversRepository,
+} from "./github-credential-descriptors";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import { DomainError } from "./errors";
 import type { WorkspaceService } from "./service";
@@ -100,6 +103,19 @@ export async function repositoryAccess(
       .array(sourceRow)
       .max(SOURCE_LIMITS.SOURCES)
       .parse(JSON.parse(sources));
+    const credentials = await githubCredentialDescriptors(
+      context,
+      workspaceId,
+      enrolled.map((source) => source.credentialRef),
+    );
+    const latestMemberRevision = await authorizeHooks(context, workspaceId);
+    checkExpiry();
+    if (latestMemberRevision !== memberRevision)
+      throw new DomainError(
+        "conflict",
+        "Workspace access changed. Check access again.",
+        409,
+      );
     const liveScopes =
       scopes === null
         ? ROLE_CAPABILITIES[role]
@@ -133,10 +149,9 @@ export async function repositoryAccess(
             revision: source.revision,
             enabled: Boolean(source.enabled),
             configurationValid,
-            credential: githubCredential(
-              context.env,
-              workspaceId,
-              source.credentialRef,
+            credential: githubCredentialCoversRepository(
+              credentials.get(source.credentialRef),
+              repository.fullName,
             )
               ? "configured"
               : "unavailable",

@@ -89,6 +89,34 @@ describe("scoped App token resolution", () => {
     expect(second.quotaKey).toBe(beta.quotaKey);
     expect(second.fence).toEqual(first.fence);
   });
+  it("shares provider identity across live readers while fencing each membership independently", async () => {
+    const first = await resolve();
+    await fixture.runtime.HQ_DB.prepare(
+      "INSERT INTO members(workspace_id,subject,display_name,role) VALUES ('alpha','reader','Reader','viewer')",
+    ).run();
+    const reader = fixture.as({ subject: "reader", displayName: "Reader" });
+    const second = await resolveGitHubCredential(reader, {
+      ...request,
+      binding: {
+        kind: "actor",
+        subject: "reader",
+        tokenId: null,
+        membershipRevision: 1,
+      },
+    });
+    expect(second.authorityIdentity).toBe(first.authorityIdentity);
+    expect(second.token).toBe(first.token);
+    expect(second.fence.binding).not.toEqual(first.fence.binding);
+    await fixture.runtime.HQ_DB.prepare(
+      "UPDATE members SET revision=revision+1 WHERE workspace_id='alpha' AND subject='owner'",
+    ).run();
+    await expect(
+      assertGitHubAuthorityFence(fixture.operator, first.fence),
+    ).rejects.toMatchObject({ code: "github_app_conflict" });
+    await expect(
+      assertGitHubAuthorityFence(reader, second.fence),
+    ).resolves.toBeUndefined();
+  });
   it("allows one explicit remint without changing authority or replaying a provider operation", async () => {
     const first = await resolve();
     evictGitHubAppToken(fixture.operator, first);
@@ -164,6 +192,47 @@ describe("scoped App token resolution", () => {
     expect(lease.observedAuthorityGeneration).toBeNull();
     expect(provider).not.toHaveBeenCalled();
   });
+  it("preserves existing collection token reference names that resemble another credential namespace", async () => {
+    fixture.runtime.GITHUB_CREDENTIALS = JSON.stringify({
+      "managed-personal": {
+        workspaceId: "alpha",
+        name: "Manual source",
+        token: "synthetic-manual-source-token",
+      },
+    });
+    await fixture.runtime.HQ_DB.prepare(
+      "UPDATE connections SET credential_ref='managed-personal',revision=2 WHERE workspace_id='alpha' AND id='github'",
+    ).run();
+    const result = await resolveGitHubCredential(fixture.operator, {
+      ...request,
+      reference: { kind: "token", reference: "managed-personal" },
+      connectionRevision: 2,
+    });
+    expect(result.fence.kind).toBe("token");
+    expect(result.token).toBe("synthetic-manual-source-token");
+    expect(provider).not.toHaveBeenCalled();
+  });
+  it.each(["before", "during"] as const)(
+    "reports exhausted execution budget %s protected key loading without provider I/O",
+    async (timing) => {
+      let reads = 0;
+      const remainingBudgetMs = () =>
+        timing === "before" || ++reads > 1 ? 0 : 8000;
+      await expect(
+        resolveGitHubCredential(
+          {
+            env: fixture.runtime,
+            db: fixture.runtime.HQ_DB,
+            now: () => fixture.clock.now,
+            principal: fixture.operator.principal,
+            remainingBudgetMs,
+          },
+          request,
+        ),
+      ).rejects.toMatchObject({ code: "github_app_budget_exhausted" });
+      expect(provider).not.toHaveBeenCalled();
+    },
+  );
   it("invalidates old leases and refuses fallback when replacement key material is missing", async () => {
     const first = await resolve();
     await fixture.runtime.HQ_DB.prepare(

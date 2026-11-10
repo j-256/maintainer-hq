@@ -1,11 +1,27 @@
 import {
   observationSchema,
+  CAPABILITY,
   LIMITS as WORKSPACE_LIMITS,
 } from "../shared/domain";
 import { GITHUB_REFRESH_LIMITS as LIMITS } from "../shared/github";
 import { GITHUB_JOB_AUTHORITY_SQL } from "./github-authority";
 import { collectGitHub, type GitHubCollection } from "./github-client";
-import { githubCredentialIdentity } from "./github-credentials";
+import {
+  githubCredentialDescriptor,
+  githubCredentialDescriptors,
+  manualGitHubCredentialDescriptor,
+} from "./github-credential-descriptors";
+import {
+  resolveGitHubCredential,
+  assertGitHubAuthorityFence,
+  githubAuthorityFenceSql,
+} from "./github-credential-resolver";
+import { githubAppPermissions, GITHUB_CAPABILITY } from "../shared/github-apps";
+import type {
+  GitHubCredentialContext,
+  GitHubCredentialLease,
+} from "./github-app-types";
+import { DomainError } from "./errors";
 import {
   githubJobAudit,
   readGitHubRefreshItems,
@@ -32,6 +48,13 @@ type Job = {
   source_id: string;
   credential_ref: string;
   credential_hash: string;
+  credential_kind: "token" | "app";
+  quota_key: string | null;
+  source_revision: number;
+  trigger: "manual" | "scheduled";
+  actor_subject: string;
+  actor_token_id: string | null;
+  actor_member_revision: number | null;
   created_at: string;
 };
 type Item = Job & {
@@ -73,6 +96,106 @@ class GitHubRunner {
   }
   timestamp() {
     return new Date(this.now()).toISOString();
+  }
+  private credentialContext(
+    remainingBudgetMs?: () => number,
+  ): GitHubCredentialContext {
+    return {
+      env: this.env,
+      db: this.db,
+      now: this.now,
+      fetch: this.options.fetch,
+      remainingBudgetMs,
+    };
+  }
+  private async itemCredential(item: Item, remainingBudgetMs: () => number) {
+    const context = this.credentialContext(remainingBudgetMs);
+    const descriptor =
+      item.credential_kind === "token"
+        ? await manualGitHubCredentialDescriptor(
+            context,
+            item.workspace_id,
+            item.credential_ref,
+          )
+        : await githubCredentialDescriptor(
+            context,
+            item.workspace_id,
+            item.credential_ref,
+          );
+    if (
+      !descriptor?.available ||
+      descriptor.hash !== item.credential_hash ||
+      descriptor.kind !== item.credential_kind ||
+      (item.quota_key !== null && item.quota_key !== descriptor.quotaKey)
+    )
+      throw new DomainError(
+        "github_app_conflict",
+        "The saved GitHub credential authority changed. Start a refresh using the reviewed source settings.",
+        409,
+      );
+    const memberRevision =
+      item.trigger === "scheduled"
+        ? null
+        : (item.actor_member_revision ??
+          (await this.db
+            .prepare(
+              "SELECT revision FROM members WHERE workspace_id=? AND subject=?",
+            )
+            .bind(item.workspace_id, item.actor_subject)
+            .first<number>("revision")));
+    if (item.trigger === "manual" && !memberRevision)
+      throw new DomainError(
+        "github_app_conflict",
+        "The original collection actor no longer has workspace access.",
+        409,
+      );
+    return resolveGitHubCredential(context, {
+      workspaceId: item.workspace_id,
+      reference: descriptor.reference,
+      repositoryId: item.repository_id,
+      repositoryFullName: item.full_name,
+      capability: GITHUB_CAPABILITY.COLLECTION,
+      connectionId: item.source_id,
+      connectionRevision: item.source_revision,
+      actorCapability: CAPABILITY.OPERATE,
+      binding:
+        item.trigger === "scheduled"
+          ? {
+              kind: "source",
+              sourceId: item.source_id,
+              sourceRevision: item.source_revision,
+              jobId: item.id,
+            }
+          : {
+              kind: "actor",
+              subject: item.actor_subject,
+              tokenId: item.actor_token_id,
+              membershipRevision: memberRevision!,
+            },
+      phase: "read",
+      optionalPermissions: githubAppPermissions([GITHUB_CAPABILITY.COLLECTION]),
+    });
+  }
+  private async failAuthority(item: Item, error: DomainError) {
+    const summary =
+      "GitHub authority could not be verified (" +
+      error.code +
+      "). Review this source's credential and installation scope before retrying.";
+    await this.db
+      .prepare(
+        "UPDATE github_refresh_items AS i SET status='failed',summary=?,updated_at=?,result_json=NULL,authority_json=NULL,lease_id=NULL,lease_until=NULL WHERE workspace_id=? AND refresh_id=? AND repository_id=? AND status='queued' AND " +
+          ITEM_VALID,
+      )
+      .bind(
+        summary,
+        this.timestamp(),
+        item.workspace_id,
+        item.id,
+        item.repository_id,
+        this.timestamp(),
+      )
+      .run();
+    await this.finish(item);
   }
   private async stop(
     job: Job,
@@ -120,19 +243,32 @@ class GitHubRunner {
     const jobs = (
       await this.db
         .prepare(
-          "SELECT workspace_id, id, source_id, credential_ref, credential_hash, created_at FROM github_refreshes WHERE status IN " +
+          "SELECT * FROM github_refreshes WHERE status IN " +
             ACTIVE +
             " ORDER BY created_at LIMIT ?",
         )
         .bind(LIMITS.RECOVERY_JOBS)
         .all<Job>()
     ).results;
-    for (const job of jobs) {
-      const credential = await githubCredentialIdentity(
-        this.env,
-        job.workspace_id,
-        job.credential_ref,
+    const catalogs = new Map<
+      string,
+      Awaited<ReturnType<typeof githubCredentialDescriptors>>
+    >();
+    for (const workspaceId of new Set(jobs.map((job) => job.workspace_id)))
+      catalogs.set(
+        workspaceId,
+        await githubCredentialDescriptors(
+          this.credentialContext(),
+          workspaceId,
+          jobs
+            .filter((job) => job.workspace_id === workspaceId)
+            .map((job) => job.credential_ref),
+        ),
       );
+    for (const job of jobs) {
+      const credential = catalogs
+        .get(job.workspace_id)
+        ?.get(job.credential_ref);
       const valid = await this.db
         .prepare(
           "SELECT 1 FROM github_refreshes j WHERE j.workspace_id = ? AND j.id = ? AND " +
@@ -140,7 +276,13 @@ class GitHubRunner {
         )
         .bind(job.workspace_id, job.id, this.timestamp())
         .first();
-      if (!valid || !credential || credential.hash !== job.credential_hash) {
+      if (
+        !valid ||
+        !credential?.available ||
+        credential.hash !== job.credential_hash ||
+        credential.kind !== job.credential_kind ||
+        (job.quota_key !== null && credential.quotaKey !== job.quota_key)
+      ) {
         await this.stop(
           job,
           "cancelled",
@@ -276,12 +418,12 @@ class GitHubRunner {
     return this.db
       .prepare(
         [
-          "SELECT j.workspace_id, j.id, j.source_id, j.credential_ref, j.credential_hash, j.created_at,",
+          "SELECT j.*,",
           "i.repository_id, i.full_name, s.freshness_minutes FROM github_refresh_items i",
           "JOIN github_refreshes j ON j.workspace_id = i.workspace_id AND j.id = i.refresh_id",
           "JOIN connections s ON s.workspace_id = j.workspace_id AND s.id = j.source_id",
           "WHERE i.status = 'queued' AND " + VALID_JOB,
-          "AND NOT EXISTS (SELECT 1 FROM github_cooldowns c WHERE c.credential_hash = j.credential_hash AND c.retry_at > ?)",
+          "AND NOT EXISTS (SELECT 1 FROM github_cooldowns c WHERE c.credential_hash = COALESCE(j.quota_key,j.credential_hash) AND c.retry_at > ?)",
           "AND NOT EXISTS (SELECT 1 FROM github_refresh_items running WHERE running.workspace_id = i.workspace_id AND running.refresh_id = i.refresh_id AND running.status = 'running')",
           "ORDER BY i.updated_at, j.created_at, i.repository_id LIMIT 1",
         ].join(" "),
@@ -289,12 +431,24 @@ class GitHubRunner {
       .bind(this.timestamp(), this.timestamp())
       .first<Item>();
   }
-  private async accept(item: Item, lease: string, result: GitHubCollection) {
-    const credential = await githubCredentialIdentity(
-      this.env,
-      item.workspace_id,
-      item.credential_ref,
-    );
+  private async accept(
+    item: Item,
+    lease: string,
+    result: GitHubCollection,
+    credentialLease: GitHubCredentialLease,
+  ) {
+    const credential =
+      item.credential_kind === "token"
+        ? await manualGitHubCredentialDescriptor(
+            this.credentialContext(),
+            item.workspace_id,
+            item.credential_ref,
+          )
+        : await githubCredentialDescriptor(
+            this.credentialContext(),
+            item.workspace_id,
+            item.credential_ref,
+          );
     if (!credential || credential.hash !== item.credential_hash) {
       await this.stop(
         item,
@@ -307,6 +461,27 @@ class GitHubRunner {
         capacityLimited: false,
       };
     }
+    try {
+      if (credentialLease.fence.kind === "app")
+        await assertGitHubAuthorityFence(
+          this.credentialContext(),
+          credentialLease.fence,
+        );
+    } catch (error) {
+      if (!(error instanceof DomainError)) throw error;
+      await this.stop(
+        item,
+        "cancelled",
+        "GitHub authority changed before evidence could be accepted. Review the saved scope before starting another refresh.",
+      );
+      return {
+        receiptRecorded: false,
+        evidenceStored: false,
+        capacityLimited: false,
+      };
+    }
+    const fence = githubAuthorityFenceSql(credentialLease.fence);
+    const authorityJson = JSON.stringify(credentialLease.fence);
     const now = this.timestamp();
     const evidence = observationSchema.parse({
       sourceId: item.source_id,
@@ -338,7 +513,9 @@ class GitHubRunner {
           "UPDATE github_refresh_items AS i SET status = ?, summary = ?, result_json = ?, observed_at = ?, updated_at = ?, changes_json = " +
             GITHUB_CHANGE_SQL +
             ", lease_until = NULL WHERE workspace_id = ? AND refresh_id = ? AND repository_id = ? AND status = 'running' AND lease_id = ? AND lease_until > ? AND " +
-            ITEM_VALID,
+            ITEM_VALID +
+            " AND authority_json=? AND " +
+            fence.sql,
         )
         .bind(
           result.status,
@@ -353,6 +530,8 @@ class GitHubRunner {
           lease,
           now,
           now,
+          authorityJson,
+          ...fence.values,
         ),
       this.db
         .prepare(
@@ -423,7 +602,7 @@ class GitHubRunner {
               .prepare(
                 "INSERT INTO github_cooldowns (credential_hash, retry_at) VALUES (?, ?) ON CONFLICT (credential_hash) DO UPDATE SET retry_at = max(retry_at, excluded.retry_at)",
               )
-              .bind(item.credential_hash, result.retryAt),
+              .bind(credentialLease.quotaKey, result.retryAt),
           ]
         : []),
     ]);
@@ -465,20 +644,31 @@ class GitHubRunner {
         }
         const item = await this.candidate();
         if (!item) break;
-        const credential = await githubCredentialIdentity(
-          this.env,
-          item.workspace_id,
-          item.credential_ref,
-        );
-        if (!credential || credential.hash !== item.credential_hash) {
-          await this.stop(
-            item,
-            "cancelled",
-            "The server-side GitHub credential changed. Start a new refresh.",
-          );
+        let credential: GitHubCredentialLease;
+        try {
+          credential = await this.itemCredential(item, remaining);
+        } catch (error) {
+          if (!(error instanceof DomainError)) throw error;
+          if (error.code === "github_app_rate_limited") break;
+          if (
+            error.code === "github_app_budget_exhausted" ||
+            error.code === "github_app_busy"
+          ) {
+            stopReason = "time_limit";
+            break;
+          }
+          if (error.code === "github_app_conflict")
+            await this.stop(
+              item,
+              "cancelled",
+              "The source, workspace access or GitHub credential authority changed. Start a refresh with the saved scope.",
+            );
+          else await this.failAuthority(item, error);
           processed++;
           continue;
         }
+        const fence = githubAuthorityFenceSql(credential.fence);
+        const authorityJson = JSON.stringify(credential.fence);
         if (remaining() < reserve) {
           stopReason = "time_limit";
           break;
@@ -489,9 +679,11 @@ class GitHubRunner {
           this.db
             .prepare(
               [
-                "UPDATE github_refresh_items AS i SET status = 'running', summary = 'Reading GitHub evidence', attempts = attempts + 1, lease_id = ?, lease_until = ?, updated_at = ?",
+                "UPDATE github_refresh_items AS i SET status = 'running', summary = 'Reading GitHub evidence', attempts = attempts + 1, lease_id = ?, lease_until = ?, updated_at = ?, authority_json = ?",
                 "WHERE workspace_id = ? AND refresh_id = ? AND repository_id = ? AND status = 'queued' AND attempts < ? AND " +
-                  ITEM_VALID,
+                  ITEM_VALID +
+                  " AND " +
+                  fence.sql,
                 "AND NOT EXISTS (SELECT 1 FROM github_refresh_items running WHERE running.workspace_id = i.workspace_id AND running.refresh_id = i.refresh_id AND running.status = 'running')",
                 "AND NOT EXISTS (SELECT 1 FROM github_cooldowns WHERE credential_hash = ? AND retry_at > ?)",
               ].join(" "),
@@ -500,12 +692,14 @@ class GitHubRunner {
               lease,
               new Date(this.now() + LIMITS.LEASE_MS).toISOString(),
               now,
+              authorityJson,
               item.workspace_id,
               item.id,
               item.repository_id,
               LIMITS.MAX_ATTEMPTS,
               now,
-              item.credential_hash,
+              ...fence.values,
+              credential.quotaKey,
               now,
             ),
           this.db
@@ -545,12 +739,17 @@ class GitHubRunner {
           Math.max(1, remaining()),
         );
         try {
+          if (credential.fence.kind === "app")
+            await assertGitHubAuthorityFence(
+              this.credentialContext(),
+              credential.fence,
+            );
           const result = await collectGitHub(item.full_name, credential.token, {
             now: this.now,
             fetch: this.options.fetch,
             signal: controller.signal,
           });
-          const acceptance = await this.accept(item, lease, result);
+          const acceptance = await this.accept(item, lease, result, credential);
           emitDiagnostic({
             event: "hq.github.repository.completed",
             ...diagnosticContext,
@@ -558,6 +757,17 @@ class GitHubRunner {
             ...acceptance,
             diagnostics: result.diagnostics,
           });
+        } catch (error) {
+          if (
+            !(error instanceof DomainError) ||
+            error.code !== "github_app_conflict"
+          )
+            throw error;
+          await this.stop(
+            item,
+            "cancelled",
+            "GitHub authority changed after collection was claimed. Review the saved scope before starting another refresh.",
+          );
         } finally {
           clearTimeout(timer);
           await deliverWorkspacePush(this.env, item.workspace_id);

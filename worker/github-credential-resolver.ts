@@ -1,13 +1,16 @@
+import { githubAppRemainingBudget } from "./github-app-client";
+import { readGitHubAuthReference } from "./github-auth-reference";
+export { readGitHubAuthReference } from "./github-auth-reference";
 import { CAPABILITY, type Capability } from "../shared/domain";
 import {
   GITHUB_APP_LIMITS as LIMITS,
   GITHUB_CAPABILITY,
   type GitHubCapability,
+  type GitHubAppGrant,
   githubAppGrantSchema,
   githubAppMetadataSchema,
   githubAppPermissions,
   githubAppPermissionsSchema,
-  type GitHubAuthReference,
   type GitHubAppPermissions,
 } from "../shared/github-apps";
 import { PROVIDER_CREDENTIAL_KIND } from "../shared/provider-credentials";
@@ -16,6 +19,7 @@ import { credentialIsCurrentSql } from "./credential-expiry";
 import { DomainError } from "./errors";
 import {
   verifyGitHubAppAuthority,
+  verifyGitHubAppAuthoritySet,
   githubAppQuotaKey,
   assertGitHubAppCooldown,
   recordGitHubAppCooldown,
@@ -54,26 +58,6 @@ export function evictGitHubAppToken(
   if (!cache) return;
   for (const [key, entry] of cache.entries)
     if (entry.token === lease.token) cache.entries.delete(key);
-}
-export async function readGitHubAuthReference(
-  context: GitHubCredentialContext,
-  workspaceId: string,
-  referenceId: string,
-): Promise<GitHubAuthReference> {
-  const row = await context.db
-    .prepare(
-      "SELECT grant_id FROM github_app_credential_references WHERE workspace_id=? AND reference_id=?",
-    )
-    .bind(workspaceId, referenceId)
-    .first<{ grant_id: string }>();
-  return row
-    ? { kind: "app", grantId: row.grant_id }
-    : { kind: "token", reference: referenceId };
-}
-function referenceId(request: GitHubCredentialRequest) {
-  return request.reference.kind === "app"
-    ? request.reference.grantId
-    : request.reference.reference;
 }
 function actorCapability(request: GitHubCredentialRequest): Capability {
   return (
@@ -124,19 +108,22 @@ function localFenceSql(
     values.push(...items);
   };
   const reference = fence.kind === "app" ? fence.grantId : fence.reference;
-  const configuration = fence.connectionKind === "configuration";
-  if (configuration) {
+  const configuration = fence.connectionKind !== "source";
+  const admission = fence.connectionKind === "configuration-admission";
+  if (configuration && !admission) {
     add(
       `EXISTS(SELECT 1 FROM secret_connections s WHERE s.workspace_id=? AND s.id=? AND s.revision=? AND s.enabled=1 AND s.provider_kind='github-actions' AND s.credential_ref=?
-      AND EXISTS(SELECT 1 FROM json_each(s.resources_json) WHERE json_extract(value,'$.id')=? AND lower(json_extract(value,'$.fullName'))=lower(?)))`,
+      AND EXISTS(SELECT 1 FROM json_each(s.resources_json) resource WHERE json_extract(resource.value,'$.id')=? AND lower(json_extract(resource.value,'$.identity'))=lower(?) AND EXISTS(SELECT 1 FROM json_each(resource.value,'$.repositories') enrolled WHERE json_extract(enrolled.value,'$.id')=? AND lower(json_extract(enrolled.value,'$.fullName'))=lower(?))))`,
       fence.workspaceId,
       fence.connectionId,
       fence.connectionRevision,
       reference,
       fence.repositoryId,
       fence.repositoryFullName,
+      fence.repositoryId,
+      fence.repositoryFullName,
     );
-  } else {
+  } else if (!admission) {
     add(
       `EXISTS(SELECT 1 FROM connections s WHERE s.workspace_id=? AND s.id=? AND s.revision=? AND s.enabled=1 AND s.provider='github' AND (?='repository-maintenance' OR s.credential_ref=?))`,
       fence.workspaceId,
@@ -160,7 +147,20 @@ function localFenceSql(
         fence.connectionId,
         fence.repositoryId,
       );
-  } else if (configuration || fence.capability !== GITHUB_CAPABILITY.COLLECTION)
+  } else if (
+    configuration ||
+    fence.capability !== GITHUB_CAPABILITY.COLLECTION ||
+    fence.actorCapability !== CAPABILITY.ADMIN
+  )
+    add("0");
+  if (
+    admission &&
+    (fence.kind !== "app" ||
+      fence.binding.kind !== "actor" ||
+      !configuration ||
+      (fence.actorCapability !== CAPABILITY.SECRETS &&
+        fence.actorCapability !== CAPABILITY.ADMIN))
+  )
     add("0");
   if (fence.binding.kind === "actor") {
     const binding = fence.binding;
@@ -260,6 +260,7 @@ function localFenceSql(
       reference,
     );
     if (
+      fence.capability !== GITHUB_CAPABILITY.COLLECTION &&
       managedCredentialReference(reference) &&
       options.tokenIdentity !== false
     ) {
@@ -338,12 +339,18 @@ async function readToken(
       request.workspaceId,
       reference,
     );
-    if (!value)
+    if (!value) {
+      if (
+        (await readGitHubAuthReference(context, request.workspaceId, reference))
+          .kind === "app"
+      )
+        githubAppConflict();
       throw new DomainError(
         "not_configured",
         "No workspace-bound manual GitHub token is configured.",
         409,
       );
+    }
     return {
       token: value.token,
       identity: value.hash,
@@ -444,10 +451,23 @@ function requiredPermissions(
     ),
   );
 }
-export async function resolveGitHubCredential(
+type ReadAuthority = Omit<GitHubCredentialLease, "token">;
+type AppAuthority = {
+  kind: "app";
+  lease: ReadAuthority & {
+    fence: Extract<GitHubAuthorityFence, { kind: "app" }>;
+  };
+  registration: GitHubAppRegistrationRow;
+  repository: GitHubAppGrant["repositories"][number];
+  grant: GitHubAppGrant;
+  permissions: GitHubAppPermissions;
+};
+async function resolveCredentialAuthority(
   context: GitHubCredentialContext,
   request: GitHubCredentialRequest,
-): Promise<GitHubCredentialLease> {
+  cachedOnly = false,
+  prepareAuthority?: (grant: GitHubAppGrant) => Promise<void>,
+): Promise<{ kind: "token"; lease: GitHubCredentialLease } | AppAuthority> {
   if (
     request.binding.kind === "actor" &&
     context.principal &&
@@ -457,20 +477,24 @@ export async function resolveGitHubCredential(
       context.principal.reporterId)
   )
     githubAppConflict();
-  const resolved = await readGitHubAuthReference(
-    context,
-    request.workspaceId,
-    referenceId(request),
-  );
-  if (JSON.stringify(resolved) !== JSON.stringify(request.reference))
-    githubAppConflict();
   const base = baseFence(context, request);
   const configurationCapability =
     request.capability === GITHUB_CAPABILITY.CONFIGURATION_READ ||
     request.capability === GITHUB_CAPABILITY.CONFIGURATION_WRITE;
   if (
-    base.connectionKind !==
-    (configurationCapability ? "configuration" : "source")
+    configurationCapability
+      ? !["configuration", "configuration-admission"].includes(
+          base.connectionKind,
+        )
+      : base.connectionKind !== "source"
+  )
+    githubAppConflict();
+  if (
+    base.connectionKind === "configuration-admission" &&
+    (request.phase !== "read" ||
+      request.reference.kind !== "app" ||
+      !request.permissions ||
+      Object.values(request.permissions).some((level) => level !== "read"))
   )
     githubAppConflict();
   if (base.actorExpiresAt !== null && base.actorExpiresAt <= context.now())
@@ -504,16 +528,19 @@ export async function resolveGitHubCredential(
     };
     await assertGitHubAuthorityFence(context, fence);
     return {
-      token: token.token,
-      authorityIdentity: token.identity,
-      quotaKey: token.quotaKey,
-      observedAuthorityGeneration: null,
-      validUntil: Math.min(
-        token.expiresAt,
-        base.actorExpiresAt ?? Infinity,
-        context.now() + LIMITS.AUTHORITY_MAX_AGE_MS,
-      ),
-      fence,
+      kind: "token",
+      lease: {
+        token: token.token,
+        authorityIdentity: token.identity,
+        quotaKey: token.quotaKey,
+        observedAuthorityGeneration: null,
+        validUntil: Math.min(
+          token.expiresAt,
+          base.actorExpiresAt ?? Infinity,
+          context.now() + LIMITS.AUTHORITY_MAX_AGE_MS,
+        ),
+        fence,
+      },
     };
   }
   const row = await context.db
@@ -569,6 +596,7 @@ export async function resolveGitHubCredential(
       .first())
   )
     githubAppConflict();
+  if (prepareAuthority) await prepareAuthority(grant);
   const observation = await verifyGitHubAppAuthority(
     context,
     {
@@ -579,7 +607,11 @@ export async function resolveGitHubCredential(
       grantRevision: grant.revision,
       repositoryId: repository.id,
     },
-    request.phase === "effect" ? "fresh_effect" : "bounded_read",
+    cachedOnly
+      ? "cached_only"
+      : request.phase === "effect"
+        ? "fresh_effect"
+        : "bounded_read",
   );
   for (const [name, level] of Object.entries(permissions)) {
     if (name === "metadata" && level === "read") continue;
@@ -595,19 +627,311 @@ export async function resolveGitHubCredential(
         403,
       );
   }
+  const expandedPermissions: Record<string, "read" | "write"> = {
+    ...permissions,
+  };
+  if (request.optionalPermissions) {
+    const optional = requiredPermissions({
+      ...request,
+      permissions: request.optionalPermissions,
+    });
+    for (const [name, level] of Object.entries(optional)) {
+      const actual = observation.installation.permissions[name];
+      if (
+        name === "metadata" ||
+        actual === "admin" ||
+        actual === "write" ||
+        actual === level
+      )
+        expandedPermissions[name] = level;
+    }
+  }
   const fence = {
     ...provisional,
     observedAuthorityGeneration: observation.generation,
   };
   await assertGitHubAuthorityFence(context, fence);
   const authorityIdentity = await credentialHash(
-    JSON.stringify(["github-app", fence, observation.digest]),
+    JSON.stringify([
+      "github-app",
+      {
+        workspaceId: fence.workspaceId,
+        connectionId: fence.connectionId,
+        connectionRevision: fence.connectionRevision,
+        connectionKind: fence.connectionKind,
+        repositoryId: fence.repositoryId,
+        repositoryFullName: fence.repositoryFullName,
+        capability: fence.capability,
+        registrationId: fence.registrationId,
+        registrationRevision: fence.registrationRevision,
+        keyRevision: fence.keyRevision,
+        installationId: fence.installationId,
+        grantId: fence.grantId,
+        grantRevision: fence.grantRevision,
+        providerRepositoryId: fence.providerRepositoryId,
+        generation: fence.observedAuthorityGeneration,
+      },
+      observation.digest,
+    ]),
   );
   const quotaKey = await githubAppQuotaKey(
     context,
     grant.appId,
     grant.installationId,
   );
+  return {
+    kind: "app",
+    lease: {
+      authorityIdentity,
+      quotaKey,
+      observedAuthorityGeneration: observation.generation,
+      validUntil: Math.min(
+        Date.parse(observation.validUntil),
+        base.actorExpiresAt ?? Infinity,
+        grant.expiresAt ? Date.parse(grant.expiresAt) : Infinity,
+      ),
+      fence,
+    },
+    registration,
+    repository,
+    grant,
+    permissions: githubAppPermissionsSchema.parse(
+      Object.fromEntries(
+        Object.entries(expandedPermissions).sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+      ),
+    ),
+  };
+}
+export type GitHubDiscoveryAuthority = {
+  authorityIdentity: string;
+  quotaKey: string;
+  validUntil: number;
+  fences: GitHubAuthorityFence[];
+  repositories: GitHubAppGrant["repositories"];
+};
+export function githubDiscoveryAuthoritySql(
+  authority: GitHubDiscoveryAuthority,
+) {
+  const first = authority.fences[0];
+  if (!first || first.kind !== "app") githubAppConflict();
+  const guard = githubAuthorityFenceSql(first);
+  // All targets share the same pinned source, actor, grant and registration revisions
+  return {
+    sql: `${guard.sql} AND NOT EXISTS(SELECT 1 FROM json_each(?) selected LEFT JOIN github_app_authority a
+      ON a.registration_id=? AND a.installation_id=? AND a.repository_id=json_extract(selected.value,'$.repositoryId')
+      WHERE a.repository_id IS NULL OR a.generation<>json_extract(selected.value,'$.generation') OR a.state<>'allowed'
+        OR a.registration_revision<>? OR a.key_revision<>? OR a.valid_until<=strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+    values: [
+      ...guard.values,
+      JSON.stringify(
+        authority.fences.map((fence) => {
+          if (
+            fence.kind !== "app" ||
+            fence.repositoryId !== null ||
+            fence.workspaceId !== first.workspaceId ||
+            fence.grantId !== first.grantId ||
+            fence.grantRevision !== first.grantRevision ||
+            fence.registrationId !== first.registrationId ||
+            fence.registrationRevision !== first.registrationRevision ||
+            fence.keyRevision !== first.keyRevision ||
+            fence.connectionId !== first.connectionId ||
+            fence.connectionRevision !== first.connectionRevision ||
+            fence.installationId !== first.installationId ||
+            JSON.stringify(fence.binding) !== JSON.stringify(first.binding)
+          )
+            githubAppConflict();
+          return {
+            repositoryId: fence.providerRepositoryId,
+            generation: fence.observedAuthorityGeneration,
+          };
+        }),
+      ),
+      first.registrationId,
+      first.installationId,
+      first.registrationRevision,
+      first.keyRevision,
+    ],
+  };
+}
+export async function assertGitHubDiscoveryAuthority(
+  context: GitHubCredentialContext,
+  authority: GitHubDiscoveryAuthority,
+) {
+  if (authority.validUntil <= context.now()) githubAppConflict();
+  const guard = githubDiscoveryAuthoritySql(authority);
+  if (
+    !(await context.db
+      .prepare(`SELECT 1 WHERE ${guard.sql}`)
+      .bind(...guard.values)
+      .first())
+  )
+    githubAppConflict();
+}
+export async function resolveGitHubDiscoveryAuthority(
+  context: GitHubCredentialContext,
+  request: Pick<
+    GitHubCredentialRequest,
+    | "workspaceId"
+    | "reference"
+    | "connectionId"
+    | "connectionRevision"
+    | "binding"
+  >,
+): Promise<GitHubDiscoveryAuthority> {
+  if (request.reference.kind !== "app" || request.binding.kind !== "actor")
+    githubAppConflict();
+  const row = await context.db
+    .prepare(
+      "SELECT metadata_json FROM github_app_grants WHERE workspace_id=? AND id=? AND state='active'",
+    )
+    .bind(request.workspaceId, request.reference.grantId)
+    .first<{ metadata_json: string }>();
+  if (!row) githubAppConflict();
+  const grant = githubAppGrantSchema.parse(JSON.parse(row.metadata_json));
+  const target = (fullName: string): GitHubCredentialRequest => ({
+    ...request,
+    repositoryId: null,
+    repositoryFullName: fullName,
+    capability: GITHUB_CAPABILITY.COLLECTION,
+    actorCapability: CAPABILITY.ADMIN,
+    permissions: { metadata: "read" },
+    phase: "read",
+  });
+  const first = await resolveCredentialAuthority(
+    context,
+    target(grant.repositories[0].fullName),
+    false,
+    async (live) => {
+      if (live.revision !== grant.revision) githubAppConflict();
+      await verifyGitHubAppAuthoritySet(
+        context,
+        grant.repositories.map((repository) => ({
+          workspaceId: request.workspaceId,
+          registrationId: grant.registrationId,
+          installationId: grant.installationId,
+          grantId: grant.id,
+          grantRevision: grant.revision,
+          repositoryId: repository.id,
+        })),
+      );
+    },
+  );
+  const leases: ReadAuthority[] = [first.lease];
+  for (const repository of grant.repositories.slice(1))
+    leases.push(
+      await resolveGitHubReadAuthority(
+        context,
+        target(repository.fullName),
+        true,
+      ),
+    );
+  const authority = {
+    authorityIdentity: await credentialHash(
+      JSON.stringify(leases.map((lease) => lease.authorityIdentity)),
+    ),
+    quotaKey: first.lease.quotaKey,
+    validUntil: Math.min(...leases.map((lease) => lease.validUntil)),
+    fences: leases.map((lease) => lease.fence),
+    repositories: grant.repositories,
+  };
+  await assertGitHubDiscoveryAuthority(context, authority);
+  return authority;
+}
+export async function resolveGitHubDiscoveryToken(
+  context: GitHubCredentialContext,
+  authority: GitHubDiscoveryAuthority,
+) {
+  await assertGitHubDiscoveryAuthority(context, authority);
+  const first = authority.fences[0];
+  if (first.kind !== "app") githubAppConflict();
+  await assertGitHubAppCooldown(context, authority.quotaKey);
+  const registration = await context.db
+    .prepare(
+      "SELECT * FROM github_app_registrations WHERE id=? AND revision=? AND key_revision=?",
+    )
+    .bind(first.registrationId, first.registrationRevision, first.keyRevision)
+    .first<GitHubAppRegistrationRow>();
+  if (!registration) githubAppConflict();
+  try {
+    const client = await openGitHubAppClient(context, registration);
+    const token = await client.mintToken({
+      installationId: first.installationId,
+      repositoryIds: authority.repositories.map((repository) => repository.id),
+      permissions: { metadata: "read" },
+    });
+    if (
+      token.repositories.length !== authority.repositories.length ||
+      token.repositories.some((repository) => {
+        const expected = authority.repositories.find(
+          (value) => value.id === repository.id,
+        );
+        return (
+          !expected ||
+          expected.fullName !== repository.fullName ||
+          expected.private !== repository.private ||
+          expected.ownerId !== repository.ownerId
+        );
+      })
+    )
+      githubAppConflict();
+    await assertGitHubDiscoveryAuthority(context, authority);
+    return token.token;
+  } catch (error) {
+    await recordGitHubAppCooldown(context, authority.quotaKey, error);
+    throw error;
+  }
+}
+// Manual collection custody remains in the original deployment catalog
+export async function resolveGitHubManualCollectionToken(
+  context: GitHubCredentialContext,
+  workspaceId: string,
+  reference: string,
+  expectedIdentity: string,
+) {
+  const resolved = await readGitHubAuthReference(
+    context,
+    workspaceId,
+    reference,
+  );
+  if (resolved.kind !== "token") githubAppConflict();
+  const token = await githubCredentialIdentity(
+    context.env,
+    workspaceId,
+    reference,
+  );
+  if (!token || token.hash !== expectedIdentity) githubAppConflict();
+  return token.token;
+}
+export async function resolveGitHubReadAuthority(
+  context: GitHubCredentialContext,
+  request: GitHubCredentialRequest,
+  cachedOnly = false,
+): Promise<ReadAuthority> {
+  const authority = await resolveCredentialAuthority(
+    context,
+    request,
+    cachedOnly,
+  );
+  if (authority.kind === "app") return authority.lease;
+  const { token: _token, ...metadata } = authority.lease;
+  return metadata;
+}
+export async function resolveGitHubCredential(
+  context: GitHubCredentialContext,
+  request: GitHubCredentialRequest,
+): Promise<GitHubCredentialLease> {
+  githubAppRemainingBudget(context.remainingBudgetMs);
+  const authority = await resolveCredentialAuthority(context, request);
+  if (authority.kind === "token") return authority.lease;
+  const {
+    registration,
+    repository,
+    permissions,
+    grant,
+    lease: { authorityIdentity, quotaKey, fence },
+  } = authority;
   await assertGitHubAppCooldown(context, quotaKey);
   const cacheKey = JSON.stringify([
     authorityIdentity,
@@ -673,16 +997,15 @@ export async function resolveGitHubCredential(
     }
   }
   await assertGitHubAuthorityFence(context, fence);
+  githubAppRemainingBudget(context.remainingBudgetMs);
   return {
     token: entry.token,
     authorityIdentity,
     quotaKey,
-    observedAuthorityGeneration: observation.generation,
+    observedAuthorityGeneration: fence.observedAuthorityGeneration,
     validUntil: Math.min(
       entry.expiresAt - LIMITS.TOKEN_MARGIN_MS,
-      Date.parse(observation.validUntil),
-      base.actorExpiresAt ?? Infinity,
-      grant.expiresAt ? Date.parse(grant.expiresAt) : Infinity,
+      authority.lease.validUntil,
     ),
     fence,
   };

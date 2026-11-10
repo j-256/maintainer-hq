@@ -16,7 +16,10 @@ import {
 } from "../shared/dependabot-changes";
 import { readRepositoryDependabot } from "./dependabot";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
-import { githubCredentialIdentity } from "./github-credentials";
+import { githubCredentialDescriptor } from "./github-credential-descriptors";
+import { githubAuthorityFenceSchema } from "./github-authority-fence-schema";
+import { resolveGitHubCredential } from "./github-credential-resolver";
+import type { GitHubCredentialLease } from "./github-app-types";
 import { dependencyHash } from "./dependency-client";
 import { dependencyCredential } from "./dependency-credentials";
 import { readDependabotBlob } from "./dependabot-client";
@@ -38,6 +41,7 @@ export const storedDependabotReviewSchema = z
     tokenId: z.string().nullable(),
     credentialRef: z.string(),
     credentialHash: z.string(),
+    readFence: githubAuthorityFenceSchema.optional(),
     writerIdentity: z.string().nullable(),
   })
   .strict();
@@ -73,11 +77,20 @@ export class DependabotChanges {
           400,
         );
     }
-    const result = await readRepositoryDependabot(this.context, {
-      workspaceId,
-      sourceId,
-      repositoryId,
-    });
+    const captured = {
+      authority: null as Omit<GitHubCredentialLease, "token"> | null,
+    };
+    const result = await readRepositoryDependabot(
+      this.context,
+      {
+        workspaceId,
+        sourceId,
+        repositoryId,
+      },
+      (authority) => {
+        captured.authority = authority;
+      },
+    );
     const e = result.evidence,
       now = this.context.now();
     if (
@@ -101,13 +114,13 @@ export class DependabotChanges {
       .bind(workspaceId, sourceId, result.source.revision)
       .first<{ credential_ref: string }>();
     const credential = source
-      ? await githubCredentialIdentity(
-          this.context.env,
+      ? await githubCredentialDescriptor(
+          this.context,
           workspaceId,
           source.credential_ref,
         )
       : null;
-    if (!credential || !source) conflict();
+    if (!credential?.available || !source || !captured.authority) conflict();
     const writer = fields.credentialId
       ? await dependencyCredential(
           this.context,
@@ -121,6 +134,9 @@ export class DependabotChanges {
       tokenId: this.context.principal.tokenId ?? null,
       credentialRef: source.credential_ref,
       credentialHash: credential.hash,
+      ...(captured.authority.fence.kind === "app"
+        ? { readFence: captured.authority.fence }
+        : {}),
       writerIdentity: writer?.identity ?? null,
       review: {
         workspaceId,
@@ -161,16 +177,16 @@ export class DependabotChanges {
         .prepare(
           `INSERT INTO github_context_budgets (credential_hash,window_start,reads) SELECT ?,?,0 WHERE ${guard.sql} ON CONFLICT(credential_hash) DO UPDATE SET window_start=excluded.window_start,reads=0 WHERE github_context_budgets.window_start<excluded.window_start`,
         )
-        .bind(credential.hash, windowStart, ...guard.values),
+        .bind(credential.quotaKey, windowStart, ...guard.values),
       this.context.db
         .prepare(
           `UPDATE github_context_budgets SET reads=reads+1 WHERE credential_hash=? AND window_start=? AND reads<? AND NOT EXISTS(SELECT 1 FROM github_cooldowns WHERE credential_hash=? AND retry_at>?) AND ${guard.sql}`,
         )
         .bind(
-          credential.hash,
+          credential.quotaKey,
           windowStart,
           READ_LIMITS.READS_PER_WINDOW,
-          credential.hash,
+          credential.quotaKey,
           timestamp,
           ...guard.values,
         ),
@@ -181,7 +197,15 @@ export class DependabotChanges {
         "Schedule review read budget or access is unavailable. Wait one minute or follow the provider cooldown before preparing another review.",
         409,
       );
-    const reader = new GitHubReader(credential.token, {
+    const lease = await resolveGitHubCredential(this.context, {
+      ...captured.authority.fence,
+      reference: credential.reference,
+      phase: "read",
+      permissions: { metadata: "read", contents: "read" },
+    });
+    if (lease.authorityIdentity !== captured.authority.authorityIdentity)
+      conflict();
+    const reader = new GitHubReader(lease.token, {
       now: this.context.now,
       maxRequests: 1,
     });
@@ -204,7 +228,7 @@ export class DependabotChanges {
             `INSERT INTO github_cooldowns(credential_hash,retry_at) SELECT ?,? WHERE ${guard.sql} ON CONFLICT(credential_hash) DO UPDATE SET retry_at=MAX(github_cooldowns.retry_at,excluded.retry_at)`,
           )
           .bind(
-            credential.hash,
+            credential.quotaKey,
             new Date(reader.retryAt).toISOString(),
             ...guard.values,
           )

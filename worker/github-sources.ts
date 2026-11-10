@@ -13,10 +13,11 @@ import {
 import { SOURCE_LIMITS, sourceInput } from "../shared/sources";
 import { DomainError } from "./errors";
 import {
-  githubCredential,
-  githubCredentialIdentity,
+  githubCredentialDescriptor,
+  githubCredentialDescriptors,
   githubCredentialReferences,
-} from "./github-credentials";
+} from "./github-credential-descriptors";
+import { GITHUB_CAPABILITY } from "../shared/github-apps";
 import { githubActorGuard, type GitHubContext } from "./github-authority";
 import type { Env } from "./types";
 
@@ -50,20 +51,16 @@ export async function describeGitHubSources(
   scopes: { source_id: string; repository_id: string }[],
   now: number,
 ): Promise<GitHubSource[]> {
-  const credentials = new Map(
-    await Promise.all(
-      [...new Set(rows.map((row) => row.credential_ref))].map(
-        async (reference) =>
-          [
-            reference,
-            await githubCredentialIdentity(env, workspaceId, reference),
-          ] as const,
-      ),
-    ),
+  const credentials = await githubCredentialDescriptors(
+    { env, db: env.HQ_DB, now: () => now },
+    workspaceId,
+    rows.map((row) => row.credential_ref),
   );
   const hashes = [
     ...new Set(
-      [...credentials.values()].flatMap((value) => (value ? [value.hash] : [])),
+      [...credentials.values()].flatMap((value) =>
+        value?.available ? [value.quotaKey] : [],
+      ),
     ),
   ];
   const cooldowns = hashes.length
@@ -97,7 +94,10 @@ export async function describeGitHubSources(
       lastAttemptAt: row.last_attempt_at,
       lastSuccessAt: row.last_success_at,
       lastError: row.last_error,
-      credentialConfigured: Boolean(credential),
+      credentialConfigured: Boolean(
+        credential?.available &&
+        credential.capabilities.includes(GITHUB_CAPABILITY.COLLECTION),
+      ),
       github: {
         credentialRef: row.credential_ref,
         configurationValid: parsed.success,
@@ -107,7 +107,7 @@ export async function describeGitHubSources(
         nextRefreshAt: row.next_refresh_at,
         retryAt:
           cooldowns.find(
-            (cooldown) => cooldown.credential_hash === credential?.hash,
+            (cooldown) => cooldown.credential_hash === credential?.quotaKey,
           )?.retry_at ?? null,
         activeRefreshId:
           row.last_refresh_status &&
@@ -164,7 +164,7 @@ export class GitHubSources {
   async credentialReferences(input: unknown) {
     const { workspaceId } = githubCredentialListInput.parse(input);
     await this.admin(workspaceId);
-    return githubCredentialReferences(this.context.env, workspaceId);
+    return githubCredentialReferences(this.context, workspaceId);
   }
   private async admin(workspaceId: string) {
     await this.context.authorize(workspaceId, CAPABILITY.ADMIN);
@@ -175,26 +175,51 @@ export class GitHubSources {
     source: GitHubSourceFields,
     previousRef?: string | null,
   ) {
-    const total = await this.db
+    const repositories = await this.db
       .prepare(
-        "SELECT count(*) FROM repositories WHERE workspace_id = ? AND id IN (SELECT value FROM json_each(?))",
+        "SELECT full_name FROM repositories WHERE workspace_id=? AND id IN (SELECT value FROM json_each(?))",
       )
       .bind(workspaceId, JSON.stringify(source.repositoryIds))
-      .first<number>("count(*)");
-    if (total !== source.repositoryIds.length)
+      .all<{ full_name: string }>();
+    if (repositories.results.length !== source.repositoryIds.length)
       throw new DomainError(
         "validation",
         "Choose repositories enrolled in this workspace",
         400,
       );
+    const credential = source.credentialRef
+      ? await githubCredentialDescriptor(
+          this.context,
+          workspaceId,
+          source.credentialRef,
+        )
+      : null;
     if (
       source.credentialRef &&
       source.credentialRef !== previousRef &&
-      !githubCredential(this.context.env, workspaceId, source.credentialRef)
+      (!credential?.available ||
+        !credential.capabilities.includes(GITHUB_CAPABILITY.COLLECTION))
     )
       throw new DomainError(
         "validation",
         "Choose an available GitHub credential for this workspace, or save without one",
+        400,
+      );
+    if (
+      credential?.kind === "app" &&
+      credential.available &&
+      (!credential.capabilities.includes(GITHUB_CAPABILITY.COLLECTION) ||
+        repositories.results.some(
+          (repository) =>
+            !credential.repositoryNames?.some(
+              (name) =>
+                name.toLowerCase() === repository.full_name.toLowerCase(),
+            ),
+        ))
+    )
+      throw new DomainError(
+        "validation",
+        "Choose repositories covered by this workspace's accepted App collection grant, or select a manual token reference.",
         400,
       );
   }

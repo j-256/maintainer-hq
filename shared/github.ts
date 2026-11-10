@@ -117,6 +117,7 @@ export type GitHubCredentialReference = {
   name: string;
   kind?: "token" | "app";
   capabilities?: GitHubCapability[];
+  available?: boolean;
 };
 export type GitHubRefreshItem = {
   repositoryId: string;
