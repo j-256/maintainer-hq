@@ -1053,7 +1053,7 @@ describe("Durable Secrets execution", () => {
     });
     expect(fresh.stage).toBe("reviewed");
     expect(writes()).toHaveLength(1);
-  });
+  }, D1_VOLUME_TEST_TIMEOUT_MS);
   it("refuses a recovery whose original receipt changed after review", async () => {
     const input = await prepared();
     await as().secretsApply(input);
