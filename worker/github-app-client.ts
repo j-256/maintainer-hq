@@ -5,6 +5,7 @@ import {
   githubProviderIdSchema,
   githubRepositoryNameSchema,
   type GitHubAppPermissions,
+  type GitHubAppRepositoryPage,
 } from "../shared/github-apps";
 import { DomainError } from "./errors";
 import { signGitHubAppJwt } from "./github-app-crypto";
@@ -202,7 +203,11 @@ export class GitHubAppClient {
     this.deadline =
       performance.now() + (options.budgetMs ?? LIMITS.REQUEST_TIMEOUT_MS);
   }
-  private async request(path: string, body?: unknown) {
+  private async request(
+    path: string,
+    body?: unknown,
+    installationToken?: string,
+  ) {
     const remaining = Math.min(
       LIMITS.REQUEST_TIMEOUT_MS,
       this.deadline - performance.now(),
@@ -215,11 +220,13 @@ export class GitHubAppClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), remaining);
     try {
-      const jwt = await signGitHubAppJwt(
-        this.#options.privateKey,
-        this.#options.appId,
-        this.now(),
-      );
+      const jwt =
+        installationToken ??
+        (await signGitHubAppJwt(
+          this.#options.privateKey,
+          this.#options.appId,
+          this.now(),
+        ));
       if (controller.signal.aborted) throw new Error();
       this.#requests++;
       const response = await this.fetcher(API_ORIGIN + path, {
@@ -398,6 +405,63 @@ export class GitHubAppClient {
         ...response.permissions,
         metadata: "read",
       }),
+    };
+  }
+  // Only the privileged installation-inventory service may use this unnarrowed metadata token
+  async listInstallationRepositories(
+    installationId: number,
+    cursor?: string,
+  ): Promise<GitHubAppRepositoryPage> {
+    if (cursor !== undefined && !/^[1-9]\d{0,4}$/.test(cursor)) invalidInput();
+    const page = cursor === undefined ? 1 : Number(cursor);
+    if (page > LIMITS.MAX_PAGE) invalidInput();
+    const installation = await this.getInstallation(installationId);
+    if (installation.suspendedAt)
+      throw new GitHubAppProviderError(
+        "github_app_denied",
+        "This installation is suspended. Ask its account owner to restore access.",
+        403,
+      );
+    const credential = parse(
+      tokenResponseSchema.omit({ repositories: true }),
+      await this.request(`/app/installations/${installationId}/access_tokens`, {
+        permissions: { metadata: "read" },
+      }),
+    );
+    if (
+      Object.entries(credential.permissions).some(
+        ([name, level]) => name !== "metadata" || level !== "read",
+      ) ||
+      Date.parse(credential.expires_at) <=
+        this.now() + LIMITS.TOKEN_MARGIN_MS ||
+      Date.parse(credential.expires_at) >
+        this.now() + LIMITS.TOKEN_MAX_LIFETIME_MS + LIMITS.TOKEN_MARGIN_MS
+    )
+      invalidResponse();
+    const response = parse(
+      z.object({
+        repositories: z.array(repositorySchema).max(LIMITS.PAGE_SIZE),
+        total_count: z.number().int().nonnegative().safe(),
+      }),
+      await this.request(
+        `/installation/repositories?per_page=${LIMITS.PAGE_SIZE}&page=${page}`,
+        undefined,
+        credential.token,
+      ),
+    );
+    const items = response.repositories.map(normalizeRepository);
+    if (
+      new Set(items.map((item) => item.id)).size !== items.length ||
+      items.some((item) => item.ownerId !== installation.account.id)
+    )
+      invalidResponse();
+    const more =
+      items.length === LIMITS.PAGE_SIZE &&
+      response.total_count > page * LIMITS.PAGE_SIZE;
+    return {
+      items,
+      nextCursor: more && page < LIMITS.MAX_PAGE ? String(page + 1) : null,
+      limited: more && page === LIMITS.MAX_PAGE,
     };
   }
   async verifyRepository(

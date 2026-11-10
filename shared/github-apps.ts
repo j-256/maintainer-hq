@@ -262,6 +262,14 @@ export const githubAppInstallationsInput = workspaceInput
       .optional(),
   })
   .strict();
+export const githubAppRepositoriesInput = githubAppInstallationsInput
+  .extend({ installationId: githubProviderIdSchema })
+  .strict();
+export type GitHubAppRepositoryPage = {
+  items: { id: number; fullName: string; ownerId: number; private: boolean }[];
+  nextCursor: string | null;
+  limited: boolean;
+};
 export const githubAppConnectionRequestInput = workspaceInput
   .extend({
     requestId: idSchema,

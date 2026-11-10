@@ -1,3 +1,4 @@
+import { Link, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleHelp, FolderGit2, TriangleAlert } from "lucide-react";
@@ -94,6 +95,9 @@ export function GitHubEditor({
       fields.repositoryIds.push(includeRepositoryId);
     return fields;
   });
+  const [authMode, setAuthMode] = useState<"app" | "token" | null>(
+    initial?.github.credentialRef ? null : "app",
+  );
   const [sourceId] = useState(() => initial?.id ?? crypto.randomUUID());
   const [revision, setRevision] = useState(initial?.revision);
   const [search, setSearch] = useState("");
@@ -105,6 +109,15 @@ export function GitHubEditor({
   const form = useRef<HTMLFormElement>(null);
   const client = useQueryClient();
   const workspaceId = snapshot.workspace.id;
+  const location = useLocation();
+  const openedSearch = useRef(location.search);
+  useEffect(() => {
+    if (
+      location.search !== openedSearch.current &&
+      new URLSearchParams(location.search).get("view") === "authentication"
+    )
+      onClose();
+  }, [location.search, onClose]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(base);
   const guard = useCloseGuard(dirty || busy, onClose);
   const latest = snapshot.connections.find(
@@ -122,6 +135,15 @@ export function GitHubEditor({
         signal,
       ),
   });
+  const selectedKind =
+    authMode ??
+    (references.data?.find((item) => item.id === draft.credentialRef)?.kind ===
+    "app"
+      ? "app"
+      : "token");
+  const visibleReferences = references.data?.filter((item) =>
+    selectedKind === "app" ? item.kind === "app" : item.kind !== "app",
+  );
   const available = snapshot.repositories.filter(
     (repository) =>
       repository.fullName.toLowerCase().includes(search.toLowerCase()) &&
@@ -262,8 +284,43 @@ export function GitHubEditor({
                 ) : null}
               </div>
               <div className="form-field">
+                <div
+                  className="github-auth-methods"
+                  aria-label="GitHub authentication method"
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-pressed={selectedKind === "app"}
+                    disabled={busy}
+                    onClick={() => {
+                      if (selectedKind !== "app") {
+                        setAuthMode("app");
+                        setDraft({ ...draft, credentialRef: null });
+                      }
+                    }}
+                  >
+                    GitHub App (recommended)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-pressed={selectedKind === "token"}
+                    disabled={busy}
+                    onClick={() => {
+                      if (selectedKind !== "token") {
+                        setAuthMode("token");
+                        setDraft({ ...draft, credentialRef: null });
+                      }
+                    }}
+                  >
+                    Advanced token configuration
+                  </Button>
+                </div>
                 <label htmlFor="github-credential">
-                  Server-side credential
+                  {selectedKind === "app"
+                    ? "GitHub App grant"
+                    : "Credential reference"}
                 </label>
                 <Select
                   value={draft.credentialRef ?? NO_CREDENTIAL}
@@ -290,7 +347,7 @@ export function GitHubEditor({
                         {draft.credentialRef} (unavailable)
                       </SelectItem>
                     ) : null}
-                    {references.data?.map((reference) => (
+                    {visibleReferences?.map((reference) => (
                       <SelectItem key={reference.id} value={reference.id}>
                         {reference.name}
                       </SelectItem>
@@ -298,7 +355,9 @@ export function GitHubEditor({
                   </SelectContent>
                 </Select>
                 <p id="github-credential-help" className="field-help">
-                  Workspace credentials only. Token values stay on the server.
+                  {selectedKind === "app"
+                    ? "Select an accepted workspace grant. Only its reviewed repositories can be read."
+                    : "Select a workspace-scoped token configured by your deployment operator. Token values stay on the server."}
                 </p>
                 {references.isPending ? (
                   <p className="field-help" role="status">
@@ -317,12 +376,47 @@ export function GitHubEditor({
                       Retry references
                     </Button>
                   </p>
-                ) : references.data?.length === 0 || missingRef ? (
+                ) : visibleReferences?.length === 0 || missingRef ? (
                   <p className="permission-notice">
-                    A server administrator must add a read-only GitHub
-                    credential for this workspace. Save without one to configure
-                    it later; evidence will remain unobserved.
+                    Choose an accepted GitHub App grant or use advanced token
+                    configuration. Save without a reference to configure it
+                    later; evidence will remain unobserved.
                   </p>
+                ) : null}
+                <p className="field-help">
+                  <Link
+                    className="quiet-link"
+                    onClick={(event) => {
+                      if (
+                        new URLSearchParams(location.search).get("view") ===
+                        "authentication"
+                      ) {
+                        event.preventDefault();
+                        guard.requestClose();
+                      }
+                    }}
+                    to={
+                      "/settings/github?workspace=" +
+                      encodeURIComponent(workspaceId) +
+                      "&view=authentication"
+                    }
+                  >
+                    Manage App access
+                  </Link>
+                </p>
+                {selectedKind === "token" ? (
+                  <details>
+                    <summary>Token setup guidance</summary>
+                    <p className="field-help">
+                      Ask the deployment operator to add a read-only,
+                      workspace-scoped token to the protected GitHub collection
+                      configuration, then select its reference here. Scope it to
+                      the intended repositories and required evidence
+                      permissions. New token connections do not require an App.
+                      Maintenance and Actions credentials use the separate
+                      protected provider-access setup.
+                    </p>
+                  </details>
                 ) : null}
               </div>
               <div className="github-policy-fields">
@@ -530,6 +624,7 @@ export function GitHubEditor({
                   const next = editable(latest);
                   setBase(next);
                   setDraft(next);
+                  setAuthMode(null);
                   setRevision(latest.revision);
                   setError(null);
                   setErrors({});

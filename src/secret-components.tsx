@@ -68,7 +68,7 @@ const REASON_LABELS: Record<NonNullable<SecretReceipt["reason"]>, string> = {
   provider_rejected: "The provider rejected this request.",
   provider_result_uncertain: "A definitive provider receipt was not received.",
   preflight_changed: "The reviewed provider state changed before submission.",
-  authority_changed: "The reviewed permissions or connection changed.",
+  authority_changed: "The reviewed authority changed or could not be verified.",
   input_expired: "The retained input expired before submission.",
   execution_interrupted:
     "Execution was interrupted; inspect the receipt before continuing.",

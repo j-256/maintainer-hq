@@ -1,3 +1,8 @@
+import {
+  githubAppQuotaKey,
+  assertGitHubAppCooldown,
+  recordGitHubAppCooldown,
+} from "./github-app-authority";
 import { z } from "zod";
 import { CAPABILITY } from "../shared/domain";
 import { MANAGED_CREDENTIAL_PREFIX } from "../shared/provider-credentials";
@@ -12,6 +17,7 @@ import {
   githubAppConnectionRequestInput,
   githubAppConnectionRequestsInput,
   githubAppInstallationsInput,
+  githubAppRepositoriesInput,
   githubAppRepositoryIdentitySchema,
   githubCapabilitiesSchema,
   type GitHubAppGrant,
@@ -142,6 +148,55 @@ export class GitHubAppGrants {
     if (
       (await new GitHubApps(this.context).registration(registration.id))
         ?.revision !== registration.revision
+    )
+      githubAppConflict();
+    return result;
+  }
+  private async installationQuota<T>(
+    registration: GitHubAppRegistrationRow,
+    installationId: number,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const metadata = githubAppMetadataSchema.parse(
+      JSON.parse(registration.metadata_json),
+    );
+    const quotaKey = await githubAppQuotaKey(
+      this.context,
+      metadata.appId,
+      installationId,
+    );
+    await assertGitHubAppCooldown(this.context, quotaKey);
+    try {
+      return await run();
+    } catch (error) {
+      await recordGitHubAppCooldown(this.context, quotaKey, error);
+      throw error;
+    }
+  }
+  async repositories(input: unknown) {
+    const request = githubAppRepositoriesInput.parse(input);
+    const { authority, registration } = await this.administrativeRegistration(
+      request.workspaceId,
+      request.registrationId,
+    );
+    const result = await this.installationQuota(
+      registration,
+      request.installationId,
+      async () => {
+        const client = await openGitHubAppClient(this.context, registration);
+        return client.listInstallationRepositories(
+          request.installationId,
+          request.cursor,
+        );
+      },
+    );
+    await assertGitHubAppIssuer(this.context, authority);
+    const current = await new GitHubApps(this.context).registration(
+      registration.id,
+    );
+    if (
+      current?.revision !== registration.revision ||
+      current.key_revision !== registration.key_revision
     )
       githubAppConflict();
     return result;
@@ -356,29 +411,38 @@ export class GitHubAppGrants {
       )
     )
       githubAppConflict();
-    const client = await openGitHubAppClient(this.context, registration);
-    const installation = await client.getInstallation(request.installationId);
-    if (installation.suspendedAt) githubAppConflict();
-    const token = await client.mintToken({
-      installationId: request.installationId,
-      repositoryIds: request.repositoryIds,
-      permissions: { metadata: "read" },
-    });
-    if (
-      token.repositories.some(
-        (repository) => repository.ownerId !== installation.account.id,
-      )
-    )
-      githubAppConflict();
-    return {
-      installation,
-      repositories: token.repositories
-        .map((repository) =>
-          githubAppRepositoryIdentitySchema.parse(repository),
+    return this.installationQuota(
+      registration,
+      request.installationId,
+      async () => {
+        const client = await openGitHubAppClient(this.context, registration);
+        const installation = await client.getInstallation(
+          request.installationId,
+        );
+        if (installation.suspendedAt) githubAppConflict();
+        const token = await client.mintToken({
+          installationId: request.installationId,
+          repositoryIds: request.repositoryIds,
+          permissions: { metadata: "read" },
+        });
+        if (
+          token.repositories.some(
+            (repository) => repository.ownerId !== installation.account.id,
+          )
         )
-        .sort((a, b) => a.id - b.id),
-    };
+          githubAppConflict();
+        return {
+          installation,
+          repositories: token.repositories
+            .map((repository) =>
+              githubAppRepositoryIdentitySchema.parse(repository),
+            )
+            .sort((a, b) => a.id - b.id),
+        };
+      },
+    );
   }
+
   async plan(input: unknown) {
     const request = githubAppGrantPlanInput.parse(input);
     const { authority, registration } = await this.administrativeRegistration(
