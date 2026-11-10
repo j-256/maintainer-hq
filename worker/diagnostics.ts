@@ -20,6 +20,8 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  z.object({ event: z.literal("hq.github.app.lifecycle"), correlationId: z.uuid(), state: z.enum(["rejected", "processed", "duplicate"]), code: z.string().regex(/^[a-z_]{1,80}$/).nullable(), elapsedMs: elapsed }).strict(),
+  z.object({ event: z.literal("hq.github.app.reconciliation"), correlationId: z.uuid(), checked: z.number().int().nonnegative(), denied: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), requests: z.number().int().nonnegative(), remaining: z.number().int().nonnegative(), incomplete: z.boolean(), retiredAttempts: z.number().int().nonnegative(), retiredDeliveries: z.number().int().nonnegative(), code: z.string().regex(/^[a-z_]{1,80}$/).nullable(), elapsedMs: elapsed }).strict(),
   z.object({
     event: z.literal("hq.github.app.authority"),
     correlationId: z.uuid(),
@@ -229,6 +231,8 @@ export function emitDiagnostic(event: Diagnostic) {
       value.event === "hq.push.interrupted" ||
       (value.event === "hq.github.app.manifest" && value.state !== "complete") ||
       (value.event === "hq.github.app.authority" && value.state !== "verified") ||
+      (value.event === "hq.github.app.lifecycle" && value.state === "rejected") ||
+      (value.event === "hq.github.app.reconciliation" && value.incomplete) ||
       value.event === "hq.secrets.cleanup.interrupted" ||
       value.event === "hq.request.failed" ||
       value.event === "hq.monitoring.targets.limited" ||
