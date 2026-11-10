@@ -1,3 +1,7 @@
+import {
+  ProviderWriteNotSentError,
+  APP_AUTHENTICATION_RETRIES,
+} from "./provider-effect-errors";
 import { z } from "zod";
 import { idSchema, repositoryFields } from "../shared/domain";
 import {
@@ -112,6 +116,7 @@ export async function secretProvider(
 }
 
 export class SecretGitHubClient {
+  #authenticationRetries = 0;
   constructor(
     readonly credential: Omit<SecretCredential, "token" | "expiresAt"> & {
       token?: string;
@@ -121,7 +126,12 @@ export class SecretGitHubClient {
     readonly authorizeRequest?: (
       path: string,
       method: string,
-    ) => Promise<{ token: string; assertLive: () => Promise<void> }>,
+      remainingBudgetMs: () => number,
+    ) => Promise<{
+      token: string;
+      assertLive: () => Promise<void>;
+      rejectCredential?: () => void;
+    }>,
   ) {}
 
   private path(repository: string, environment?: string | null) {
@@ -191,17 +201,46 @@ export class SecretGitHubClient {
       );
     return root + "/actions/organization-" + collection;
   }
-  private async response(path: string, method = "GET", body?: object) {
+  private async response(
+    path: string,
+    method = "GET",
+    body?: object,
+    retry?: {
+      attempts: number;
+      serialized: string | undefined;
+      deadline: number;
+    },
+  ): Promise<{
+    status: number;
+    body: unknown;
+    rateLimited: boolean;
+    authorityChanged?: boolean;
+  }> {
+    const deadline =
+      retry?.deadline ?? performance.now() + SECRET_LIMITS.REQUEST_MS;
+    const remainingBudgetMs = () => deadline - performance.now();
+    const serialized = retry
+      ? retry.serialized
+      : body
+        ? JSON.stringify(body)
+        : undefined;
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
-      SECRET_LIMITS.REQUEST_MS,
+      Math.max(0, remainingBudgetMs()),
     );
+    let dispatched = false;
     try {
       const authority = this.authorizeRequest
-        ? await this.authorizeRequest(path, method)
+        ? await this.authorizeRequest(path, method, remainingBudgetMs)
         : null;
       controller.signal.throwIfAborted();
+      if (remainingBudgetMs() <= 0)
+        throw new DomainError(
+          "secret_provider_interrupted",
+          "The GitHub request reached its deadline before provider submission.",
+          503,
+        );
       const token = authority?.token ?? this.credential.token;
       if (!token)
         throw new DomainError(
@@ -209,6 +248,7 @@ export class SecretGitHubClient {
           "The selected GitHub credential is unavailable.",
           503,
         );
+      dispatched = true;
       const request = this.request(SECRET_PROVIDER.ORIGIN + path, {
         method,
         redirect: "manual",
@@ -220,7 +260,7 @@ export class SecretGitHubClient {
           "User-Agent": "maintainer-hq",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
-        ...(body ? { body: JSON.stringify(body) } : {}),
+        ...(serialized ? { body: serialized } : {}),
       });
       const abort = new Promise<never>((_resolve, reject) => {
         controller.signal.addEventListener(
@@ -230,7 +270,45 @@ export class SecretGitHubClient {
         );
       });
       const response = await Promise.race([request, abort]);
-      if (authority) await authority.assertLive();
+      if (
+        response.status === 401 &&
+        authority?.rejectCredential &&
+        this.#authenticationRetries < APP_AUTHENTICATION_RETRIES
+      ) {
+        void response.body?.cancel().catch(() => {});
+        this.#authenticationRetries++;
+        authority.rejectCredential();
+        try {
+          return await this.response(path, method, body, {
+            attempts: (retry?.attempts ?? 0) + 1,
+            serialized,
+            deadline,
+          });
+        } catch (error) {
+          if (!(error instanceof ProviderWriteNotSentError)) throw error;
+          return {
+            status: 401,
+            body: null,
+            rateLimited: error.reason === "rate_limited",
+            authorityChanged: true,
+          };
+        }
+      }
+      let authorityChanged = false;
+      if (authority) {
+        try {
+          await authority.assertLive();
+        } catch (error) {
+          if (
+            method === "GET" ||
+            (response.status !== 401 &&
+              response.status !== 204 &&
+              !(["POST", "PUT"].includes(method) && response.status === 201))
+          )
+            throw error;
+          authorityChanged = true;
+        }
+      }
       const rateLimited =
         response.status === 429 ||
         (response.status === 403 &&
@@ -238,11 +316,21 @@ export class SecretGitHubClient {
             response.headers.has("Retry-After")));
       if (method !== "GET") {
         void response.body?.cancel().catch(() => {});
-        return { status: response.status, body: null, rateLimited };
+        return {
+          status: response.status,
+          body: null,
+          rateLimited,
+          authorityChanged,
+        };
       }
       if (!response.ok) {
         void response.body?.cancel().catch(() => {});
-        return { status: response.status, body: null, rateLimited };
+        return {
+          status: response.status,
+          body: null,
+          rateLimited,
+          authorityChanged,
+        };
       }
       const reader = response.body?.getReader();
       if (!reader) throw new Error("Missing provider body");
@@ -274,6 +362,8 @@ export class SecretGitHubClient {
         rateLimited,
       };
     } catch (error) {
+      if (method !== "GET" && !dispatched)
+        throw new ProviderWriteNotSentError(error);
       if (error instanceof DomainError) throw error;
       throw new DomainError(
         "secret_provider_interrupted",
@@ -525,7 +615,10 @@ export class SecretGitHubClient {
         response.status === 204 ||
         (["POST", "PUT"].includes(method) && response.status === 201)
       )
-        return { status: "accepted", reason: null };
+        return {
+          status: "accepted",
+          reason: response.authorityChanged ? "authority_changed" : null,
+        };
       if (
         response.status >= 400 &&
         response.status < 500 &&
@@ -533,10 +626,15 @@ export class SecretGitHubClient {
       )
         return {
           status: "rejected",
-          reason: response.rateLimited ? "rate_limited" : "provider_rejected",
+          reason: response.rateLimited
+            ? "rate_limited"
+            : response.authorityChanged
+              ? "authority_changed"
+              : "provider_rejected",
         };
       return { status: "indeterminate", reason: "provider_result_uncertain" };
-    } catch {
+    } catch (error) {
+      if (error instanceof ProviderWriteNotSentError) throw error;
       return { status: "indeterminate", reason: "provider_result_uncertain" };
     }
   }

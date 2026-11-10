@@ -1,3 +1,5 @@
+import { githubAuthorityFenceSchema } from "./github-authority-fence-schema";
+import { GITHUB_APP_LIMITS } from "../shared/github-apps";
 import { z } from "zod";
 import { CAPABILITY } from "../shared/domain";
 import {
@@ -46,6 +48,10 @@ export const capturedDestinationSchema = z
     connectionName: z.string(),
     resource: secretResourceBindingSchema,
     snapshot: secretTargetSnapshotSchema,
+    githubAuthority: z
+      .array(githubAuthorityFenceSchema)
+      .max(GITHUB_APP_LIMITS.REPOSITORIES)
+      .optional(),
   })
   .strict();
 export const capturedSecretsSchema = z
@@ -351,6 +357,7 @@ export class SecretReviews {
       selected.row,
       selected.resource,
       selected.provider.identity,
+      selected.provider.captureGitHubAuthority?.(),
     );
     return {
       destination: {
@@ -364,6 +371,9 @@ export class SecretReviews {
       connectionName: selected.row.name,
       resource: selected.resource,
       snapshot,
+      ...(selected.provider.captureGitHubAuthority
+        ? { githubAuthority: selected.provider.captureGitHubAuthority() }
+        : {}),
     };
   }
   async ready(row: SecretReviewRow, captured = this.captured(row)) {

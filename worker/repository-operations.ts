@@ -1,3 +1,8 @@
+import {
+  assertGitHubAuthorityFence,
+  resolveGitHubReadAuthority,
+} from "./github-credential-resolver";
+import type { GitHubAppPermissions } from "../shared/github-apps";
 import { CAPABILITY } from "../shared/domain";
 import { z } from "zod";
 import { idSchema } from "../shared/domain";
@@ -194,6 +199,9 @@ export class RepositoryOperations<
     workspaceId: string,
     stored: StoredRepositoryReview,
     deadline: string,
+    phase: "read" | "effect" = "read",
+    permissions?: GitHubAppPermissions,
+    remainingBudgetMs?: () => number,
   ) {
     if (Date.parse(deadline) <= this.context.now() + LIMITS.REQUEST_MS)
       throw new DomainError(
@@ -213,6 +221,16 @@ export class RepositoryOperations<
       workspaceId,
       stored.review.writer.id,
       stored.review.basis.repository.fullName,
+      true,
+      {
+        repositoryId: stored.review.basis.repository.id,
+        sourceId: stored.review.basis.source.id,
+        sourceRevision: stored.review.basis.source.revision,
+        membershipRevision: stored.memberRevision,
+        phase,
+        permissions,
+        remainingBudgetMs,
+      },
     ).catch(() => {
       throw new DomainError(
         "dependency_access_changed",
@@ -220,6 +238,32 @@ export class RepositoryOperations<
         409,
       );
     });
+    if (stored.readFence?.kind === "app") {
+      try {
+        await resolveGitHubReadAuthority(
+          {
+            env: this.context.env,
+            db: this.context.db,
+            now: this.context.now,
+            principal: this.context.principal,
+            remainingBudgetMs,
+          },
+          {
+            ...stored.readFence,
+            reference: { kind: "app", grantId: stored.readFence.grantId },
+            phase: "read",
+            permissions: { metadata: "read", contents: "read" },
+          },
+        );
+        await assertGitHubAuthorityFence(this.context, stored.readFence);
+      } catch {
+        throw new DomainError(
+          "dependency_access_changed",
+          "The reviewed source authority changed.",
+          409,
+        );
+      }
+    }
     const catalog = this.context.env.GITHUB_CREDENTIALS;
     const guard = await dependencyReviewGuard(this.context, stored);
     const allowed = await this.db
@@ -254,7 +298,7 @@ export class RepositoryOperations<
     operation.requests = requests;
     const statement = this.db
       .prepare(
-        `UPDATE operations SET status=?,summary=?,result_json=?,updated_at=? WHERE workspace_id=? AND id=? AND plan_id=? AND kind=? AND status='running'`,
+        `UPDATE operations SET status=?,summary=?,result_json=?,updated_at=? WHERE workspace_id=? AND id=? AND plan_id=? AND kind=? AND status='running'${guard ? ` AND (${guard.sql})` : ""}`,
       )
       .bind(
         operation.status,
@@ -265,6 +309,7 @@ export class RepositoryOperations<
         operation.id,
         operation.planId,
         this.adapter.kind,
+        ...(guard?.values ?? []),
       );
     const results = guard
       ? await this.db.batch([
@@ -422,6 +467,7 @@ export class RepositoryOperations<
     );
     let client: DependencyGitHub | null = null;
     let readRequests = 0;
+    let acceptanceGuard: { sql: string; values: unknown[] } | undefined;
     const save = (guard?: { sql: string; values: unknown[] }) =>
       this.persist(
         workspaceId,
@@ -442,6 +488,52 @@ export class RepositoryOperations<
         fetch,
         LIMITS.REQUEST_MS,
         Date.parse(operation.executionExpiresAt),
+        "fence" in credential
+          ? async (method, suffix, remainingBudgetMs) => {
+              const permissions: GitHubAppPermissions = suffix.startsWith(
+                "/pulls",
+              )
+                ? {
+                    metadata: "read",
+                    pull_requests: method === "POST" ? "write" : "read",
+                  }
+                : {
+                    metadata: "read",
+                    contents: method === "POST" ? "write" : "read",
+                  };
+              const lease = await this.check(
+                workspaceId,
+                stored,
+                operation.executionExpiresAt,
+                method === "POST" ? "effect" : "read",
+                permissions,
+                remainingBudgetMs,
+              );
+              return {
+                token: lease.token,
+                ...("rejectCredential" in lease
+                  ? { rejectCredential: lease.rejectCredential }
+                  : {}),
+                assertLive: async () => {
+                  const guard = await dependencyReviewGuard(
+                    this.context,
+                    stored,
+                  );
+                  if (
+                    !(await this.db
+                      .prepare(`SELECT 1 WHERE ${guard.sql}`)
+                      .bind(...guard.values)
+                      .first())
+                  )
+                    throw new DomainError(
+                      "dependency_access_changed",
+                      "The reviewed authority changed during the provider request.",
+                      409,
+                    );
+                },
+              };
+            }
+          : undefined,
       );
       const inspected = await this.adapter.inspect(
         review,
@@ -528,6 +620,7 @@ export class RepositoryOperations<
         if (phase === "branch" || phase === "pull_request")
           await this.check(workspaceId, stored, operation.executionExpiresAt);
         operation.phase = phase;
+        acceptanceGuard = authority.authority;
         await save(authority.authority);
         if (
           authority.catalog !== this.context.env.GITHUB_CREDENTIALS ||
@@ -568,7 +661,7 @@ export class RepositoryOperations<
             review,
             operation,
           );
-        await save();
+        await save(authority.authority);
       }
       operation.phase = "finished";
       operation.status = "succeeded";
@@ -594,7 +687,21 @@ export class RepositoryOperations<
             ? "failed"
             : "partial";
     }
-    await save();
+    try {
+      await save(
+        operation.status === "succeeded" ? acceptanceGuard : undefined,
+      );
+    } catch (error) {
+      if (
+        operation.status !== "succeeded" ||
+        !(error instanceof DomainError) ||
+        error.code !== "dependency_access_changed"
+      )
+        throw error;
+      operation.status = "partial";
+      operation.reason = "access_changed";
+      await save();
+    }
     await this.db.batch(
       this.audit(
         workspaceId,

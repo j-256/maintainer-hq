@@ -1,3 +1,5 @@
+import { APP_AUTHENTICATION_RETRIES } from "./provider-effect-errors";
+import { DomainError } from "./errors";
 import { z } from "zod";
 import { repositoryFields } from "../shared/domain";
 import { GITHUB_LIMITS, githubBranchSchema } from "../shared/github-evidence";
@@ -54,13 +56,25 @@ function bounded<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 export class DependencyGitHub {
   readonly base: string;
   requests = 0;
+  #authenticationRetries = 0;
+  #token: string;
   constructor(
     readonly repository: string,
-    readonly token: string,
+    token: string,
     readonly fetcher: typeof fetch = fetch,
     readonly timeoutMs: number = LIMITS.REQUEST_MS,
     readonly deadline = Infinity,
+    readonly authorizeRequest?: (
+      method: "GET" | "POST",
+      suffix: string,
+      remainingBudgetMs: () => number,
+    ) => Promise<{
+      token: string;
+      assertLive: () => Promise<void>;
+      rejectCredential?: () => void;
+    }>,
   ) {
+    this.#token = token;
     repositoryFields.shape.fullName.parse(repository);
     if (!/^[\x21-\x7e]{1,2048}$/.test(token))
       throw new DependencyProviderFailure("provider_unavailable");
@@ -71,29 +85,49 @@ export class DependencyGitHub {
     method: "GET" | "POST",
     suffix: string,
     body?: unknown,
+    retry?: {
+      attempts: number;
+      serialized: string | undefined;
+      deadline: number;
+    },
   ): Promise<unknown> {
-    const serialized = body === undefined ? undefined : JSON.stringify(body);
-    const timeout = Math.min(this.timeoutMs, this.deadline - Date.now());
+    const serialized = retry
+      ? retry.serialized
+      : body === undefined
+        ? undefined
+        : JSON.stringify(body);
+    const deadline =
+      retry?.deadline ?? Math.min(this.deadline, Date.now() + this.timeoutMs);
+    const remainingBudgetMs = () => deadline - Date.now();
+    const timeout = remainingBudgetMs();
     if (timeout <= 0)
       throw new DependencyProviderFailure("provider_unavailable");
     if (
-      this.requests >= LIMITS.REQUESTS ||
+      this.requests - this.#authenticationRetries >= LIMITS.REQUESTS ||
       (serialized &&
         new TextEncoder().encode(serialized).byteLength > LIMITS.REQUEST_BYTES)
     )
       throw new DependencyProviderFailure("provider_unavailable");
-    this.requests++;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     const signal = controller.signal;
+    let dispatched = false;
     try {
+      const authority = this.authorizeRequest
+        ? await this.authorizeRequest(method, suffix, remainingBudgetMs)
+        : null;
+      signal.throwIfAborted();
+      if (remainingBudgetMs() <= 0)
+        throw new DependencyProviderFailure("provider_unavailable");
+      this.requests++;
+      dispatched = true;
       const response = await bounded(
         this.fetcher(new URL(this.base + suffix, GITHUB_LIMITS.API_ORIGIN), {
           method,
           redirect: "error",
           signal,
           headers: {
-            Authorization: "Bearer " + this.token,
+            Authorization: "Bearer " + (authority?.token ?? this.#token),
             Accept: "application/vnd.github+json",
             "Content-Type": "application/json",
             "X-GitHub-Api-Version": GITHUB_LIMITS.API_VERSION,
@@ -103,6 +137,20 @@ export class DependencyGitHub {
         }),
         signal,
       );
+      if (
+        response.status === 401 &&
+        authority?.rejectCredential &&
+        this.#authenticationRetries < APP_AUTHENTICATION_RETRIES
+      ) {
+        void response.body?.cancel().catch(() => undefined);
+        this.#authenticationRetries++;
+        authority.rejectCredential();
+        return this.request(method, suffix, body, {
+          attempts: (retry?.attempts ?? 0) + 1,
+          serialized,
+          deadline,
+        });
+      }
       if (response.status !== (method === "POST" ? 201 : 200)) {
         void response.body?.cancel().catch(() => undefined);
         throw new DependencyProviderFailure(
@@ -142,13 +190,20 @@ export class DependencyGitHub {
         bytes.set(chunk, offset);
         offset += chunk.byteLength;
       }
+      if (authority) await authority.assertLive();
       return JSON.parse(
         new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       );
     } catch (error) {
-      if (error instanceof DependencyProviderFailure) throw error;
+      if (
+        error instanceof DependencyProviderFailure ||
+        error instanceof DomainError
+      )
+        throw error;
       throw new DependencyProviderFailure(
-        method === "POST" ? "outcome_unknown" : "provider_unavailable",
+        method === "POST" && dispatched
+          ? "outcome_unknown"
+          : "provider_unavailable",
       );
     } finally {
       clearTimeout(timer);
@@ -199,17 +254,15 @@ export class DependencyGitHub {
     return result.object.sha;
   }
   async pull(head: string, base: string, title: string, body: string) {
-    return pullSchema
-      .extend({ merged: z.boolean() })
-      .parse(
-        await this.request("POST", "/pulls", {
-          head,
-          base,
-          title,
-          body,
-          maintainer_can_modify: false,
-        }),
-      );
+    return pullSchema.extend({ merged: z.boolean() }).parse(
+      await this.request("POST", "/pulls", {
+        head,
+        base,
+        title,
+        body,
+        maintainer_can_modify: false,
+      }),
+    );
   }
   async findPull(head: string) {
     const params = new URLSearchParams({

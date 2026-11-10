@@ -1,3 +1,4 @@
+import type { GitHubAuthorityFence } from "./github-app-types";
 import { z } from "zod";
 import { idSchema, repositoryFields } from "../shared/domain";
 import {
@@ -42,6 +43,8 @@ export interface ConnectedSecretProvider {
   identity: string;
   writable: boolean;
   authorityGuard?: () => { sql: string; values: unknown[] };
+  captureGitHubAuthority?: () => GitHubAuthorityFence[];
+  pinGitHubAuthority?: (fences: GitHubAuthorityFence[]) => Promise<void>;
   selectResources(ids: string[]): Promise<SecretResourceBinding[]>;
   checkResources(resources: SecretResourceBinding[]): Promise<void>;
   scopes(resource: SecretResourceBinding, page: number): Promise<SecretScopes>;

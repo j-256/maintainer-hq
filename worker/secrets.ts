@@ -1,3 +1,5 @@
+import type { GitHubAuthorityFence } from "./github-app-types";
+import { assertGitHubAuthorityFence } from "./github-credential-resolver";
 import { z } from "zod";
 import { CAPABILITY, workspaceInput } from "../shared/domain";
 import {
@@ -360,6 +362,7 @@ export class SecretsService {
       selected.row,
       selected.resource,
       selected.provider.identity,
+      selected.provider.captureGitHubAuthority?.(),
     );
     return result;
   }
@@ -415,6 +418,7 @@ export class SecretsService {
       selected.row,
       selected.resource,
       selected.provider.identity,
+      selected.provider.captureGitHubAuthority?.(),
     );
     const managedKeys = items.data.map((item) =>
       managedDestinationKey(result.providerKind, entryKind, {
@@ -461,6 +465,7 @@ export class SecretsService {
     row: SecretConnectionRow,
     resource: SecretResourceBinding,
     providerIdentity: string,
+    capturedAuthority: GitHubAuthorityFence[] = [],
   ) {
     await authorize(this.context, workspaceId);
     const current = await this.connection(workspaceId, row.id);
@@ -487,5 +492,7 @@ export class SecretsService {
         409,
       );
     await provider.checkResources([resource]);
+    for (const fence of capturedAuthority)
+      await assertGitHubAuthorityFence(this.context, fence);
   }
 }

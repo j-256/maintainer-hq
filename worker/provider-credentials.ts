@@ -275,6 +275,7 @@ export class ProviderCredentials {
         .parse(result.data);
       if (identity.full_name.toLowerCase() !== resourceName.toLowerCase())
         providerCredentialConflict();
+      if (!provider.settings.expiresAt) providerCredentialUnavailable();
       expiresAt = provider.settings.expiresAt;
     } else {
       if (scope.kind === "worker")

@@ -1,3 +1,8 @@
+import { ProviderWriteNotSentError } from "./provider-effect-errors";
+import { combineSqlGuards } from "./authority-sql";
+import { githubAuthorityFenceSql } from "./github-credential-resolver";
+import { githubAuthorityFenceSchema } from "./github-authority-fence-schema";
+import { GITHUB_APP_LIMITS } from "../shared/github-apps";
 import { z } from "zod";
 import { CAPABILITY, LIMITS, idSchema } from "../shared/domain";
 import {
@@ -21,10 +26,7 @@ import {
   type ManagedConfigurationReview,
   type ManagedProviderSnapshot,
 } from "../shared/managed-configurations";
-import {
-  SECRET_ENTRY_KIND,
-  secretProviderKindSchema,
-} from "../shared/secrets";
+import { SECRET_ENTRY_KIND, secretProviderKindSchema } from "../shared/secrets";
 import { credentialHash } from "./credential-hash";
 import { DomainError } from "./errors";
 import {
@@ -48,8 +50,7 @@ const managedResourceSchema = z
 const reviewedSchema = z
   .object({
     configuration: managedConfigurationSchema,
-    destinationIndex:
-      managedConfigurationPlanInput.shape.destinationIndex,
+    destinationIndex: managedConfigurationPlanInput.shape.destinationIndex,
     memberRevision: z.number().int().positive(),
     tokenId: z.string().nullable(),
     providerRef: z.string().min(1).max(255),
@@ -65,6 +66,10 @@ const reviewedSchema = z
       MANAGED_CONFIGURATION_ACTION.NONE,
     ]),
     writable: z.boolean(),
+    githubAuthority: z
+      .array(githubAuthorityFenceSchema)
+      .max(GITHUB_APP_LIMITS.REPOSITORIES)
+      .optional(),
   })
   .strict();
 type Reviewed = z.infer<typeof reviewedSchema>;
@@ -200,8 +205,7 @@ export class ManagedConfigurationOperations {
   ): ManagedConfigurationReceipt {
     return {
       writeStatus: status === "running" ? "indeterminate" : "not-sent",
-      reason:
-        status === "running" ? "provider_result_uncertain" : null,
+      reason: status === "running" ? "provider_result_uncertain" : null,
       observationStatus: MANAGED_CONFIGURATION_STATUS.UNAVAILABLE,
       item: null,
       observedAt: null,
@@ -210,16 +214,17 @@ export class ManagedConfigurationOperations {
   }
 
   async get(input: unknown): Promise<ManagedConfigurationReview> {
-    const { workspaceId, planId } = managedConfigurationReviewInput.parse(input);
+    const { workspaceId, planId } =
+      managedConfigurationReviewInput.parse(input);
     await authorize(this.context, workspaceId);
     const row = await this.row(workspaceId, planId);
     const reviewed = this.reviewed(row);
     const operation = await this.operation(workspaceId, planId);
     const receipt = operation
-      ? z
+      ? (z
           .object({ receipt: managedConfigurationReceiptSchema.optional() })
           .parse(JSON.parse(operation.result_json)).receipt ??
-        this.fallbackReceipt(operation.status)
+        this.fallbackReceipt(operation.status))
       : null;
     await authorize(this.context, workspaceId);
     const desired =
@@ -306,6 +311,17 @@ export class ManagedConfigurationOperations {
       );
   }
 
+  private guard(workspaceId: string, reviewed: Reviewed) {
+    return combineSqlGuards([
+      actorGuard(
+        this.context,
+        workspaceId,
+        CAPABILITY.SECRETS,
+        reviewed.memberRevision,
+      ),
+      ...(reviewed.githubAuthority ?? []).map(githubAuthorityFenceSql),
+    ]);
+  }
   private async ready(
     workspaceId: string,
     reviewed: Reviewed,
@@ -332,8 +348,7 @@ export class ManagedConfigurationOperations {
         JSON.stringify(managedConfigurationSchema.parse(reviewed.configuration))
       : JSON.stringify(stableConfiguration(configuration)) ===
         JSON.stringify(stableConfiguration(reviewed.configuration));
-    if (!configurationMatches)
-      this.conflict();
+    if (!configurationMatches) this.conflict();
     const selected = await this.configurations.selected(
       workspaceId,
       configuration,
@@ -353,6 +368,16 @@ export class ManagedConfigurationOperations {
             JSON.stringify(reviewed.resource.repositoryIds)))
     )
       this.conflict();
+    if (requireActor && reviewed.githubAuthority?.length) {
+      if (!selected.connection.provider.pinGitHubAuthority) this.conflict();
+      try {
+        await selected.connection.provider.pinGitHubAuthority(
+          reviewed.githubAuthority,
+        );
+      } catch {
+        this.conflict();
+      }
+    }
     return { configuration, selected };
   }
 
@@ -434,16 +459,17 @@ export class ManagedConfigurationOperations {
         snapshot.item,
       ),
       writable: selected.connection.provider.writable,
+      ...(selected.connection.provider.captureGitHubAuthority
+        ? {
+            githubAuthority:
+              selected.connection.provider.captureGitHubAuthority(),
+          }
+        : {}),
     });
     await this.ready(workspaceId, reviewed, true);
     const serialized = JSON.stringify(reviewed);
     const fingerprint = "sha256:" + (await credentialHash(serialized));
-    const guard = actorGuard(
-      this.context,
-      workspaceId,
-      CAPABILITY.SECRETS,
-      memberRevision,
-    );
+    const guard = this.guard(workspaceId, reviewed);
     const createdAt = this.timestamp();
     const expiresAt = new Date(
       this.context.now() + LIMITS.PLAN_TTL_MS,
@@ -560,13 +586,23 @@ export class ManagedConfigurationOperations {
     status: ManagedConfigurationOperation["status"],
     summary: string,
     receipt: ManagedConfigurationReceipt,
-  ) {
+    reconciliation?: { authority?: { sql: string; values: unknown[] } },
+  ): Promise<boolean> {
+    const authority = reconciliation
+      ? reconciliation.authority
+      : reviewed.githubAuthority?.length &&
+          receipt.reason !== "authority_changed" &&
+          (receipt.writeStatus === "accepted" ||
+            receipt.observedAt !== null ||
+            status === "succeeded")
+        ? this.guard(workspaceId, reviewed)
+        : undefined;
     const eventId = operationId + "_" + status;
-    await this.db.batch([
+    const saved = await this.db.batch([
       this.db
         .prepare(
           `UPDATE operations SET status=?,summary=?,result_json=?,updated_at=?
-          WHERE workspace_id=? AND id=? AND kind=? AND status IN ('pending','running','partial','indeterminate')`,
+          WHERE workspace_id=? AND id=? AND kind=? AND status IN ('pending','running','partial','indeterminate')${authority ? ` AND (${authority.sql})` : ""}`,
         )
         .bind(
           status,
@@ -576,6 +612,7 @@ export class ManagedConfigurationOperations {
           workspaceId,
           operationId,
           MANAGED_CONFIGURATION_OPERATION_KIND,
+          ...(authority?.values ?? []),
         ),
       this.db
         .prepare(
@@ -619,22 +656,49 @@ export class ManagedConfigurationOperations {
           ),
       ),
     ]);
+    if (authority && !saved[0].meta.changes) {
+      if (reconciliation) return false;
+      const accepted = receipt.writeStatus === "accepted";
+      const uncertain = receipt.writeStatus === "indeterminate";
+      return this.record(
+        workspaceId,
+        operationId,
+        reviewed,
+        accepted ? "partial" : uncertain ? "indeterminate" : "failed",
+        "Authority changed before the provider receipt could be recorded under its original scope. Preserve the confirmed provider result and recheck metadata before another change.",
+        this.receipt(
+          reviewed,
+          null,
+          receipt.writeStatus,
+          accepted ? "authority_changed" : receipt.reason,
+          receipt.submittedAt,
+        ),
+      );
+    }
+    return Boolean(saved[0].meta.changes);
   }
 
   private summary(
     action: Reviewed["action"],
     status: ManagedConfigurationOperation["status"],
   ) {
-    const target = action === MANAGED_CONFIGURATION_ACTION.NONE
-      ? "No provider write was needed"
-      : "The reviewed " + action + " for the managed variable";
+    const target =
+      action === MANAGED_CONFIGURATION_ACTION.NONE
+        ? "No provider write was needed"
+        : "The reviewed " + action + " for the managed variable";
     if (status === "succeeded")
       return target + " and live provider state matches the desired state.";
     if (status === "failed")
       return target + " was not accepted. Refresh status before trying again.";
     if (status === "partial")
-      return target + " has a known or uncertain submission, but live state does not yet prove the desired outcome. Reconcile before another change.";
-    return target + " may have reached the provider. Acceptance and live state are uncertain; reconcile before another change.";
+      return (
+        target +
+        " has a known or uncertain submission, but live state does not yet prove the desired outcome. Reconcile before another change."
+      );
+    return (
+      target +
+      " may have reached the provider. Acceptance and live state are uncertain; reconcile before another change."
+    );
   }
 
   async apply(input: unknown): Promise<ManagedConfigurationReview> {
@@ -655,12 +719,7 @@ export class ManagedConfigurationOperations {
     const desired =
       reviewed.configuration.destinations[reviewed.destinationIndex];
     if (!desired) this.conflict();
-    const guard = actorGuard(
-      this.context,
-      workspaceId,
-      CAPABILITY.SECRETS,
-      reviewed.memberRevision,
-    );
+    const guard = this.guard(workspaceId, reviewed);
     const operationId = crypto.randomUUID();
     const now = this.timestamp();
     const requested =
@@ -844,12 +903,33 @@ export class ManagedConfigurationOperations {
         .run();
       if (!started.meta.changes) this.conflict();
       submittedAt = candidateSubmittedAt;
-      const result = await current.selected.connection.provider.writeManagedVariable!(
+      const result = await current.selected.connection.provider
+        .writeManagedVariable!(
         current.selected.connection.resource,
         preflight,
         reviewed.action,
         reviewed.configuration.desiredValue,
       );
+      if (
+        result.status === "accepted" &&
+        result.reason === "authority_changed"
+      ) {
+        await this.record(
+          workspaceId,
+          operationId,
+          reviewed,
+          "partial",
+          "The provider accepted the write, but its reviewed authority changed. Reconcile metadata before another action.",
+          this.receipt(
+            reviewed,
+            null,
+            "accepted",
+            "authority_changed",
+            submittedAt,
+          ),
+        );
+        return this.get({ workspaceId, planId });
+      }
       let observed: ManagedProviderSnapshot | null = null;
       try {
         observed = (
@@ -888,7 +968,9 @@ export class ManagedConfigurationOperations {
         this.summary(reviewed.action, status),
         receipt,
       );
-    } catch {
+    } catch (error) {
+      const knownUnsent = error instanceof ProviderWriteNotSentError;
+      if (knownUnsent) submittedAt = null;
       const status = submittedAt ? "indeterminate" : "failed";
       await this.record(
         workspaceId,
@@ -900,9 +982,13 @@ export class ManagedConfigurationOperations {
           : "Authority or provider state changed before submission. No provider action was sent.",
         this.receipt(
           reviewed,
-          preflight,
+          knownUnsent ? null : preflight,
           submittedAt ? "indeterminate" : "not-sent",
-          submittedAt ? "provider_result_uncertain" : "authority_changed",
+          knownUnsent
+            ? error.reason
+            : submittedAt
+              ? "provider_result_uncertain"
+              : "authority_changed",
           submittedAt,
         ),
       );
@@ -911,7 +997,8 @@ export class ManagedConfigurationOperations {
   }
 
   async reconcile(input: unknown): Promise<ManagedConfigurationReview> {
-    const { workspaceId, planId } = managedConfigurationReviewInput.parse(input);
+    const { workspaceId, planId } =
+      managedConfigurationReviewInput.parse(input);
     await authorize(this.context, workspaceId, CAPABILITY.SECRETS);
     const row = await this.row(workspaceId, planId);
     const operation = await this.operation(workspaceId, planId);
@@ -920,14 +1007,16 @@ export class ManagedConfigurationOperations {
     const reviewed = this.reviewed(row);
     const current = await this.ready(workspaceId, reviewed, false);
     let snapshot: ManagedProviderSnapshot | null = null;
+    let readAuthority: { sql: string; values: unknown[] } | undefined;
     try {
-      snapshot = (
-        await this.configurations.inspect(
-          workspaceId,
-          current.configuration,
-          reviewed.destinationIndex,
-        )
-      ).snapshot;
+      const inspection = await this.configurations.inspect(
+        workspaceId,
+        current.configuration,
+        reviewed.destinationIndex,
+      );
+      snapshot = inspection.snapshot;
+      readAuthority =
+        inspection.selected.connection.provider.authorityGuard?.();
     } catch {
       snapshot = null;
     }
@@ -936,9 +1025,10 @@ export class ManagedConfigurationOperations {
     );
     if (targetChanged) snapshot = null;
     await authorize(this.context, workspaceId, CAPABILITY.SECRETS);
-    const prior = z
-      .object({ receipt: managedConfigurationReceiptSchema.optional() })
-      .parse(JSON.parse(operation.result_json)).receipt ??
+    const prior =
+      z
+        .object({ receipt: managedConfigurationReceiptSchema.optional() })
+        .parse(JSON.parse(operation.result_json)).receipt ??
       this.fallbackReceipt(operation.status);
     const receipt = this.receipt(
       reviewed,
@@ -961,8 +1051,9 @@ export class ManagedConfigurationOperations {
         ? "A live provider read confirms the desired state. The original write acceptance remains unknown."
         : targetChanged
           ? "The provider target identity changed. The original outcome remains uncertain and no write was replayed."
-        : this.summary(reviewed.action, status),
+          : this.summary(reviewed.action, status),
       receipt,
+      { authority: readAuthority },
     );
     return this.get({ workspaceId, planId });
   }

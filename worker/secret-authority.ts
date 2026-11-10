@@ -1,3 +1,5 @@
+import { combineSqlGuards } from "./authority-sql";
+import { githubAuthorityFenceSql } from "./github-credential-resolver";
 import { CAPABILITY } from "../shared/domain";
 import { hookActorGuard } from "./hook-authority";
 import { SecretsService } from "./secrets";
@@ -24,12 +26,22 @@ export function capturedSecretGuard(
     CAPABILITY.SECRETS,
     memberRevision,
   );
+  const captured = combineSqlGuards(
+    items
+      .flatMap((item) => item.githubAuthority ?? [])
+      .map(githubAuthorityFenceSql),
+  );
   return {
-    sql: `${actor.sql} AND NOT EXISTS (SELECT 1 FROM json_each(?) i WHERE NOT EXISTS
+    sql: `${actor.sql} AND ${captured.sql} AND NOT EXISTS (SELECT 1 FROM json_each(?) i WHERE NOT EXISTS
       (SELECT 1 FROM secret_connections c WHERE c.workspace_id=? AND c.id=json_extract(i.value,'$.destination.connectionId')
         AND c.revision=json_extract(i.value,'$.destination.connectionRevision') AND c.provider_kind=json_extract(i.value,'$.providerKind')
         AND c.credential_ref=json_extract(i.value,'$.providerRef') AND c.enabled=1))`,
-    values: [...actor.values, JSON.stringify(items), workspaceId],
+    values: [
+      ...actor.values,
+      ...captured.values,
+      JSON.stringify(items),
+      workspaceId,
+    ],
   };
 }
 export async function connectCapturedSecrets(
@@ -53,6 +65,14 @@ export async function connectCapturedSecrets(
       !selected.provider.writable
     )
       secretReviewConflict();
+    if (item.githubAuthority?.length) {
+      if (!selected.provider.pinGitHubAuthority) secretReviewConflict();
+      try {
+        await selected.provider.pinGitHubAuthority(item.githubAuthority);
+      } catch {
+        secretReviewConflict();
+      }
+    }
     await selected.provider.checkPrepared(item.resource, item.snapshot);
     connected.push(selected.provider);
   }

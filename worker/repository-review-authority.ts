@@ -1,3 +1,4 @@
+import { combineSqlGuards } from "./authority-sql";
 import { CAPABILITY } from "../shared/domain";
 import type { DependencyChangeReview } from "../shared/dependency-changes";
 import { hookActorGuard } from "./hook-authority";
@@ -5,7 +6,11 @@ import {
   githubCredentialDescriptor,
   manualGitHubCredentialDescriptor,
 } from "./github-credential-descriptors";
-import { githubAuthorityFenceSql } from "./github-credential-resolver";
+import {
+  githubAuthorityFenceSql,
+  assertGitHubAuthorityFence,
+  resolveGitHubReadAuthority,
+} from "./github-credential-resolver";
 import type { GitHubAuthorityFence } from "./github-app-types";
 import { providerCredentialGuard } from "./provider-credential-store";
 import { PROVIDER_CREDENTIAL_KIND } from "../shared/provider-credentials";
@@ -30,11 +35,29 @@ export type StoredRepositoryReview = {
   credentialHash: string;
   writerIdentity: string | null;
   readFence?: GitHubAuthorityFence;
+  writerFence?: GitHubAuthorityFence;
 };
 export async function repositoryReviewGuard(
   context: WorkspaceService,
   stored: StoredRepositoryReview,
+  options: { refresh?: boolean } = {},
 ) {
+  let providerCurrent = true;
+  if (options.refresh) {
+    for (const fence of [stored.readFence, stored.writerFence]) {
+      if (fence?.kind !== "app") continue;
+      try {
+        await resolveGitHubReadAuthority(context, {
+          ...fence,
+          reference: { kind: "app", grantId: fence.grantId },
+          phase: "read",
+        });
+        await assertGitHubAuthorityFence(context, fence);
+      } catch {
+        providerCurrent = false;
+      }
+    }
+  }
   const { review } = stored;
   const { basis, workspaceId } = review;
   const credential =
@@ -55,14 +78,21 @@ export async function repositoryReviewGuard(
     CAPABILITY.OPERATE,
     stored.memberRevision,
   );
-  const writer =
-    review.writer && stored.writerIdentity
-      ? providerCredentialGuard(
-          workspaceId,
-          PROVIDER_CREDENTIAL_KIND.REPOSITORY,
-          review.writer.id,
-          stored.writerIdentity,
-        )
+  const writer = stored.writerFence
+    ? githubAuthorityFenceSql(stored.writerFence)
+    : review.writer && stored.writerIdentity
+      ? (() => {
+          const guard = providerCredentialGuard(
+            workspaceId,
+            PROVIDER_CREDENTIAL_KIND.REPOSITORY,
+            review.writer.id,
+            stored.writerIdentity,
+          );
+          return {
+            sql: `${guard.sql} AND NOT EXISTS(SELECT 1 FROM github_app_credential_references WHERE workspace_id=? AND reference_id=?)`,
+            values: [...guard.values, workspaceId, review.writer.id],
+          };
+        })()
       : { sql: "1", values: [] };
   const observed = stored.readFence
     ? githubAuthorityFenceSql(stored.readFence)
@@ -70,17 +100,18 @@ export async function repositoryReviewGuard(
         sql: "NOT EXISTS(SELECT 1 FROM github_app_credential_references WHERE workspace_id=? AND reference_id=?)",
         values: [workspaceId, stored.credentialRef],
       };
+  const provider = combineSqlGuards([writer, observed]);
   return {
-    sql: `${actor.sql} AND ${writer.sql} AND ${observed.sql} AND ?=1 AND EXISTS (
+    sql: `${actor.sql} AND ${provider.sql} AND ?=1 AND EXISTS (
       SELECT 1 FROM repositories r JOIN source_repositories sr ON sr.workspace_id=r.workspace_id AND sr.repository_id=r.id
       JOIN connections s ON s.workspace_id=sr.workspace_id AND s.id=sr.source_id
       WHERE r.workspace_id=? AND r.id=? AND r.full_name=? AND r.revision=? AND s.id=? AND s.revision=? AND s.enabled=1 AND s.provider='github' AND s.credential_ref=?)`,
     values: [
       ...actor.values,
-      ...writer.values,
-      ...observed.values,
+      ...provider.values,
       Number(
-        credential?.hash === stored.credentialHash &&
+        providerCurrent &&
+          credential?.hash === stored.credentialHash &&
           stored.tokenId === (context.principal.tokenId ?? null),
       ),
       workspaceId,

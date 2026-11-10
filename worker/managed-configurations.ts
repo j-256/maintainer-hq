@@ -747,6 +747,7 @@ export class ManagedConfigurations {
       selected.connection.row,
       selected.connection.resource,
       selected.connection.provider.identity,
+      selected.connection.provider.captureGitHubAuthority?.(),
     );
     return { snapshot, selected };
   }
