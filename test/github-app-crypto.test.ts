@@ -1,3 +1,4 @@
+import { createPrivateKey } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   normalizeGitHubAppKey,
@@ -33,7 +34,7 @@ describe("GitHub App protected material", () => {
     const first = await normalizeGitHubAppKey(key.pkcs1);
     const second = await normalizeGitHubAppKey(key.pkcs8);
     expect(first.pkcs8).toBe(second.pkcs8);
-    expect(first.pkcs8).toMatch(/^-----BEGIN PRIVATE KEY-----\n/);
+    expect(createPrivateKey(first.pkcs8).asymmetricKeyType).toBe("rsa");
     expect(first.fingerprint).toBe(key.fingerprint);
     expect(second.fingerprint).toBe(key.fingerprint);
   });
@@ -67,12 +68,11 @@ describe("GitHub App protected material", () => {
       true,
       ["sign", "verify"],
     );
-    const nonRsaPem =
-      "-----BEGIN PRIVATE KEY-----\n" +
-      Buffer.from(
-        await crypto.subtle.exportKey("pkcs8", nonRsa.privateKey),
-      ).toString("base64") +
-      "\n-----END PRIVATE KEY-----\n";
+    const nonRsaPem = createPrivateKey({
+      key: Buffer.from(await crypto.subtle.exportKey("pkcs8", nonRsa.privateKey)),
+      format: "der",
+      type: "pkcs8",
+    }).export({ format: "pem", type: "pkcs8" }).toString();
     for (const input of [
       weak.pkcs8,
       nonRsaPem,

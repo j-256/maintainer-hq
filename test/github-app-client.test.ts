@@ -95,6 +95,22 @@ describe("GitHub App fixed-origin client", () => {
     });
   });
 
+  it("accepts bounded opaque long tokens without interpreting their format", async () => {
+    const token = "ghs_42_" + "a".repeat(4096) + ".b.c";
+    expect(
+      (
+        await client(async () =>
+          Response.json(tokenResponse({ token })),
+        ).mintToken(scope)
+      ).token,
+    ).toBe(token);
+    await expect(
+      client(async () =>
+        Response.json(tokenResponse({ token: "a".repeat(16385) })),
+      ).mintToken(scope),
+    ).rejects.toMatchObject({ code: "github_app_response_invalid" });
+  });
+
   it("rejects excess, missing or expired token authority and malformed responses", async () => {
     for (const response of [
       tokenResponse({ repositories: [repository, { ...repository, id: 102 }] }),

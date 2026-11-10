@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GITHUB_APP_LIMITS } from "../shared/github-apps";
 import type {
   GitHubDiagnostics,
   GitHubStopReason,
@@ -18,6 +19,8 @@ import {
   type Observation,
 } from "../shared/domain";
 
+const MANUAL_TOKEN_BYTES = 2048;
+
 type EvidenceDetails = Observation["details"];
 export type GitHubCollection = {
   status: "succeeded" | "partial" | "failed";
@@ -29,6 +32,7 @@ export type GitHubCollection = {
   diagnostics: GitHubDiagnostics;
 };
 type CollectorOptions = {
+  credentialKind?: "app" | "token";
   fetch?: typeof fetch;
   now?: () => number;
   signal?: AbortSignal;
@@ -775,7 +779,15 @@ export async function collectGitHub(
   const invalidName =
     !repositoryFields.shape.fullName.safeParse(fullName).success ||
     [".", ".."].includes(fullName.split("/")[1]);
-  if (invalidName || !/^[\x21-\x7e]{1,2048}$/.test(token)) {
+  const tokenLimit =
+    options.credentialKind === "app"
+      ? GITHUB_APP_LIMITS.TOKEN_BYTES
+      : MANUAL_TOKEN_BYTES;
+  if (
+    invalidName ||
+    token.length > tokenLimit ||
+    !/^[\x21-\x7e]+$/.test(token)
+  ) {
     reader.endpoint("repository").reason = "configuration";
     put({
       key: "repository",

@@ -11,6 +11,10 @@ Open **Settings > GitHub evidence** for the Coverage view. Each row identifies t
 
 Access or feature gaps include direct links to the affected repository's access or security settings on GitHub. **Review collector access on GitHub** offers fine-grained token, classic token, and GitHub App installation settings without assuming which credential caused a denied read. The same links appear with detailed evidence in repositories and refresh receipts. They open a new tab and remain available to HQ viewers; GitHub checks the signed-in account's permissions. After making changes on GitHub, return to HQ and refresh the connection to verify coverage. Opening a settings page does not change a coverage result or grant access.
 
+## Choose authentication
+
+Open the Authentication tab to use a deployment-owned [GitHub App](github-apps.md) through an explicit workspace grant. Apps are recommended; **Advanced: manual token** remains available for new and existing connections. Choose and save the credential reference deliberately, then inspect a new refresh receipt. A configured grant does not attest to provider permissions or scanner availability.
+
 ## Resolve access or feature gaps
 
 The row names the unavailable checks. Open **Inspect** to see a remedy for each one. For a scanner, follow **Security settings on GitHub** and check that the named feature is available and enabled; code scanning also needs an analysis of the default branch. Then review the credential used by the connection. A fine-grained token or GitHub App needs the corresponding Dependabot alerts, Code scanning alerts or Secret scanning alerts read permission. The credential settings links are alternatives for different credential types, not a request to create every kind of credential. A generic denied read cannot determine whether the feature or credential is responsible.

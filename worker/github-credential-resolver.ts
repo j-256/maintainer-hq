@@ -23,6 +23,7 @@ import {
   githubAppQuotaKey,
   assertGitHubAppCooldown,
   recordGitHubAppCooldown,
+  type GitHubAuthorityObservation,
 } from "./github-app-authority";
 import { openGitHubAppClient } from "./github-app-material-store";
 import {
@@ -451,6 +452,34 @@ function requiredPermissions(
     ),
   );
 }
+function appAuthorityIdentity(
+  fence: Extract<GitHubAuthorityFence, { kind: "app" }>,
+  digest: string,
+) {
+  return credentialHash(
+    JSON.stringify([
+      "github-app",
+      {
+        workspaceId: fence.workspaceId,
+        connectionId: fence.connectionId,
+        connectionRevision: fence.connectionRevision,
+        connectionKind: fence.connectionKind,
+        repositoryId: fence.repositoryId,
+        repositoryFullName: fence.repositoryFullName,
+        capability: fence.capability,
+        registrationId: fence.registrationId,
+        registrationRevision: fence.registrationRevision,
+        keyRevision: fence.keyRevision,
+        installationId: fence.installationId,
+        grantId: fence.grantId,
+        grantRevision: fence.grantRevision,
+        providerRepositoryId: fence.providerRepositoryId,
+        generation: fence.observedAuthorityGeneration,
+      },
+      digest,
+    ]),
+  );
+}
 type ReadAuthority = Omit<GitHubCredentialLease, "token">;
 type AppAuthority = {
   kind: "app";
@@ -651,28 +680,9 @@ async function resolveCredentialAuthority(
     observedAuthorityGeneration: observation.generation,
   };
   await assertGitHubAuthorityFence(context, fence);
-  const authorityIdentity = await credentialHash(
-    JSON.stringify([
-      "github-app",
-      {
-        workspaceId: fence.workspaceId,
-        connectionId: fence.connectionId,
-        connectionRevision: fence.connectionRevision,
-        connectionKind: fence.connectionKind,
-        repositoryId: fence.repositoryId,
-        repositoryFullName: fence.repositoryFullName,
-        capability: fence.capability,
-        registrationId: fence.registrationId,
-        registrationRevision: fence.registrationRevision,
-        keyRevision: fence.keyRevision,
-        installationId: fence.installationId,
-        grantId: fence.grantId,
-        grantRevision: fence.grantRevision,
-        providerRepositoryId: fence.providerRepositoryId,
-        generation: fence.observedAuthorityGeneration,
-      },
-      observation.digest,
-    ]),
+  const authorityIdentity = await appAuthorityIdentity(
+    fence,
+    observation.digest,
   );
   const quotaKey = await githubAppQuotaKey(
     context,
@@ -799,13 +809,14 @@ export async function resolveGitHubDiscoveryAuthority(
     permissions: { metadata: "read" },
     phase: "read",
   });
+  let observations: GitHubAuthorityObservation[] = [];
   const first = await resolveCredentialAuthority(
     context,
     target(grant.repositories[0].fullName),
     false,
     async (live) => {
       if (live.revision !== grant.revision) githubAppConflict();
-      await verifyGitHubAppAuthoritySet(
+      observations = await verifyGitHubAppAuthoritySet(
         context,
         grant.repositories.map((repository) => ({
           workspaceId: request.workspaceId,
@@ -818,15 +829,31 @@ export async function resolveGitHubDiscoveryAuthority(
       );
     },
   );
+  if (first.kind !== "app" || observations.length !== grant.repositories.length)
+    githubAppConflict();
   const leases: ReadAuthority[] = [first.lease];
-  for (const repository of grant.repositories.slice(1))
-    leases.push(
-      await resolveGitHubReadAuthority(
-        context,
-        target(repository.fullName),
-        true,
+  for (let index = 1; index < observations.length; index++) {
+    const observation = observations[index];
+    const repository = grant.repositories[index];
+    if (JSON.stringify(observation.repository) !== JSON.stringify(repository))
+      githubAppConflict();
+    const fence = {
+      ...first.lease.fence,
+      repositoryFullName: repository.fullName,
+      providerRepositoryId: repository.id,
+      observedAuthorityGeneration: observation.generation,
+    };
+    leases.push({
+      ...first.lease,
+      fence,
+      authorityIdentity: await appAuthorityIdentity(fence, observation.digest),
+      observedAuthorityGeneration: observation.generation,
+      validUntil: Math.min(
+        first.lease.validUntil,
+        Date.parse(observation.validUntil),
       ),
-    );
+    });
+  }
   const authority = {
     authorityIdentity: await credentialHash(
       JSON.stringify(leases.map((lease) => lease.authorityIdentity)),
