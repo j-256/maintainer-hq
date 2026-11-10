@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createPrivateKey, createPublicKey } from "node:crypto";
-import { importPKCS8, SignJWT } from "jose";
+import { SignJWT } from "jose";
 import { z } from "zod";
 import { idSchema } from "../shared/domain";
 import {
@@ -11,6 +11,10 @@ import { DomainError } from "./errors";
 import { providerCredentialEncryptionKey } from "./provider-credential-crypto";
 
 const RSA_ALGORITHM = "RS256";
+const RSA_IMPORT_ALGORITHM = Object.freeze({
+  name: "RSASSA-PKCS1-v1_5",
+  hash: "SHA-256",
+});
 const ENCRYPTION_ALGORITHM = "AES-GCM";
 const NONCE_BYTES = 12;
 const TAG_BITS = 128;
@@ -101,13 +105,24 @@ export async function signGitHubAppJwt(
   )
     invalid();
   const normalized = await normalizeGitHubAppKey(key);
+  const der = createPrivateKey(normalized.pkcs8).export({
+    type: "pkcs8",
+    format: "der",
+  });
+  const signingKey = await crypto.subtle.importKey(
+    "pkcs8",
+    new Uint8Array(der).buffer,
+    RSA_IMPORT_ALGORITHM,
+    false,
+    ["sign"],
+  );
   const seconds = Math.floor(now / 1000);
   return new SignJWT({})
     .setProtectedHeader({ alg: RSA_ALGORITHM })
     .setIssuer(String(appId))
     .setIssuedAt(seconds - LIMITS.JWT_SKEW_SECONDS)
     .setExpirationTime(seconds + LIMITS.JWT_LIFETIME_SECONDS)
-    .sign(await importPKCS8(normalized.pkcs8, RSA_ALGORITHM));
+    .sign(signingKey);
 }
 function associatedData(context: GitHubMaterialContext, keyId: string) {
   const { env: _env, ...binding } = context;
