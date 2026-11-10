@@ -1,12 +1,16 @@
 export function countD1Statements(database: D1Database) {
   let count = 0;
   let calls = 0;
+  let maxBindings = 0;
   const originals = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
   function wrap(statement: D1PreparedStatement): D1PreparedStatement {
     const proxy = new Proxy(statement, {
       get(target, key) {
         if (key === "bind")
-          return (...values: unknown[]) => wrap(target.bind(...values));
+          return (...values: unknown[]) => {
+            maxBindings = Math.max(maxBindings, values.length);
+            return wrap(target.bind(...values));
+          };
         const value = Reflect.get(target, key, target);
         if (["first", "all", "run", "raw"].includes(String(key)))
           return (...args: unknown[]) => {
@@ -41,9 +45,11 @@ export function countD1Statements(database: D1Database) {
     db,
     count: () => count,
     calls: () => calls,
+    maxBindings: () => maxBindings,
     reset: () => {
       count = 0;
       calls = 0;
+      maxBindings = 0;
     },
   };
 }

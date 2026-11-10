@@ -7,6 +7,12 @@ description: Find the shared command contract and choose safe browser, CLI, or M
 
 The browser, CLI, HTTP API, and MCP adapters call the same workspace-scoped service. They share validation, permissions, revisions, review fingerprints, and recovery semantics. There is no arbitrary remote shell, SQL endpoint, or caller-selected provider URL.
 
+## GitHub App operations
+
+The `github_apps_list`, `github_app_registration_*`, `github_app_manifest_*`, `github_app_installations_list`, `github_app_repositories_list`, `github_app_connection_*` and `github_app_grant_*` command families expose bounded metadata through the shared API, CLI and MCP. Use schema discovery for the exact command and inputs. Deployment setup requires a verified human setup permit plus live administrative workspace ownership; a workspace owner accepts its own offered grant independently. Automation credentials cannot become deployment setup operators.
+
+Private signing material uses the dedicated browser file input, CLI `github-app-input` command or local stdio MCP private-file adapter. It never belongs in an ordinary command or MCP argument. See [registration, protected import and recovery](github-apps.md) before submitting private input. Saved metadata review links reopen the same review and never reapply it automatically.
+
 ## Discover exact inputs
 
 From the repository with locked dependencies installed:

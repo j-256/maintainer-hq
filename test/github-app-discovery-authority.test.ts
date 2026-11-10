@@ -1,3 +1,4 @@
+import { countD1Statements } from "./helpers/d1-count";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import {
   createGitHubAppFixture,
@@ -80,7 +81,24 @@ it("verifies and narrows the full accepted repository bound with shared provider
   )
     .bind(JSON.stringify(grant), grant.revision)
     .run();
-  const authority = await discovery();
+  const measured = countD1Statements(fixture.runtime.HQ_DB);
+  const context = new Proxy(fixture.operator, {
+    get(target, key) {
+      return key === "db" ? measured.db : Reflect.get(target, key, target);
+    },
+  });
+  const authority = await resolveGitHubDiscoveryAuthority(context, request);
+  console.info("APP_RESOURCE_DISCOVERY_COLD", {
+    calls: measured.calls(),
+    statements: measured.count(),
+    maxBindings: measured.maxBindings(),
+  });
+  expect(measured.calls()).toBeLessThanOrEqual(750);
+  expect(measured.maxBindings()).toBeLessThanOrEqual(100);
+  const beforeWarm = measured.calls();
+  await resolveGitHubDiscoveryAuthority(context, request);
+  console.info("APP_RESOURCE_DISCOVERY_WARM", measured.calls() - beforeWarm);
+  expect(measured.calls() - beforeWarm).toBeLessThanOrEqual(350);
   expect(authority.fences).toHaveLength(100);
   expect(requests).toHaveLength(2);
   expect(mints).toHaveLength(1);
@@ -96,6 +114,12 @@ it("verifies and narrows the full accepted repository bound with shared provider
   expect(mints).toHaveLength(2);
   expect(mints[1]).toEqual(mints[0]);
   expect(JSON.stringify(authority)).not.toContain("synthetic-scoped-token");
+  await fixture.runtime.HQ_DB.prepare(
+    "UPDATE github_app_authority SET generation=generation+1 WHERE repository_id=200",
+  ).run();
+  await expect(
+    assertGitHubDiscoveryAuthority(fixture.operator, authority),
+  ).rejects.toMatchObject({ code: "github_app_conflict" });
   await invalidateGitHubAppAuthority(fixture.operator, "app-a");
   await expect(
     assertGitHubDiscoveryAuthority(fixture.operator, authority),

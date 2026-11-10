@@ -1,3 +1,4 @@
+import { GITHUB_APP_LIMITS } from "../shared/github-apps";
 import { APP_AUTHENTICATION_RETRIES } from "./provider-effect-errors";
 import { DomainError } from "./errors";
 import { z } from "zod";
@@ -76,7 +77,10 @@ export class DependencyGitHub {
   ) {
     this.#token = token;
     repositoryFields.shape.fullName.parse(repository);
-    if (!/^[\x21-\x7e]{1,2048}$/.test(token))
+    if (
+      token.length > GITHUB_APP_LIMITS.TOKEN_BYTES ||
+      !/^[\x21-\x7e]+$/.test(token)
+    )
       throw new DependencyProviderFailure("provider_unavailable");
     this.base =
       "/repos/" + repository.split("/").map(encodeURIComponent).join("/");

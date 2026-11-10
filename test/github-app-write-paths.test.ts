@@ -1,3 +1,4 @@
+import { countD1Statements } from "./helpers/d1-count";
 import { DependencyGitHub } from "../worker/dependency-github";
 import { SecretReviews } from "../worker/secret-reviews";
 import { invalidateGitHubAppAuthority } from "../worker/github-app-authority";
@@ -334,9 +335,37 @@ describe.each(["token", "app"] as const)(
     it.each(["dependencies", "dependabot"] as const)(
       "submits the reviewed %s PR through the selected credential",
       async (selected) => {
+        const measured = countD1Statements(fixture.runtime.HQ_DB);
+        const originalOperator = fixture.operator;
+        fixture.operator = new Proxy(originalOperator, {
+          get(target, key) {
+            return key === "db"
+              ? measured.db
+              : Reflect.get(target, key, target);
+          },
+        });
+        events = [];
         const review = await plan(selected);
+        if (mode === "app")
+          console.info("APP_RESOURCE_PR_REVIEW", selected, {
+            calls: measured.calls(),
+            statements: measured.count(),
+            provider: events.length,
+          });
+        measured.reset();
         events = [];
         const operation = await apply(review);
+        if (mode === "app") {
+          console.info("APP_RESOURCE_PR_EFFECT", selected, {
+            calls: measured.calls(),
+            statements: measured.count(),
+            provider: events.length,
+            mints: events.filter((path) => path.endsWith("/access_tokens"))
+              .length,
+          });
+          expect(measured.calls()).toBeLessThan(1000);
+          expect(events.length).toBeLessThanOrEqual(50);
+        }
         expect(operation).toMatchObject({
           status: "succeeded",
           phase: "finished",

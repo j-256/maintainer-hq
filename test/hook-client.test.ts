@@ -73,6 +73,31 @@ describe("Hookrelay private client boundary", () => {
     }
   });
 
+  it("accepts the old token-backed setup contract without requesting App diagnostics or credentials", async () => {
+    const configuration = {
+      authorityId: "a".repeat(32),
+      revision: 1,
+      mode: "active",
+      canCreate: true,
+      reason: "ready",
+      observedAt: new Date().toISOString(),
+    };
+    const result = await callHookProvider(
+      provider(async (_url, init) => {
+        expect(JSON.parse(String(init.body))).toEqual({
+          command: "github_setup_configuration",
+          input: { workspaceId: "alpha", actorId: "hq_actor" },
+        });
+        return success(configuration);
+      }),
+      "github_setup_configuration",
+      "alpha",
+      "hq_actor",
+    );
+    expect(result.result).toEqual(configuration);
+    expect(JSON.stringify(result)).not.toContain("privateKey");
+  });
+
   it("creates fresh authorization headers and never follows a redirect", async () => {
     const fetch = vi.fn(async (url: string, init: RequestInit) => {
       expect(url).toBe("https://hookrelay.internal/admin/api/v1");

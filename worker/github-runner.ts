@@ -745,6 +745,7 @@ class GitHubRunner {
               credential.fence,
             );
           const result = await collectGitHub(item.full_name, credential.token, {
+            credentialKind: credential.fence.kind,
             now: this.now,
             fetch: this.options.fetch,
             signal: controller.signal,

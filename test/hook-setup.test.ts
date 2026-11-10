@@ -61,6 +61,9 @@ beforeEach(async () => {
   const fetcher = {
     fetch: async (_url: string, init: RequestInit) => {
       const { command, input: fields } = JSON.parse(String(init.body));
+      expect(Object.keys(fields)).not.toContain("privateKey");
+      expect(Object.keys(fields)).not.toContain("installationToken");
+      expect(Object.keys(fields)).not.toContain("registrationId");
       let result: unknown;
       if (command === "github_setup_configuration")
         result = {
@@ -132,6 +135,8 @@ beforeEach(async () => {
   };
   runtime = new Proxy(bindings, {
     get(target, key, receiver) {
+      if (key === "GITHUB_APP_DEPLOYMENT_ID")
+        return "synthetic-hq-app-deployment";
       if (key === "HOOKRELAY_TEST") return fetcher;
       if (key === "HOOKRELAY_CREDENTIALS")
         return JSON.stringify({
