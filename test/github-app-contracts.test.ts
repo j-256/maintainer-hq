@@ -20,6 +20,20 @@ const metadata = {
 };
 
 describe("GitHub App public contracts", () => {
+  it("uses GitHub's accepted Actions Variables permission name for configuration profiles", () => {
+    for (const capability of [
+      "configuration-read",
+      "configuration-write",
+    ] as const) {
+      const permissions = githubAppPermissions([capability]);
+      expect(permissions).toHaveProperty(
+        "actions_variables",
+        capability === "configuration-read" ? "read" : "write",
+      );
+      expect(permissions).not.toHaveProperty("variables");
+    }
+  });
+
   it("keeps token and App authority explicit without changing token reference spelling", () => {
     expect(
       githubAuthReferenceSchema.parse({
@@ -57,7 +71,7 @@ describe("GitHub App public contracts", () => {
       pull_requests: "write",
       actions: "read",
       secrets: "read",
-      variables: "read",
+      actions_variables: "read",
       environments: "read",
     });
     const collection = githubAppPermissions(["collection"]);
@@ -79,7 +93,7 @@ describe("GitHub App public contracts", () => {
       metadata: "read",
       actions: "read",
       secrets: "write",
-      variables: "write",
+      actions_variables: "write",
       environments: "write",
     });
   });

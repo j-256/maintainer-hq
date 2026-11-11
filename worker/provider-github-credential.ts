@@ -161,7 +161,7 @@ function configurationPermission(
   if (/^\/actions\/(organization-)?secrets(\/|$)/.test(path))
     return { metadata: "read", secrets: level };
   if (/^\/actions\/(organization-)?variables(\/|$)/.test(path))
-    return { metadata: "read", variables: level };
+    return { metadata: "read", actions_variables: level };
   if (!path && !effect) return { metadata: "read" };
   throw new DomainError(
     "github_app_permission_missing",

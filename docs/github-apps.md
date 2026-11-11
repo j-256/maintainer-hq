@@ -71,6 +71,8 @@ For signing-key rotation, create a key in GitHub, review replacement under the e
 | Configuration read | Metadata, Actions, Secrets, Variables and Environments read |
 | Configuration write | Metadata and Actions read, Secrets, Variables and Environments write |
 
+GitHub names the App permission for Variables `actions_variables`. Use that spelling in App manifests and scoped permission profiles. Configuration inventory responses and GraphQL requests retain their separate `variables` fields.
+
 Profiles describe registration ceilings; each operation narrows its token further to its exact repositories and permissions. HQ does not request repository Administration, Workflows or repository Webhooks permission. Hookrelay owns webhook management through its separate App. Editing supported Dependabot YAML through a PR remains repository maintenance; enabling new Dependabot administration or editing workflow files is outside this feature. Ordinary repository rules still apply to App-created PRs.
 
 Repository-effective organization secrets and variables remain the existing limited scope; an App does not confer an organization-wide configuration catalog. Scanner licensing, feature enablement, public-repository query behavior outside an installation and exact GraphQL query support require separate evidence. A 404 may hide denied access. An empty or inaccessible response never establishes healthy security or complete coverage. GitHub Enterprise Server, merge bypass, hosted tenant signup and App-wide notification collection are outside this implementation.
