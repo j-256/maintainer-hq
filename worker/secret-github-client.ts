@@ -122,7 +122,7 @@ export class SecretGitHubClient {
       token?: string;
       expiresAt: string | null;
     },
-    readonly request: typeof fetch = fetch,
+    readonly request: typeof fetch = globalThis.fetch,
     readonly authorizeRequest?: (
       path: string,
       method: string,
@@ -133,7 +133,9 @@ export class SecretGitHubClient {
       rejectCredential?: () => void;
       recordResponse?: (response: Response) => Promise<void>;
     }>,
-  ) {}
+  ) {
+    if (request === globalThis.fetch) this.request = request.bind(globalThis);
+  }
 
   private path(repository: string, environment?: string | null) {
     if (
