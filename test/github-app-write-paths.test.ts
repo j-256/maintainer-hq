@@ -1,4 +1,5 @@
 import { countD1Statements } from "./helpers/d1-count";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 import { DependencyGitHub } from "../worker/dependency-github";
 import { SecretReviews } from "../worker/secret-reviews";
 import { invalidateGitHubAppAuthority } from "../worker/github-app-authority";
@@ -475,7 +476,7 @@ describe.each(["token", "app"] as const)(
         status: "indeterminate",
       });
       expect(writes).toHaveLength(1);
-    });
+    }, D1_VOLUME_TEST_TIMEOUT_MS);
     if (mode === "app") {
       it("remints once after an explicit unapplied authentication rejection", async () => {
         const review = await plan("dependencies");
@@ -778,6 +779,7 @@ describe.each(["token", "app"] as const)(
             : /^Bearer synthetic-manual-actions$/,
         );
       },
+      D1_VOLUME_TEST_TIMEOUT_MS,
     );
     it.each([false, true])(
       "applies a reviewed managed variable in an environment=%s scope",

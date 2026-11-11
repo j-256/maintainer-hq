@@ -16,6 +16,7 @@ import { WorkspaceService } from "../worker/service";
 import { createApplication } from "../worker/app";
 import { callCommand, clientConfiguration } from "../cli/client";
 import { countD1Statements } from "./helpers/d1-count";
+import { D1_VOLUME_TEST_TIMEOUT_MS } from "./helpers/timeouts";
 import type { Env } from "../worker/types";
 
 const bindings = env as unknown as Env & {
@@ -572,4 +573,4 @@ it("batches a bounded fleet and shares a closed-world read through HTTP, CLI and
   );
   expect(response.status).toBe(200);
   expect(await response.text()).toContain("configuredForWrites");
-});
+}, D1_VOLUME_TEST_TIMEOUT_MS);
