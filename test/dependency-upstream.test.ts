@@ -5,11 +5,13 @@ import { DEPENDENCY_LIMITS } from "../shared/dependency-policy";
 describe("Credential-free bounded upstream reads", () => {
   it("uses only the fixed public registry and rejects arbitrary paths", async () => {
     const fetcher = vi.fn(async (target, init) => {
+      const request = new Request(target, init);
+      expect(request.redirect).toBe("manual");
       expect(String(target)).toBe(
         "https://registry.npmjs.org/%40example%2Frunner/latest",
       );
       expect(new Headers(init?.headers).has("Authorization")).toBe(false);
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual");
       return Response.json({ name: "@example/runner", version: "1.0.0" });
     });
     await upstreamDependencyDocument("@example/runner", fetcher);

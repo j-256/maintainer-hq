@@ -3,7 +3,7 @@ import { GITHUB_APP_LIMITS } from "../shared/github-apps";
 import { githubDiagnosticsSchema } from "../shared/github-diagnostics";
 import { contextReadSchema } from "../shared/github-context";
 import { DEPENDENCIES_LIMITS } from "../shared/dependencies";
-import { dependencyOperationSchema } from "../shared/dependency-operations";
+import { dependencyOperationSchema, dependencyProviderDiagnosticSchema } from "../shared/dependency-operations";
 import { HOOK_INVENTORY_LIMIT_REASONS } from "../shared/coverage-evidence";
 import { monitorTargetScanSchema } from "../shared/monitoring";
 import { dependabotEvidenceSchema } from "../shared/dependabot";
@@ -130,6 +130,7 @@ const diagnosticSchema = z.discriminatedUnion("event", [
       phase: dependencyOperationSchema.shape.phase,
       status: dependencyOperationSchema.shape.status,
       reason: dependencyOperationSchema.shape.reason,
+      providerFailure: dependencyProviderDiagnosticSchema.optional(),
       requests: dependencyOperationSchema.shape.requests,
       elapsedMs: elapsed,
     })

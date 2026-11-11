@@ -28,7 +28,7 @@ export async function upstreamDependencyDocument(
         "https://registry.npmjs.org/" + encodeURIComponent(name) + "/latest",
         {
           headers: { Accept: "application/json" },
-          redirect: "error",
+          redirect: "manual",
           signal,
         },
       ),

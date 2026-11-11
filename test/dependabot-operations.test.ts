@@ -91,7 +91,7 @@ beforeEach(async () => {
       expect(new Headers(init.headers).get("Authorization")).toBe(
         "Bearer " + WRITE_TOKEN,
       );
-      expect(init.redirect).toBe("error");
+      expect(init.redirect).toBe("manual");
       const body = JSON.parse(String(init.body));
       writes.push({ path, body });
       const recorded = await bindings.HQ_DB.prepare(

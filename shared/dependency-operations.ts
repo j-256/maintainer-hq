@@ -35,6 +35,12 @@ export const dependencyPhaseSchema = z.enum([
   "pull_request",
   "finished",
 ]);
+export const dependencyProviderDiagnosticSchema = z.object({
+  stage: z.enum(["operation", "authority", "fetch", "response", "body", "fence", "decode", "validation"]),
+  errorType: z.enum(["Error", "TypeError", "RangeError", "ReferenceError", "SyntaxError", "AbortError", "TimeoutError", "ZodError", "DomainError", "HttpStatus", "Unknown"]),
+  status: z.number().int().min(100).max(599).optional(),
+}).strict();
+export type DependencyProviderDiagnostic = z.infer<typeof dependencyProviderDiagnosticSchema>;
 export const dependencyOperationSchema = z
   .object({
     id: idSchema,

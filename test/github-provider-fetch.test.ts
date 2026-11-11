@@ -3,6 +3,29 @@ import { DependencyGitHub } from "../worker/dependency-github";
 import { SecretGitHubClient } from "../worker/secret-github-client";
 
 describe("native GitHub provider transports", () => {
+  it("creates maintenance requests accepted by the native Worker runtime", async () => {
+    const sha = "a".repeat(40);
+    const client = new DependencyGitHub("example/repository", "synthetic-token", async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.redirect).toBe("manual");
+      return Response.json({ sha }, { status: 201 });
+    });
+    expect(await client.tree(sha, [])).toBe(sha);
+  });
+
+  it("rejects redirect responses without following them or retaining their destination", async () => {
+    const privateLocation = "https://private.invalid/private-bearer";
+    const client = new DependencyGitHub("example/repository", "synthetic-token", async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.redirect).toBe("manual");
+      return new Response(null, { status: 302, headers: { Location: privateLocation } });
+    });
+    const error = await client.readBranch("main").catch((error: unknown) => error);
+    expect(error).toMatchObject({ reason: "provider_unavailable", diagnostic: { stage: "response", errorType: "HttpStatus", status: 302 } });
+    expect(client.requests).toBe(1);
+    expect(JSON.stringify(error)).not.toContain(privateLocation);
+  });
+
   it.each([false, true])("preserves native fetch for configuration reads with explicit transport %s", async (explicit) => {
     const repository = {
       id: 101,
