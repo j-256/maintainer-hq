@@ -112,7 +112,7 @@ test("release logs retain diagnostics while rejecting missing redaction and extr
   assert.deepEqual(config.observability, {
     enabled: true,
     redact_query_string: true,
-    logs: { enabled: true, invocation_logs: true, persist: true },
+    logs: { enabled: true, invocation_logs: false, persist: true },
     traces: { enabled: false },
     issues: { enabled: false },
   });
@@ -121,6 +121,7 @@ test("release logs retain diagnostics while rejecting missing redaction and extr
     { enabled: true },
     { ...config.observability, redact_query_string: false },
     { ...config.observability, enabled: false },
+    { ...config.observability, logs: { enabled: true, invocation_logs: true, persist: true } },
     { ...config.observability, traces: { enabled: true } },
     { ...config.observability, issues: { enabled: true } },
     { ...config.observability, logs: { enabled: true, destinations: ["unreviewed"] } },
