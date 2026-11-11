@@ -22,7 +22,7 @@ export const RELEASE_WORKER_LIMITS = Object.freeze({
 export const RELEASE_OBSERVABILITY = Object.freeze({
   enabled: true,
   redact_query_string: true,
-  logs: Object.freeze({ enabled: true, invocation_logs: true, persist: true }),
+  logs: Object.freeze({ enabled: true, invocation_logs: false, persist: true }),
   traces: Object.freeze({ enabled: false }),
   issues: Object.freeze({ enabled: false }),
 });

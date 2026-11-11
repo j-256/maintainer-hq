@@ -48,7 +48,7 @@ test(
         {
           enabled: true,
           redact_query_string: true,
-          logs: { enabled: true, invocation_logs: true, persist: true },
+          logs: { enabled: true, invocation_logs: false, persist: true },
           traces: { enabled: false },
           issues: { enabled: false },
         },
