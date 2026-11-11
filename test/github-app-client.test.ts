@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { GitHubAppClient } from "../worker/github-app-client";
 import { githubAppTestKey } from "./helpers/github-app-keys";
 
@@ -46,6 +46,35 @@ function client(fetcher: typeof fetch) {
 }
 
 describe("GitHub App fixed-origin client", () => {
+  it("preserves the global receiver required by native Workers fetch", async () => {
+    const app = {
+      id: 42,
+      name: "Repository operator",
+      slug: "repository-operator",
+      owner: installation.account,
+      permissions: { metadata: "read" },
+    };
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(function (
+      this: unknown,
+    ) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(Response.json(app));
+    });
+    try {
+      const api = new GitHubAppClient({
+        appId: 42,
+        privateKey: key.pkcs8,
+        now: () => now,
+      });
+      expect(await api.getApp()).toMatchObject({
+        id: 42,
+        permissions: app.permissions,
+      });
+    } finally {
+      request.mockRestore();
+    }
+  });
+
   it("narrows and verifies Actions Variables token authority using the provider wire name", async () => {
     const permissions = {
       metadata: "read" as const,
