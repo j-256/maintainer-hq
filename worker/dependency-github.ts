@@ -62,7 +62,7 @@ export class DependencyGitHub {
   constructor(
     readonly repository: string,
     token: string,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = globalThis.fetch,
     readonly timeoutMs: number = LIMITS.REQUEST_MS,
     readonly deadline = Infinity,
     readonly authorizeRequest?: (
@@ -76,6 +76,7 @@ export class DependencyGitHub {
       recordResponse?: (response: Response) => Promise<void>;
     }>,
   ) {
+    if (fetcher === globalThis.fetch) this.fetcher = fetcher.bind(globalThis);
     this.#token = token;
     repositoryFields.shape.fullName.parse(repository);
     if (
