@@ -24,6 +24,7 @@ import { dependencyHash } from "./dependency-client";
 import {
   DependencyGitHub,
   DependencyProviderFailure,
+  dependencyProviderDiagnostic,
   type DependencyPull,
 } from "./dependency-github";
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
@@ -468,6 +469,7 @@ export class RepositoryOperations<
     let client: DependencyGitHub | null = null;
     let readRequests = 0;
     let acceptanceGuard: { sql: string; values: unknown[] } | undefined;
+    let providerFailure: ReturnType<typeof dependencyProviderDiagnostic>;
     const save = (guard?: { sql: string; values: unknown[] }) =>
       this.persist(
         workspaceId,
@@ -671,6 +673,7 @@ export class RepositoryOperations<
       operation.reason = "complete";
       operation.observedAt = this.timestamp();
     } catch (error) {
+      providerFailure = dependencyProviderDiagnostic(error);
       operation.reason =
         error instanceof DependencyProviderFailure
           ? error.reason
@@ -703,6 +706,7 @@ export class RepositoryOperations<
         throw error;
       operation.status = "partial";
       operation.reason = "access_changed";
+      providerFailure = dependencyProviderDiagnostic(error);
       await save();
     }
     await this.db.batch(
@@ -723,6 +727,7 @@ export class RepositoryOperations<
       phase: operation.phase,
       status: operation.status,
       reason: operation.reason,
+      providerFailure,
       requests: operation.requests,
       elapsedMs: operation.elapsedMs,
     });
@@ -795,6 +800,7 @@ export class RepositoryOperations<
         : undefined,
     );
     let observed = false;
+    let providerFailure: ReturnType<typeof dependencyProviderDiagnostic>;
     try {
       const pulls = operation.pullRequest
         ? [await client.readPull(operation.pullRequest.number)]
@@ -818,6 +824,7 @@ export class RepositoryOperations<
       }
       observed = true;
     } catch (error) {
+      providerFailure = dependencyProviderDiagnostic(error);
       operation.status = "indeterminate";
       operation.reason =
         error instanceof DependencyProviderFailure
@@ -855,6 +862,7 @@ export class RepositoryOperations<
       phase: operation.phase,
       status: operation.status,
       reason: operation.reason,
+      providerFailure,
       requests: client.requests,
       elapsedMs: Math.max(0, Math.round(performance.now() - started)),
     });

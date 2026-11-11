@@ -102,7 +102,7 @@ beforeEach(async () => {
       expect(new Headers(init.headers).get("Authorization")).toBe(
         "Bearer " + WRITE_TOKEN,
       );
-      expect(init.redirect).toBe("error");
+      expect(init.redirect).toBe("manual");
       const body = JSON.parse(String(init.body));
       writes.push({ path, body });
       const recorded = await bindings.HQ_DB.prepare(
@@ -413,6 +413,32 @@ describe("Dependency write custody and exact outcomes", () => {
       reason: "evidence_changed",
     });
     expect(writes).toEqual([]);
+  });
+  it("correlates bounded provider failures for submission and read-only reconciliation", async () => {
+    const r = await review();
+    const original = fetcher.getMockImplementation()!;
+    const privateDetail = "private-provider-detail-must-stay-private";
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    fetcher.mockImplementation(async (target, init) => {
+      const path = new URL(String(target)).pathname;
+      if (init?.method === "POST") throw new TypeError(privateDetail);
+      if (path.endsWith("/pulls")) return new Response(privateDetail);
+      return original(target, init);
+    });
+    const operation = await apply(r);
+    if (!operation) throw new Error("The accepted operation must be retained");
+    expect(operation).toMatchObject({ status: "indeterminate", phase: "tree" });
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({
+      reference: operation.id, action: "submit",
+      providerFailure: { stage: "fetch", errorType: "TypeError" },
+    }));
+    await service().dependencyOperationReconcile({ workspaceId: "alpha", planId: r.planId });
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({
+      reference: operation.id, action: "reconcile",
+      providerFailure: { stage: "decode", errorType: "SyntaxError", status: 200 },
+    }));
+    expect(writes).toEqual([]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);
   });
   it("does not duplicate an accepted PR after its response is lost; reconciliation reads the original identity", async () => {
     const r = await review();

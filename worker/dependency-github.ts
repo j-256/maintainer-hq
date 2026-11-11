@@ -5,7 +5,11 @@ import { z } from "zod";
 import { repositoryFields } from "../shared/domain";
 import { GITHUB_LIMITS, githubBranchSchema } from "../shared/github-evidence";
 import { githubShaSchema } from "../shared/github-context";
-import { DEPENDENCY_OPERATION_LIMITS as LIMITS } from "../shared/dependency-operations";
+import {
+  DEPENDENCY_OPERATION_LIMITS as LIMITS,
+  dependencyProviderDiagnosticSchema,
+  type DependencyProviderDiagnostic,
+} from "../shared/dependency-operations";
 
 export class DependencyProviderFailure extends Error {
   constructor(
@@ -15,9 +19,22 @@ export class DependencyProviderFailure extends Error {
       | "outcome_unknown"
       | "identity_changed",
     readonly status = 0,
+    readonly diagnostic?: DependencyProviderDiagnostic,
   ) {
     super(reason);
   }
+}
+const failureDiagnostics = new WeakMap<Error, DependencyProviderDiagnostic>();
+function safeErrorType(error: unknown): DependencyProviderDiagnostic["errorType"] {
+  const parsed = dependencyProviderDiagnosticSchema.shape.errorType.safeParse(error instanceof Error ? error.name : "Unknown");
+  return parsed.success ? parsed.data : "Unknown";
+}
+export function dependencyProviderDiagnostic(error: unknown): DependencyProviderDiagnostic | undefined {
+  if (error instanceof Error && failureDiagnostics.has(error)) return failureDiagnostics.get(error);
+  if (error instanceof DependencyProviderFailure) return error.diagnostic;
+  if (error instanceof DomainError) return { stage: "authority", errorType: "DomainError" };
+  if (error instanceof z.ZodError) return { stage: "validation", errorType: "ZodError" };
+  return { stage: "operation", errorType: safeErrorType(error) };
 }
 const commitSchema = z.object({
   sha: githubShaSchema,
@@ -87,16 +104,17 @@ export class DependencyGitHub {
     this.base =
       "/repos/" + repository.split("/").map(encodeURIComponent).join("/");
   }
-  private async request(
+  private async request<T>(
     method: "GET" | "POST",
     suffix: string,
+    schema: z.ZodType<T>,
     body?: unknown,
     retry?: {
       attempts: number;
       serialized: string | undefined;
       deadline: number;
     },
-  ): Promise<unknown> {
+  ): Promise<T> {
     const serialized = retry
       ? retry.serialized
       : body === undefined
@@ -118,6 +136,8 @@ export class DependencyGitHub {
     const timer = setTimeout(() => controller.abort(), timeout);
     const signal = controller.signal;
     let dispatched = false;
+    let stage: DependencyProviderDiagnostic["stage"] = "authority";
+    let providerStatus: number | undefined;
     try {
       const authority = this.authorizeRequest
         ? await this.authorizeRequest(method, suffix, remainingBudgetMs)
@@ -127,10 +147,11 @@ export class DependencyGitHub {
         throw new DependencyProviderFailure("provider_unavailable");
       this.requests++;
       dispatched = true;
+      stage = "fetch";
       const response = await bounded(
         this.fetcher(new URL(this.base + suffix, GITHUB_LIMITS.API_ORIGIN), {
           method,
-          redirect: "error",
+          redirect: "manual",
           signal,
           headers: {
             Authorization: "Bearer " + (authority?.token ?? this.#token),
@@ -143,6 +164,8 @@ export class DependencyGitHub {
         }),
         signal,
       );
+      stage = "response";
+      providerStatus = response.status;
       await authority?.recordResponse?.(response);
       if (
         response.status === 401 &&
@@ -152,7 +175,7 @@ export class DependencyGitHub {
         void response.body?.cancel().catch(() => undefined);
         this.#authenticationRetries++;
         authority.rejectCredential();
-        return this.request(method, suffix, body, {
+        return this.request(method, suffix, schema, body, {
           attempts: (retry?.attempts ?? 0) + 1,
           serialized,
           deadline,
@@ -167,8 +190,10 @@ export class DependencyGitHub {
               : "outcome_unknown"
             : "provider_unavailable",
           response.status,
+          { stage, errorType: "HttpStatus", status: response.status },
         );
       }
+      stage = "body";
       if (
         !response.body ||
         Number(response.headers.get("Content-Length")) > LIMITS.RESPONSE_BYTES
@@ -197,20 +222,26 @@ export class DependencyGitHub {
         bytes.set(chunk, offset);
         offset += chunk.byteLength;
       }
+      stage = "fence";
       if (authority) await authority.assertLive();
-      return JSON.parse(
+      stage = "decode";
+      const value: unknown = JSON.parse(
         new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       );
+      stage = "validation";
+      return schema.parse(value);
     } catch (error) {
-      if (
-        error instanceof DependencyProviderFailure ||
-        error instanceof DomainError
-      )
+      if (error instanceof DomainError || error instanceof z.ZodError) {
+        failureDiagnostics.set(error, { stage, errorType: error instanceof DomainError ? "DomainError" : "ZodError", ...(providerStatus ? { status: providerStatus } : {}) });
         throw error;
+      }
+      if (error instanceof DependencyProviderFailure) throw error;
       throw new DependencyProviderFailure(
         method === "POST" && dispatched
           ? "outcome_unknown"
           : "provider_unavailable",
+        providerStatus ?? 0,
+        { stage, errorType: signal.aborted ? "AbortError" : safeErrorType(error), ...(providerStatus ? { status: providerStatus } : {}) },
       );
     } finally {
       clearTimeout(timer);
@@ -221,21 +252,19 @@ export class DependencyGitHub {
     base: string,
     files: { path: string; mode: string; content: string }[],
   ) {
-    return z.object({ sha: githubShaSchema }).parse(
-      await this.request("POST", "/git/trees", {
+    return (
+      await this.request("POST", "/git/trees", z.object({ sha: githubShaSchema }), {
         base_tree: base,
         tree: files.map((file) => ({ ...file, type: "blob" })),
-      }),
+      })
     ).sha;
   }
   async commit(parent: string, tree: string, message: string) {
-    const result = commitSchema.parse(
-      await this.request("POST", "/git/commits", {
-        message,
-        tree,
-        parents: [parent],
-      }),
-    );
+    const result = await this.request("POST", "/git/commits", commitSchema, {
+      message,
+      tree,
+      parents: [parent],
+    });
     if (
       result.tree.sha !== tree ||
       result.parents.length !== 1 ||
@@ -246,30 +275,24 @@ export class DependencyGitHub {
   }
   async branch(name: string, sha: string) {
     const ref = "refs/heads/" + name;
-    const result = refSchema.parse(
-      await this.request("POST", "/git/refs", { ref, sha }),
-    );
+    const result = await this.request("POST", "/git/refs", refSchema, { ref, sha });
     if (result.ref !== ref || result.object.sha !== sha)
       throw new DependencyProviderFailure("outcome_unknown");
   }
   async readBranch(name: string) {
-    const result = refSchema.parse(
-      await this.request("GET", "/git/ref/heads/" + encodeURIComponent(name)),
-    );
+    const result = await this.request("GET", "/git/ref/heads/" + encodeURIComponent(name), refSchema);
     if (result.ref !== "refs/heads/" + name)
       throw new DependencyProviderFailure("identity_changed");
     return result.object.sha;
   }
   async pull(head: string, base: string, title: string, body: string) {
-    return pullSchema.extend({ merged: z.boolean() }).parse(
-      await this.request("POST", "/pulls", {
-        head,
-        base,
-        title,
-        body,
-        maintainer_can_modify: false,
-      }),
-    );
+    return this.request("POST", "/pulls", pullSchema.extend({ merged: z.boolean() }), {
+      head,
+      base,
+      title,
+      body,
+      maintainer_can_modify: false,
+    });
   }
   async findPull(head: string) {
     const params = new URLSearchParams({
@@ -277,14 +300,9 @@ export class DependencyGitHub {
       head: this.repository.split("/")[0] + ":" + head,
       per_page: "2",
     });
-    return z
-      .array(pullSchema)
-      .max(2)
-      .parse(await this.request("GET", "/pulls?" + params));
+    return this.request("GET", "/pulls?" + params, z.array(pullSchema).max(2));
   }
   async readPull(number: number) {
-    return pullSchema
-      .extend({ merged: z.boolean() })
-      .parse(await this.request("GET", "/pulls/" + number));
+    return this.request("GET", "/pulls/" + number, pullSchema.extend({ merged: z.boolean() }));
   }
 }

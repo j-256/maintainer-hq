@@ -112,7 +112,7 @@ test("upstream evidence deduplicates the installed parents and never sends crede
       fetcher: async (input, init) => {
         calls.push(String(input));
         assert.equal(String(input), "https://registry.npmjs.org/runner/latest");
-        assert.equal(init?.redirect, "error");
+        assert.equal(init?.redirect, "manual");
         assert.equal(new Headers(init?.headers).has("authorization"), false);
         return Response.json({
           name: "runner",
