@@ -731,7 +731,7 @@ describe.each(["token", "app"] as const)(
         actions: "read" as const,
         environments: "read" as const,
         secrets: "read" as const,
-        variables: "read" as const,
+        actions_variables: "read" as const,
       };
       fixture.runtime.GITHUB_SECRET_CREDENTIALS = JSON.stringify({
         "manual-actions": {

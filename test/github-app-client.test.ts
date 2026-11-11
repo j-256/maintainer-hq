@@ -46,6 +46,33 @@ function client(fetcher: typeof fetch) {
 }
 
 describe("GitHub App fixed-origin client", () => {
+  it("narrows and verifies Actions Variables token authority using the provider wire name", async () => {
+    const permissions = {
+      metadata: "read" as const,
+      actions_variables: "write" as const,
+    };
+    let requested: unknown;
+    const api = client(async (_input, init) => {
+      requested = JSON.parse(String(init?.body));
+      return Response.json(tokenResponse({ permissions }));
+    });
+    const requestedScope = {
+      installationId: 7,
+      repositoryIds: [101],
+      permissions,
+    };
+    const token = await api.mintToken(requestedScope);
+    expect(requested).toEqual({ repository_ids: [101], permissions });
+    expect(token.permissions).toEqual(permissions);
+    await expect(
+      client(async () =>
+        Response.json(
+          tokenResponse({ permissions: { metadata: "read", variables: "write" } }),
+        ),
+      ).mintToken(requestedScope),
+    ).rejects.toMatchObject({ code: "github_app_response_invalid" });
+  });
+
   it("keeps signing material out of serialized client state", () => {
     const api = client(async () => Response.json({}));
     expect(JSON.stringify(api).includes("PRIVATE KEY")).toBe(false);

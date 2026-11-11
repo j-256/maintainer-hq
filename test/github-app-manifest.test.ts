@@ -92,6 +92,20 @@ function provider() {
 }
 
 describe("guided GitHub App manifest registration", () => {
+  it("renders a configuration manifest with GitHub's accepted Variables permission", async () => {
+    const attempt = await fixture.operator.githubAppManifestStart({
+      ...startInput,
+      capabilities: ["configuration-read", "configuration-write"],
+    });
+    const response = await renderGitHubAppManifest(
+      new Request(attempt.browserUrl),
+      fixture.operator,
+    );
+    const html = await response.text();
+    expect(html).toContain("&quot;actions_variables&quot;:&quot;write&quot;");
+    expect(html).not.toContain("&quot;variables&quot;");
+  });
+
   it("allows GitHub form submission only on the authenticated manifest page", async () => {
     const attempt = await fixture.operator.githubAppManifestStart(startInput);
     const app = createApplication(async () => githubAppTestPrincipal());

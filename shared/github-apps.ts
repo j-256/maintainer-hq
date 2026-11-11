@@ -103,7 +103,7 @@ export const githubAppPermissionsSchema = z
     secret_scanning_alerts: z.literal("read").optional(),
     actions: z.literal("read").optional(),
     secrets: readWrite.optional(),
-    variables: readWrite.optional(),
+    actions_variables: readWrite.optional(),
     environments: readWrite.optional(),
   })
   .strict()
@@ -131,14 +131,14 @@ const PROFILES: Record<GitHubCapability, GitHubAppPermissions> = {
     metadata: "read",
     actions: "read",
     secrets: "read",
-    variables: "read",
+    actions_variables: "read",
     environments: "read",
   },
   "configuration-write": {
     metadata: "read",
     actions: "read",
     secrets: "write",
-    variables: "write",
+    actions_variables: "write",
     environments: "write",
   },
 };

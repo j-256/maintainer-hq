@@ -600,7 +600,7 @@ describe.each(["token", "app"] as const)(
               ? {
                   ...permissions,
                   secrets: "read",
-                  variables: "read",
+                  actions_variables: "read",
                   environments: "read",
                 }
               : permissions,
