@@ -198,7 +198,7 @@ export class GitHubAppClient {
         (!Number.isFinite(options.budgetMs) || options.budgetMs <= 0))
     )
       invalidInput();
-    this.fetcher = options.fetch ?? fetch;
+    this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.now = options.now ?? Date.now;
     this.deadline =
       performance.now() + (options.budgetMs ?? LIMITS.REQUEST_TIMEOUT_MS);
