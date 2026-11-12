@@ -331,4 +331,19 @@ describe("GitHub App fixed-origin client", () => {
       ).getInstallation(7),
     ).rejects.toMatchObject({ code: "github_app_unavailable" });
   });
+  it("reports token scope rejection with safe stage and status without diagnosing revocation", async () => {
+    const rejected = client(async () => new Response("private-provider-body-canary", { status: 422 }));
+    await expect(rejected.mintToken(scope)).rejects.toMatchObject({
+      code: "github_app_denied", status: 403,
+      providerStage: "installation_token", providerStatus: 422,
+      message: expect.stringContaining("repository selection and App permissions"),
+    });
+    await expect(rejected.getInstallation(7)).rejects.toMatchObject({
+      code: "github_app_unavailable", providerStage: "installation", providerStatus: 422,
+    });
+    try { await rejected.mintToken(scope); } catch (error) {
+      expect(String(error)).not.toMatch(/private-provider-body-canary|revoked/);
+    }
+  });
+
 });

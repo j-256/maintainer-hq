@@ -378,3 +378,6 @@ export type GitHubAppGrantReview = {
   state: "offered" | "active" | "revoked" | "expired";
   grant: GitHubAppGrant | null;
 };
+
+export const githubAppProviderStageSchema = z.enum(["app", "installation", "installation_token", "inventory"]);
+export type GitHubAppProviderStage = z.infer<typeof githubAppProviderStageSchema>;

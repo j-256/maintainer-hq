@@ -164,6 +164,22 @@ describe("GitHub App authority observations", () => {
       "synthetic-installation-token",
     );
   });
+  it("logs rejected token scope as denied with fixed provider metadata and invalidates old authority", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await resolveGitHubCredential(fixture.operator, request);
+    const normal = appProviderFixture(fixture);
+    provider.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
+      new URL(String(input)).pathname.endsWith("/access_tokens")
+        ? new Response("private-provider-body-canary", { status: 422 })
+        : normal(input, init),
+    );
+    await expect(verifyGitHubAppAuthority(fixture.operator, scope(), "fresh_effect"))
+      .rejects.toMatchObject({ code: "github_app_denied" });
+    expect(warning.mock.calls.some(([entry]) => entry?.event === "hq.github.app.authority" &&
+      entry.state === "denied" && entry.providerStage === "installation_token" && entry.providerStatus === 422)).toBe(true);
+    expect(await fixture.operator.db.prepare("SELECT state FROM github_app_authority WHERE repository_id=101").first("state")).toBe("denied");
+    expect(JSON.stringify(warning.mock.calls)).not.toMatch(/private-provider-body-canary|synthetic-installation-token/);
+  });
   it("fresh effects bypass a read snapshot and invalidate changed repository access", async () => {
     const first = await resolveGitHubCredential(fixture.operator, request);
     const calls = provider.mock.calls.length;
