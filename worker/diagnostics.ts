@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GITHUB_APP_LIMITS } from "../shared/github-apps";
+import { GITHUB_APP_LIMITS, githubAppProviderStageSchema } from "../shared/github-apps";
 import { githubDiagnosticsSchema } from "../shared/github-diagnostics";
 import { contextReadSchema } from "../shared/github-context";
 import { DEPENDENCIES_LIMITS } from "../shared/dependencies";
@@ -33,6 +33,8 @@ const diagnosticSchema = z.discriminatedUnion("event", [
     freshness: z.enum(["bounded_read", "fresh_effect"]),
     state: z.enum(["verified", "denied", "limited", "conflict", "unavailable"]),
     generation: z.number().int().positive(),
+    providerStage: githubAppProviderStageSchema.optional(),
+    providerStatus: z.number().int().min(100).max(599).optional(),
     requests: z.number().int().nonnegative().max(GITHUB_APP_LIMITS.AUTHORITY_REQUESTS),
     code: z.string().regex(/^[a-z_]{1,80}$/).nullable(),
     elapsedMs: elapsed,

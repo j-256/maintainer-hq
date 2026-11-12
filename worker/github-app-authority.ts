@@ -344,6 +344,7 @@ async function verify(
     state: "verified" | "denied" | "limited" | "conflict" | "unavailable",
     generation: number,
     code: string | null,
+    providerError?: unknown,
   ) =>
     emitDiagnostic({
       event: "hq.github.app.authority",
@@ -361,6 +362,7 @@ async function verify(
         : (client?.requests ?? 0),
       code,
       elapsedMs: Math.max(0, Math.round(performance.now() - started)),
+      ...(providerError instanceof GitHubAppProviderError ? { providerStage: providerError.providerStage, providerStatus: providerError.providerStatus } : {}),
     });
   try {
     const bundle = prepare ? await prepare.prepare() : null;
@@ -481,6 +483,7 @@ async function verify(
             : "unavailable",
       original.generation,
       code,
+      error,
     );
     throw error;
   }

@@ -6,6 +6,7 @@ import {
   githubRepositoryNameSchema,
   type GitHubAppPermissions,
   type GitHubAppRepositoryPage,
+  type GitHubAppProviderStage,
 } from "../shared/github-apps";
 import { DomainError } from "./errors";
 import { signGitHubAppJwt } from "./github-app-crypto";
@@ -102,6 +103,8 @@ export type GitHubAppToken = {
   permissions: GitHubAppPermissions;
 };
 export class GitHubAppProviderError extends DomainError {
+  providerStage?: GitHubAppProviderStage;
+  providerStatus?: number;
   constructor(
     code: string,
     message: string,
@@ -217,6 +220,10 @@ export class GitHubAppClient {
         "github_app_budget_exhausted",
         "App verification exceeded its execution budget. Retry through the saved review.",
       );
+    const providerStage: GitHubAppProviderStage = path.endsWith("/access_tokens")
+      ? "installation_token" : /^\/app\/installations\/[0-9]+$/.test(path)
+        ? "installation" : path === "/app" ? "app" : "inventory";
+    let providerStatus: number | undefined;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), remaining);
     try {
@@ -242,6 +249,7 @@ export class GitHubAppClient {
         signal: controller.signal,
         redirect: "manual",
       });
+      providerStatus = response.status;
       if (!response.ok) {
         await response.body?.cancel();
         const retry = response.headers.get("retry-after");
@@ -269,6 +277,12 @@ export class GitHubAppClient {
               : null,
           );
         }
+        if (response.status === 422 && providerStage === "installation_token")
+          throw new GitHubAppProviderError(
+            "github_app_denied",
+            "GitHub rejected the requested installation token scope. Check repository selection and App permissions before preparing a new review.",
+            403,
+          );
         if ([401, 403, 404].includes(response.status))
           throw new GitHubAppProviderError(
             "github_app_denied",
@@ -282,11 +296,15 @@ export class GitHubAppClient {
       }
       return await readGitHubAppResponse(response);
     } catch (error) {
-      if (error instanceof DomainError) throw error;
-      throw new GitHubAppProviderError(
+      const reported = error instanceof DomainError ? error : new GitHubAppProviderError(
         "github_app_unavailable",
         "GitHub App verification did not complete. No authority was accepted.",
       );
+      if (reported instanceof GitHubAppProviderError) {
+        reported.providerStage = providerStage;
+        reported.providerStatus = providerStatus;
+      }
+      throw reported;
     } finally {
       clearTimeout(timer);
     }
