@@ -697,6 +697,56 @@ describe("Monitoring enrollment, reads, and private transport", () => {
     );
   });
 
+  it("accepts provider run timing and diagnostic metadata in a monitoring snapshot", async () => {
+    await save();
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url, init) => {
+      const response = await original(url, init);
+      if (JSON.parse(String(init.body)).command !== "snapshot") return response;
+      const body = (await response.json()) as {
+        result: { execution: Record<string, unknown> };
+      };
+      body.result.execution = {
+        state: "fresh",
+        freshUntil: new Date(now + 60_000).toISOString(),
+        expectedIntervalSeconds: 60,
+        retainedRunLimit: 120,
+        timing: {
+          schedulerDelayMilliseconds: 25,
+          durationMilliseconds: 200,
+          ageSeconds: 0.5,
+        },
+        lastRun: {
+          scheduledAt: time(),
+          startedAt: time(),
+          completedAt: time(),
+          enabled: true,
+          configurationRevision,
+          configFingerprint: (await metadata()).configFingerprint,
+          probeIntervalMinutes: 1,
+          targetCount: 1,
+          dueTargets: 1,
+          succeededProbes: 1,
+          failedProbes: 0,
+          phaseErrors: 0,
+          deliveriesFailed: 0,
+          subrequests: 1,
+          runId: "11111111-1111-4111-8111-111111111111",
+          phaseDurationsMilliseconds: { configuration: 10, probing: 150 },
+        },
+      };
+      return Response.json(body);
+    });
+    const snapshot = await as("viewer").monitoringSnapshot(connection);
+    expect(snapshot.result.execution).toMatchObject({
+      timing: { schedulerDelayMilliseconds: 25, ageSeconds: 0.5 },
+      lastRun: {
+        runId: "11111111-1111-4111-8111-111111111111",
+        phaseDurationsMilliseconds: { configuration: 10, probing: 150 },
+      },
+    });
+  });
+
   it("rejects an incident outside the exact open selection", async () => {
     await save();
     const original = fetcher.getMockImplementation()!;
