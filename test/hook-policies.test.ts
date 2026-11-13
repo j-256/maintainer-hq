@@ -126,6 +126,9 @@ beforeEach(async () => {
     if (!supported) return error("validation", 400);
     let result: unknown;
     switch (command) {
+      case "lifecycle_subscription":
+      case "lifecycle_subscriptions":
+        return error("validation", 400);
       case "configuration":
         result = {
           authorityId,

@@ -1,0 +1,20 @@
+.lifecycle-dialog { width: min(48rem, calc(100vw - 2rem)); max-width: 48rem; max-height: calc(100dvh - 2rem); overflow-y: auto; overflow-wrap: anywhere; display: flex; flex-direction: column; gap: 1.25rem; }
+.lifecycle-dialog section, .lifecycle-dialog fieldset { min-width: 0; }
+.lifecycle-dialog h3 { font-size: 1rem; font-weight: 600; margin-block: .75rem .5rem; }
+.lifecycle-dialog fieldset { display: grid; gap: .65rem; padding-block: .75rem; }
+.lifecycle-dialog legend, .lifecycle-dialog label { font-weight: 500; }
+.lifecycle-dialog select { min-height: 2.5rem; width: 100%; padding: .5rem; background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: .4rem; }
+.lifecycle-dialog input[type="checkbox"] { accent-color: var(--primary); width: 1rem; height: 1rem; flex-shrink: 0; }
+.lifecycle-dialog label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: .5rem; }
+.lifecycle-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.lifecycle-summary { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); gap: .5rem 1rem; }
+.lifecycle-summary dt, .lifecycle-state dt { color: var(--muted-foreground); }
+.lifecycle-summary dd, .lifecycle-state dd { min-width: 0; overflow-wrap: anywhere; }
+.lifecycle-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; padding-block: .75rem; border-block: 1px solid var(--border); }
+.lifecycle-state { display: grid; gap: .5rem; }
+.lifecycle-state dt { font-size: .875rem; }
+.lifecycle-destinations { list-style: none; padding: 0; }
+.lifecycle-destinations li { padding-block: 1rem; display: grid; gap: .75rem; border-bottom: 1px solid var(--border); }
+.lifecycle-events { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.lifecycle-private { padding-block: .75rem; border-block: 1px solid var(--border); }
+@media (max-width: 540px) { .lifecycle-summary, .lifecycle-comparison, .lifecycle-events { grid-template-columns: 1fr; } .lifecycle-summary dd { margin-bottom: .5rem; } .lifecycle-actions > button { width: 100%; } }

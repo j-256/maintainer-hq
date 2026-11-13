@@ -1,3 +1,4 @@
+import { lifecycleFileInput, supplyLifecycleFile, readLifecycleFile } from "./hook-lifecycle-input";
 import { adoptHandoffFile, exportHandoffFile, handoffAdoptFileInput, handoffExportFileInput } from "./hook-handoff";
 import { githubAppFileInput, readGitHubAppInputFile, supplyGitHubAppInput } from "./github-app-input";
 import { Command, CommanderError } from "commander";
@@ -52,6 +53,15 @@ try {
   if (!options.url) throw new ClientError("Provide --url or HQ_URL", 2);
   const configuration = clientConfiguration(options.url, Boolean(options.dev));
   const server = new McpServer({ name: "maintainer-hq", version: "0.1.0" });
+  server.registerTool("hooks_lifecycle_input_file", {
+    title: "Supply destination credentials from an exact protected local file",
+    description: "Trusted local adapter only. Checks live review, actor, workspace, membership and provider authority before reading a bounded owner-only regular non-symlink JSON file. Never pass destination URLs, tokens or signing secrets as arguments. Returns metadata only. Hosted MCP is metadata-only. Reconcile the same review after uncertain acceptance.",
+    inputSchema: lifecycleFileInput,
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true, idempotentHint: true },
+  }, async input => {
+    try { const { inputFile, ...selection } = input; return { content: [{ type: "text" as const, text: JSON.stringify(await supplyLifecycleFile(configuration, selection, () => readLifecycleFile(inputFile))) }] }; }
+    catch (error) { return { isError: true, content: [{ type: "text" as const, text: error instanceof ClientError ? error.message : "Private destination input did not complete; inspect the same review" }] }; }
+  });
   server.registerTool("github_app_import_file", {
     title: "Import protected App material from one exact owner-only local file",
     description: "Trusted local adapter only. Requires an exact live deployment-operator review, verified human session and regular owner-only non-symlink JSON file. Checks review authority before reading material and returns metadata only. Never pass private keys or webhook secrets as arguments. Hosted MCP cannot read a client's files. Reconcile uncertain acceptance through the same review before retrying.",

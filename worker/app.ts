@@ -1,3 +1,4 @@
+import { HookLifecycle } from "./hook-lifecycle";
 import { handleGitHubAppLifecycle, reconcileGitHubAppAuthority } from "./github-app-events";
 import { HookHandoff } from "./hook-handoff";
 import { uploadGitHubAppMaterial } from "./github-app-private-input";
@@ -218,6 +219,9 @@ export function createApplication(
           } else if (url.pathname === "/api/session" && request.method === "GET") {
             diagnostic.operation = "session";
             response = Response.json(await service.session());
+          } else if (/^\/api\/hooks\/lifecycle-input\/[^/]+$/.test(url.pathname) && request.method === "POST") {
+            diagnostic.operation = "hooks_lifecycle_private_input";
+            response = Response.json(await new HookLifecycle(service).supply(request, url.pathname.split("/").at(-1)!));
           } else if (url.pathname === "/api/hooks/handoff/private" && request.method === "POST") {
             diagnostic.operation = "hooks_handoff_private";
             const body = z.object({ action: z.enum(["adopt_plan", "reveal", "export"]), input: z.unknown() }).strict().parse(await readJson(request));

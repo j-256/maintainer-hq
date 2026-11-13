@@ -1,3 +1,4 @@
+import { lifecycleResults } from "./hook-lifecycle";
 import { hookSetupResults } from "./hook-setup";
 import { handoffResults } from "./hook-handoff";
 import { z } from "zod";
@@ -277,6 +278,7 @@ export const hookPolicySubscriptionSchema = z
     resourceId: z.uuid(),
     name: hookName,
     source: hookName,
+    retired: z.boolean().optional(),
     policy: hookPolicySchema,
   })
   .strict();
@@ -483,6 +485,7 @@ export const hookDeliveriesSchema = z
   .strict();
 export const hookResultSchemas = {
   ...handoffResults,
+  ...lifecycleResults,
   ...hookSetupResults,
   snapshot: hookSnapshotSchema,
   signals: z
@@ -522,6 +525,8 @@ export const hookResultSchemas = {
       observedAt: timestamp,
     })
     .strict(),
+  lifecycle_subscriptions: hookAuthoritySchema.extend({ items: z.array(hookPolicySubscriptionSchema).max(HOOK_LIMITS.PAGE_SIZE), nextCursor: z.uuid().nullable(), observedAt: timestamp }).strict(),
+  lifecycle_subscription: hookPolicyDetailSchema,
   configuration_subscription: hookPolicyDetailSchema,
   configuration_sinks: hookAuthoritySchema
     .extend({

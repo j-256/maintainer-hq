@@ -1,3 +1,4 @@
+import { supplyLifecycleFile, readLifecycleFile } from "./hook-lifecycle-input";
 import { adoptHandoffFile, exportHandoffFile } from "./hook-handoff";
 import { Command, CommanderError } from "commander";
 import { readFile } from "node:fs/promises";
@@ -117,6 +118,26 @@ program
         2,
       ),
     );
+  });
+
+program.command("hook-lifecycle-input")
+  .description("Supply destination credentials privately after an exact metadata review")
+  .requiredOption("-i, --input <file>", "Metadata JSON with workspaceId, planId and fingerprint")
+  .requiredOption("-p, --private-file <file>", "Owner-only destination JSON file or piped stdin (-); never a value")
+  .addHelpText("after", "\nChecks live actor, membership, connection, provider and review authority before reading a private value. Returns metadata only. Reconcile uncertain input through the same review. Exit statuses: 0 success, 1 runtime or uncertain failure, 2 invalid selection or file.")
+  .action(async (options: { input: string; privateFile: string }) => {
+    const global = program.opts<{ url?: string; dev?: boolean }>();
+    if (!global.url) throw new ClientError("Provide --url or HQ_URL", 2);
+    let selection: unknown;
+    try {
+      const text = await readFile(options.input, "utf8");
+      if (Buffer.byteLength(text) > LIMITS.BODY_BYTES) throw new Error();
+      selection = JSON.parse(text);
+    } catch {
+      throw new ClientError("Selection must be bounded JSON with workspaceId, planId and fingerprint, without private values", 2);
+    }
+    const configuration = clientConfiguration(global.url, Boolean(global.dev));
+    console.log(JSON.stringify(await supplyLifecycleFile(configuration, selection, () => readLifecycleFile(options.privateFile)), null, 2));
   });
 
 for (const action of ["adopt", "export"] as const) {

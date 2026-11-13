@@ -17,6 +17,7 @@ import {
 import { authorizeHooks, hookActorGuard } from "./hook-authority";
 import {
   callHookProvider,
+  callHookSubscriptionProvider,
   hookProvider,
   hookProviderActor,
   HookProviderError,
@@ -135,9 +136,9 @@ export class HookPolicies {
       workspaceId,
       connectionId,
     );
-    const response = await callHookProvider(
+    const response = await callHookSubscriptionProvider(
       provider,
-      "configuration_subscription",
+      "lifecycle_subscription",
       workspaceId,
       await hookProviderActor(this.context.principal.subject),
       { resourceId },
@@ -159,15 +160,10 @@ export class HookPolicies {
       workspaceId,
       connectionId,
     );
-    const response = await callHookProvider(
-      provider,
-      kind === "subscriptions"
-        ? "configuration_subscriptions"
-        : "configuration_sinks",
-      workspaceId,
-      await hookProviderActor(this.context.principal.subject),
-      { revision, cursor },
-    );
+    const actor = await hookProviderActor(this.context.principal.subject);
+    const response = kind === "subscriptions"
+      ? await callHookSubscriptionProvider(provider, "lifecycle_subscriptions", workspaceId, actor, { revision, cursor })
+      : await callHookProvider(provider, "configuration_sinks", workspaceId, actor, { revision, cursor });
     if (
       response.result.authorityId !== authorityId ||
       response.result.revision !== revision ||

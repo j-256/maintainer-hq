@@ -14,6 +14,7 @@ export async function mockHookPolicies(
     mode?: "active" | "legacy";
     canConfigure?: boolean;
     supported?: boolean;
+    retired?: boolean;
   } = {},
 ) {
   const hooks = await mockHooks(page, options);
@@ -42,6 +43,7 @@ export async function mockHookPolicies(
     resourceId: POLICY_RESOURCE_ID,
     name: HOOK_DELIVERY.subscription,
     source: "github",
+    retired: options.retired ?? false,
     policy: structuredClone(state.policy),
   });
   await page.route("**/api/commands/hooks_*", async (route) => {
