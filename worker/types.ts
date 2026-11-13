@@ -16,6 +16,7 @@ export interface Env {
   GITHUB_APP_SETUP_PERMITS?: string;
   GITHUB_APP_ORIGIN?: string;
   HOOKRELAY_CREDENTIALS?: string;
+  HOOKRELAY_CREDENTIALS_ADDITIONAL?: string;
   MONITORING_CREDENTIALS?: string;
 }
 export type PrincipalResolver = (

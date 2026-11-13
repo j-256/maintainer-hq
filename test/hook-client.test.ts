@@ -73,6 +73,21 @@ describe("Hookrelay private client boundary", () => {
     }
   });
 
+  it("preserves primary credentials when additional catalogs are invalid or collide", async () => {
+    const primary = { primary: descriptor };
+    const secondary = { ...descriptor, name: "Lifecycle", token: "hkr_" + "b".repeat(43) };
+    const base = { HOOKRELAY_CREDENTIALS: JSON.stringify(primary), HOOKRELAY_TEST: { fetch: async () => success() } };
+    for (const additional of ["invalid", JSON.stringify({ primary: secondary }), JSON.stringify({ duplicate: descriptor })]) {
+      const env = { ...base, HOOKRELAY_CREDENTIALS_ADDITIONAL: additional } as unknown as Env;
+      expect(hookProviderReferences(env, "alpha")).toEqual([{ id: "primary", name: "Synthetic", available: true }]);
+      expect((await hookProvider(env, "alpha", "primary")).token).toBe(token);
+    }
+    const env = { ...base, HOOKRELAY_CREDENTIALS_ADDITIONAL: JSON.stringify({ lifecycle: secondary }) } as unknown as Env;
+    expect(hookProviderReferences(env, "alpha").map(value => value.id)).toEqual(["lifecycle", "primary"]);
+    expect((await hookProvider(env, "alpha", "lifecycle")).token).toBe(secondary.token);
+    expect(hookProviderReferences(env, "beta")).toEqual([]);
+  });
+
   it("accepts the old token-backed setup contract without requesting App diagnostics or credentials", async () => {
     const configuration = {
       authorityId: "a".repeat(32),
