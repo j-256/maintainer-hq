@@ -348,7 +348,6 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
               type="button"
               aria-expanded={operationsExpanded}
               aria-controls="overview-operational-details"
-              aria-label="Inspect operational previews"
               aria-describedby="overview-operational-status"
               onClick={() => setOperationsExpanded((value) => !value)}
             >
@@ -360,28 +359,28 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
                 }
               />
               <span>Operational connections</span>
-              <span
-                className="attention-read-status"
-                id="overview-operational-status"
-              >
-                {selected.length} of {operational.length} connections /{" "}
-                {queries.some((query) => query.error)
-                  ? "Read failed"
-                  : pending
-                    ? "Reading..."
-                    : queries.some(
-                          (query) =>
-                            query.data &&
-                            now >=
-                              Date.parse(query.data.readAt) +
-                                ATTENTION_LIMITS.READ_FRESH_MS,
-                        )
-                      ? "Refresh needed"
-                      : selected.length
-                        ? "Read"
-                        : "Not configured"}
-              </span>
             </button>
+            <span
+              className="attention-read-status"
+              id="overview-operational-status"
+            >
+              {selected.length} of {operational.length} connections /{" "}
+              {queries.some((query) => query.error)
+                ? "Read failed"
+                : pending
+                  ? "Reading..."
+                  : queries.some(
+                        (query) =>
+                          query.data &&
+                          now >=
+                            Date.parse(query.data.readAt) +
+                              ATTENTION_LIMITS.READ_FRESH_MS,
+                      )
+                    ? "Refresh needed"
+                    : selected.length
+                      ? "Read"
+                      : "Not configured"}
+            </span>
           </h2>
           {selected.length ? (
             <Button

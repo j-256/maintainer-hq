@@ -108,6 +108,12 @@ for (const theme of ["light", "dark"])
           exact: true,
         }),
       ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: "Operational connections",
+          exact: true,
+        }),
+      ).toBeVisible();
       const reviewAudit = await new AxeBuilder({ page }).analyze();
       expect(reviewAudit.violations).toEqual([]);
       expect(reviewAudit.incomplete).toEqual([]);
@@ -158,7 +164,7 @@ test("attention descriptions and counts honor enlarged text on narrow screens", 
       ),
     ).toBe(true);
     const previews = page.getByRole("button", {
-      name: "Inspect operational previews",
+      name: "Operational connections",
       exact: true,
     });
     await expect(previews).toHaveAccessibleDescription(/2 of 3 connections/);
@@ -271,7 +277,7 @@ test("attention keeps URL filters, bounded connection reads and item pagination 
     page.getByRole("textbox", { name: "Search attention" }),
   ).toHaveValue("Independent project");
   await page
-    .getByRole("button", { name: "Inspect operational previews", exact: true })
+    .getByRole("button", { name: "Operational connections", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Next connections", exact: true })
@@ -327,7 +333,7 @@ test("operational read failure stays a coverage gap and recovers without losing 
     }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Inspect operational previews", exact: true })
+    .getByRole("button", { name: "Operational connections", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Retry Primary hooks", exact: true })
@@ -374,7 +380,7 @@ test("operational previews age visibly without a new HTTP polling loop", async (
     page.getByRole("textbox", { name: "Search attention" }),
   ).toHaveValue("Primary hooks");
   await page
-    .getByRole("button", { name: "Inspect operational previews", exact: true })
+    .getByRole("button", { name: "Operational connections", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Refresh operations", exact: true }),

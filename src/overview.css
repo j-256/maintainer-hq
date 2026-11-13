@@ -72,6 +72,10 @@
   gap: 12px;
 }
 .attention-operations h2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: var(--hq-text-body);
   font-weight: 600;
   margin: 0;
