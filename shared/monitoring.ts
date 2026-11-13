@@ -342,6 +342,15 @@ export const monitorExecutionSchema = z
     freshUntil: timestamp.nullable(),
     expectedIntervalSeconds: z.literal(60),
     retainedRunLimit: z.literal(120),
+    timing: z
+      .object({
+        schedulerDelayMilliseconds: z.number().int().nonnegative(),
+        durationMilliseconds: z.number().int().nonnegative(),
+        ageSeconds: z.number().finite().nonnegative(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     lastRun: z
       .object({
         scheduledAt: timestamp,
@@ -358,6 +367,25 @@ export const monitorExecutionSchema = z
         phaseErrors: z.number().int().min(0).max(1000),
         deliveriesFailed: z.number().int().min(0).max(10),
         subrequests: z.number().int().min(0).max(45),
+        runId: z
+          .string()
+          .regex(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/)
+          .optional(),
+        phaseDurationsMilliseconds: z
+          .partialRecord(
+            z.enum([
+              "configuration",
+              "reconciliation",
+              "probing",
+              "persistence",
+              "analytics",
+              "delivery",
+              "maintenance",
+              "run-status",
+            ]),
+            z.number().int().nonnegative(),
+          )
+          .optional(),
       })
       .strict()
       .nullable(),
