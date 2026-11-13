@@ -20,6 +20,7 @@ const context = z.object({
   repositoryId: identity,
 });
 const diagnosticSchema = z.discriminatedUnion("event", [
+  z.object({ event: z.literal("hq.hooks.lifecycle"), reference: z.uuid(), workspaceId: identity, state: z.enum(["succeeded", "partial", "failed", "indeterminate"]) }).strict(),
   z.object({ event: z.literal("hq.github.app.lifecycle"), correlationId: z.uuid(), state: z.enum(["rejected", "processed", "duplicate"]), code: z.string().regex(/^[a-z_]{1,80}$/).nullable(), elapsedMs: elapsed }).strict(),
   z.object({ event: z.literal("hq.github.app.reconciliation"), correlationId: z.uuid(), checked: z.number().int().nonnegative(), denied: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), requests: z.number().int().nonnegative(), remaining: z.number().int().nonnegative(), incomplete: z.boolean(), retiredAttempts: z.number().int().nonnegative(), retiredDeliveries: z.number().int().nonnegative(), code: z.string().regex(/^[a-z_]{1,80}$/).nullable(), elapsedMs: elapsed }).strict(),
   z.object({

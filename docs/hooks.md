@@ -105,3 +105,43 @@ The Hooks health view separates recent history from a complete summary of retain
 ## Additional client credentials
 
 `HOOKRELAY_CREDENTIALS_ADDITIONAL` accepts the same bounded descriptor catalog as `HOOKRELAY_CREDENTIALS`. Deploy it through protected configuration input and retain its recoverable source with the deployment owner's credential custody. Valid primary references and tokens retain priority; colliding additional references or token aliases are ignored. A malformed additional catalog does not disable the primary catalog. Distinct tokens may reference the same provider authority. Keep the original reference available while old clients or uncertain receipts still need it.
+
+## Destination, subscription, and owned-hook lifecycle
+
+Use **Manage destinations** in Hooks to create Discord, ntfy, or webhook destinations, replace private configuration, retire a destination, or restore it. Names and types are ordinary review metadata. Private destination URLs, topics, tokens, and signing secrets enter a separate protected form after review; those drafts are cleared on submission, close, navigation, and reload. Provider custody encrypts the values. HQ retains only bounded review and input-intent metadata.
+
+The provider reports separate configuration, provision, private-custody, and upstream-management capabilities. An HQ owner or operator also needs current workspace membership and an eligible credential. Missing grants, inactive online configuration, unavailable custody, and unavailable GitHub authority prevent the affected action. Existing environment-backed destinations remain readable and usable.
+
+Destination retirement preserves pending deliveries and recovery material. Enabled subscriptions must first unlink the destination through **Edit routing**. The reviewed impact identifies affected subscriptions. A retired destination cannot be selected for new routing. Restoration is a separate reviewed operation.
+
+Open **Manage subscription** from a subscription to retire or restore it, adopt an exact existing GitHub hook, update the owned hook's events or active state, or explicitly delete that upstream hook. Subscription retirement preserves retained history and deliveries and does not delete an upstream hook. Restoration leaves the subscription disabled until a routing review enables it. Neither action replays retained events. Hook adoption checks the provider-observed numeric repository identity and exact HTTPS receiver. GitHub's redacted secret is insufficient to verify signing; an authenticated ping supplies that evidence.
+
+Each review binds its actor, workspace, membership, HQ credential, connection revision, provider identity, authority revision, exact change, and expiry. Applying records durable intent before contacting the provider. Operations history opens the addressable original receipt and reports configuration and upstream outcomes separately. An interrupted apply or private input may be indeterminate. **Reconcile saved receipt** reads that original provider receipt without resubmitting the write. The original provider credential reference must remain available for recovery even after a connection changes.
+
+### CLI and MCP
+
+The shared commands are `hooks_lifecycle_configuration`, `hooks_lifecycle_plan`, `hooks_lifecycle_get`, `hooks_lifecycle_apply`, and `hooks_lifecycle_reconcile`. Inspect their bounded schemas with `npm run cli -- schema <command>`. Ordinary HTTP commands and hosted MCP accept metadata only. Planning takes a caller-generated `planId`, the selected connection and its revision, provider authority and revision, and one strict change variant. Apply takes `workspaceId`, `planId`, and the exact returned HQ fingerprint. Get and reconcile take only `workspaceId` and `planId`.
+
+For a prepared destination review, put only `workspaceId`, `planId`, and `fingerprint` in a selection JSON file. Supply the private document through a regular owner-only non-symlink file or piped stdin:
+
+```sh
+npm run cli -- --url https://hq.example hook-lifecycle-input -i selection.json --private-file destination.json
+```
+
+The local adapter checks live review authority before reading the file. It bounds input to 16384 bytes, verifies ownership and restrictive permissions, rejects symlinks, wipes byte buffers, and returns metadata only. The stdio MCP tool `hooks_lifecycle_input_file` provides the same file adapter using an `inputFile` path; it does not accept stdin or credential values in arguments. Hosted MCP cannot read local files. Existing HQ authentication environment variables apply. Consumed input returns `submitted:false` without reading or comparing a new value. An uncertain input journal blocks a second read until the same receipt is reconciled. A bounded, authenticated provider rejection that explicitly precedes acceptance permits a corrected private document; lost or malformed acknowledgements remain indeterminate. Retired-aware reads use the lifecycle metadata routes and fall back to legacy configuration reads only when an older provider explicitly rejects the unsupported command.
+
+Private documents have these shapes:
+
+```json
+{"type":"discord","url":"<private Discord webhook URL>"}
+{"type":"ntfy","server":"<optional HTTPS server>","topic":"<private topic>","token":"<optional token>"}
+{"type":"webhook","url":"<private HTTPS URL>","signingSecret":"<private signing secret>"}
+```
+
+Do not place real documents in command arguments, ordinary tool inputs, logs, screenshots, source control, or browser storage. Provider URL validation rejects unsafe protocols, embedded URL credentials, fragments, and unsafe local destinations. Redirects are not followed. No notification is sent by review or destination configuration.
+
+### Activation and recovery
+
+Apply HQ migrations before using lifecycle input. Preserve the existing primary catalogs and original client identities. Provision a separate workspace-scoped additional provider client through protected configuration, explicitly select its HQ connection reference with revision-aware Save, and retain the old reference for original receipts. The provider client needs the specific read, configure, provision, custody, and owned-hook grants required by the intended actions. Deployment, provider credentials and grants, source/connection selection, App setup, and production qualification remain separate operator approvals.
+
+The lifecycle bridge adds bounded D1 metadata and private requests to an existing provider service binding. It introduces no additional Cloudflare paid product dependency. Workload-dependent request, CPU, D1 storage, and daily operation limits still apply; review the [hosting requirements](hosting.md#deployment-prerequisites) and qualify the intended workload before activation. A successful local synthetic fixture does not qualify production throughput or notification delivery.

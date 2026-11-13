@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOOK_LIMITS } from "../shared/hooks";
 import {
   callHookProvider,
+  callHookSubscriptionProvider,
   hookProvider,
   hookProviderReferences,
   type HookProvider,
@@ -246,4 +247,32 @@ describe("Hookrelay private client boundary", () => {
     await outcome;
     expect(canceled).toBe(true);
   });
+});
+it("reads additive retired subscription metadata while preserving old provider results", async () => {
+  const value = { authorityId: "a".repeat(32), revision: 1, mode: "active", resourceId: "00000000-0000-4000-8000-000000000001", name: "Synthetic subscription", source: "github", policy: { enabled: false, sinks: [], filter: null, sinkFilters: {} }, observedAt: new Date().toISOString() };
+  const withRetired = await callHookProvider(provider(async () => success({ ...value, retired: true })), "configuration_subscription", "alpha", "hq_actor");
+  expect(withRetired.result).toMatchObject({ retired: true });
+  expect((await callHookProvider(provider(async () => success(value)), "configuration_subscription", "alpha", "hq_actor")).result).toMatchObject({ name: value.name });
+});
+
+it("uses retired-aware metadata and falls back only after explicit unsupported-command validation", async () => {
+  const detail = { authorityId: "a".repeat(32), revision: 1, mode: "active", resourceId: "00000000-0000-4000-8000-000000000001", name: "Synthetic", source: "github", policy: { enabled: false, sinks: [], filter: null, sinkFilters: {} }, observedAt: new Date().toISOString() };
+  const calls: string[] = [];
+  const legacy = provider(async (_url, init) => {
+    const command = JSON.parse(String(init.body)).command; calls.push(command);
+    return command === "lifecycle_subscription" ? Response.json({ error: { code: "validation" } }, { status: 400 }) : success(detail);
+  });
+  expect((await callHookSubscriptionProvider(legacy, "lifecycle_subscription", "alpha", "hq_actor", { resourceId: detail.resourceId })).result).toMatchObject({ name: "Synthetic" });
+  expect(calls).toEqual(["lifecycle_subscription", "configuration_subscription"]);
+  calls.length = 0;
+  await expect(callHookSubscriptionProvider(provider(async (_url, init) => { calls.push(JSON.parse(String(init.body)).command); return Response.json({ error: { code: "forbidden" } }, { status: 403 }); }), "lifecycle_subscription", "alpha", "hq_actor", { resourceId: detail.resourceId })).rejects.toMatchObject({ code: "hooks_provider_forbidden" });
+  expect(calls).toEqual(["lifecycle_subscription"]);
+  expect((await callHookSubscriptionProvider(provider(async () => success({ ...detail, retired: true })), "lifecycle_subscription", "alpha", "hq_actor", { resourceId: detail.resourceId })).result).toMatchObject({ retired: true });
+});
+
+it("classifies the real ordinary management error envelope without correlation metadata", async () => {
+  for (const [status, code, definite] of [[404, "not_found", true], [403, "forbidden", true], [503, "validation", false]] as const) {
+    const error = await callHookProvider(provider(async () => Response.json({ error: { code, message: "Synthetic management refusal" } }, { status, headers: { "cache-control": "no-store" } })), "lifecycle_apply", "alpha", "hq_actor", { planId: "00000000-0000-4000-8000-000000000001" }).catch((value: unknown) => value);
+    expect(error).toMatchObject({ providerStatus: status, definiteRejection: definite, rejectionCode: definite ? code : null });
+  }
 });

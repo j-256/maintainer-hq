@@ -332,3 +332,14 @@ it("does not turn bounded, inconsistent, or excessively future subscription inve
     }),
   );
 });
+it("rejects an in-flight coverage read after a lifecycle operation intent is persisted", async () => {
+  await repositories(1);
+  const planId = crypto.randomUUID();
+  await db.prepare("INSERT INTO action_plans(id,workspace_id,actor_subject,kind,input_json,fingerprint,created_at,expires_at) VALUES(?,'alpha','owner','hookrelay.resource.lifecycle',?,'synthetic',?,?)").bind(planId, JSON.stringify({ connectionId: "hook" }), stamp(), new Date(now + 300000).toISOString()).run();
+  fetcher.mockImplementation(async () => {
+    await db.prepare("INSERT INTO operations(id,workspace_id,plan_id,actor_subject,kind,status,summary,created_at,updated_at) VALUES(?,'alpha',?,'owner','hookrelay.resource.lifecycle','pending','Lifecycle requested',?,?)").bind(crypto.randomUUID(), planId, stamp(), stamp()).run();
+    return response();
+  });
+  await run();
+  expect(await coverage()).toBeNull();
+});

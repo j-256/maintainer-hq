@@ -1,3 +1,5 @@
+import { HOOK_LIFECYCLE_KIND } from "../shared/hook-lifecycle";
+import { HookLifecycleDialog } from "./hook-lifecycle";
 import { HOOK_HANDOFF_KIND } from "../shared/hook-handoff";
 import { HookHandoffDialog } from "./hook-handoff";
 import { HOOK_SETUP_KIND } from "../shared/hook-setup";
@@ -490,11 +492,13 @@ function Subscriptions({
   connection,
   onDeliveries,
   onPolicy,
+  onLifecycle,
 }: {
   snapshot: Snapshot;
   connection: HookConnection;
   onDeliveries: (name: string) => void;
   onPolicy: (resourceId: string) => void;
+  onLifecycle: (resourceId: string) => void;
 }) {
   const [page, setPage] = useState<{
     identity: string;
@@ -555,6 +559,7 @@ function Subscriptions({
         Omit<HookResult<"subscriptions">, "items"> & {
           items: (HookResult<"subscriptions">["items"][number] & {
             resourceId?: string;
+            retired?: boolean;
           })[];
         }
       > & {
@@ -588,6 +593,7 @@ function Subscriptions({
               resourceId: item.resourceId,
               name: item.name,
               source: item.source,
+              retired: item.retired,
               enabled: item.policy.enabled,
               sinks: item.policy.sinks,
             })),
@@ -683,7 +689,7 @@ function Subscriptions({
                   <div className="source-card-heading">
                     <h3>{item.name}</h3>
                     <Badge variant="outline">
-                      {item.enabled ? "Enabled" : "Disabled"}
+                      {item.retired ? "Retired" : item.enabled ? "Enabled" : "Disabled"}
                     </Badge>
                   </div>
                   <p>
@@ -720,6 +726,7 @@ function Subscriptions({
                           : "View routing"}
                       </Button>
                     ) : null}
+                    {item.resourceId ? <Button variant="outline" onClick={() => onLifecycle(item.resourceId!)}>Manage subscription</Button> : null}
                     <Button
                       variant="outline"
                       onClick={() => onDeliveries(item.name)}
@@ -993,6 +1000,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
             <Webhook size={28} aria-hidden="true" /> Hooks
           </h1>
         </div>
+        {selected && active ? <Button variant="outline" onClick={() => { rememberFocus(); navigate({ lifecycle: "new", lifecycleResource: null }); }}>Manage destinations</Button> : null}
         {selected && active ? <Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.SECRETS)} onClick={() => { rememberFocus(); navigate({ handoff: "new" }); }}>New GitHub hook</Button> : null}
         {canAdmin && connections.data?.length ? (
           <Button
@@ -1178,6 +1186,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
                     key={selected.id + "/" + selected.revision}
                     snapshot={snapshot}
                     connection={selected}
+                    onLifecycle={(id) => { rememberFocus(); navigate({ lifecycle: "new", lifecycleResource: id }); }}
                     onPolicy={(id) => {
                       rememberFocus();
                       navigate({
@@ -1223,11 +1232,13 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
                     kind === HOOK_POLICY_KIND ||
                     kind === HOOK_SETUP_KIND ||
                     kind === HOOK_HANDOFF_KIND ||
+                    kind === HOOK_LIFECYCLE_KIND ||
                     kind === HOOK_RESOLUTION_KIND
                       ? null
                       : id,
                   setupReview: kind === HOOK_SETUP_KIND ? id : null,
                   handoff: kind === HOOK_HANDOFF_KIND ? id : null,
+                  lifecycle: kind === HOOK_LIFECYCLE_KIND ? id : null,
                   disposition: kind === HOOK_RESOLUTION_KIND ? id : null,
                   policyReview: kind === HOOK_POLICY_KIND ? id : null,
                   policy: null,
@@ -1306,6 +1317,10 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
           onReview={(id) => navigate({ policyReview: id })}
         />
       ) : null}
+      {selected && params.get("lifecycle") ? <HookLifecycleDialog
+        key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision, params.get("lifecycle"), params.get("lifecycleResource")].join("/")}
+        snapshot={snapshot} connection={selected} planId={params.get("lifecycle") === "new" ? null : params.get("lifecycle")} resourceId={params.get("lifecycleResource")} returnFocus={focus.current}
+        onReview={id => navigate({ lifecycle: id })} onBack={() => navigate({ lifecycle: "new" })} onClose={() => navigate({ lifecycle: null, lifecycleResource: null })} /> : null}
       {selected && params.get("handoff") ? <HookHandoffDialog
         key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision].join("/")}
         snapshot={snapshot} connection={selected} planId={params.get("handoff") === "new" ? null : params.get("handoff")} repositoryId={params.get("repository")} returnFocus={focus.current}

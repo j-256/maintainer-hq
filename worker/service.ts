@@ -1,3 +1,4 @@
+import { HookLifecycle } from "./hook-lifecycle";
 import { GitHubAppGrants } from "./github-app-grants";
 import { HookHandoff } from "./hook-handoff";
 import { GitHubApps } from "./github-app-registrations";
@@ -454,6 +455,11 @@ export class WorkspaceService {
   hooksConfiguration(input: unknown) {
     return new HookPolicies(this).configuration(input);
   }
+  hooksLifecycleConfiguration(input: unknown) { return new HookLifecycle(this).configuration(input); }
+  hooksLifecyclePlan(input: unknown) { return new HookLifecycle(this).plan(input); }
+  hooksLifecycleGet(input: unknown) { return new HookLifecycle(this).get(input); }
+  hooksLifecycleApply(input: unknown) { return new HookLifecycle(this).apply(input); }
+  hooksLifecycleReconcile(input: unknown) { return new HookLifecycle(this).reconcile(input); }
   hooksHandoffConfiguration(input: unknown) { return new HookHandoff(this).configuration(input); }
   hooksHandoffRepository(input: unknown) { return new HookHandoff(this).repository(input); }
   hooksHandoffStatus(input: unknown) { return new HookHandoff(this).status(input); }

@@ -100,8 +100,16 @@ const providerMessages = {
   review_unavailable:
     "Hookrelay configuration changed or its pending review limit was reached. Refresh before reviewing again.",
 } as const;
+export const HOOK_PROVIDER_REJECTION_STATUS = Object.freeze({ validation: 400, unauthorized: 401, forbidden: 403, not_found: 404, conflict: 409, expired: 409, media_type: 415, too_large: 413, request_timeout: 408 });
+const rejectionSchema = z.object({ error: z.object({ code: z.enum(Object.keys(HOOK_PROVIDER_REJECTION_STATUS) as [keyof typeof HOOK_PROVIDER_REJECTION_STATUS, ...(keyof typeof HOOK_PROVIDER_REJECTION_STATUS)[]]), message: z.string().min(1).max(1000) }).strict() }).strict();
+const privateRejectionSchema = rejectionSchema.extend({ correlationId: z.uuid() }).strict();
+export function hookProviderRejection(status: number, data: unknown, boundary: "management" | "private") {
+  const parsed = (boundary === "private" ? privateRejectionSchema : rejectionSchema).safeParse(data);
+  return parsed.success && HOOK_PROVIDER_REJECTION_STATUS[parsed.data.error.code] === status ? parsed.data.error.code : null;
+}
 export class HookProviderError extends DomainError {
-  constructor(readonly providerCode: string) {
+  get definiteRejection() { return this.rejectionCode !== null; }
+  constructor(readonly providerCode: string, readonly providerStatus: number | null = null, readonly rejectionCode: keyof typeof HOOK_PROVIDER_REJECTION_STATUS | null = null) {
     super(
       "hooks_provider_" + providerCode,
       providerMessages[providerCode as keyof typeof providerMessages] ??
@@ -206,7 +214,7 @@ export async function callHookProvider<K extends HookCommand>(
             Object.hasOwn(providerMessages, error.data.error.code)
               ? error.data.error.code
               : "unavailable";
-          throw new HookProviderError(code);
+          throw new HookProviderError(code, response.status, response.headers.get("cache-control") === "no-store" ? hookProviderRejection(response.status, data, "management") : null);
         }
         const envelope = z
           .object({
@@ -238,5 +246,13 @@ export async function callHookProvider<K extends HookCommand>(
     throw new HookProviderError("unavailable");
   } finally {
     clearTimeout(timer);
+  }
+}
+
+export async function callHookSubscriptionProvider<K extends "lifecycle_subscriptions" | "lifecycle_subscription">(provider: HookProvider, command: K, workspaceId: string, actorId: string, input: Record<string, unknown>) {
+  try { return await callHookProvider(provider, command, workspaceId, actorId, input); }
+  catch (error) {
+    if (!(error instanceof HookProviderError) || error.providerCode !== "validation" || error.providerStatus !== 400) throw error;
+    return await callHookProvider(provider, command === "lifecycle_subscription" ? "configuration_subscription" : "configuration_subscriptions", workspaceId, actorId, input) as { result: HookResult<K>; capabilities: ("read" | "retry" | "resolve")[] };
   }
 }
