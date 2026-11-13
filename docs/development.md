@@ -54,5 +54,3 @@ The static docs site has its own locked build dependencies. It reads the Markdow
 The checked-in development and placeholder hosting configuration is not a production identity configuration. Use the [offline release workflow](release.md) and [hosting gates](hosting.md) to build and inspect a concrete protected deployment. The production entrypoint excludes the development owner adapter.
 
 Preserve database, binding, identity, credential, and provider recovery separately. A code rollback is not a database restore and cannot undo a provider operation. Development setup never provisions live provider authority.
-
-For a synthetic lifecycle review environment, prepare the isolated E2E database, run `npm run dev -- --mode e2e --port 5207`, and then run `npx tsx e2e/hooks-lifecycle-preview.ts`. Open `http://127.0.0.1:5210/hooks?workspace=development`. The loopback-only proxy reuses browser fixtures for lifecycle, destinations, subscriptions, and receipts. It does not contact a provider or send notifications. Synthetic receipts persist only while the preview process runs. Keep this separate from a production-connected development environment.
