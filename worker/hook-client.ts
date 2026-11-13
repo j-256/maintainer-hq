@@ -25,24 +25,24 @@ export type HookProvider = Descriptor & { fetcher: Fetcher; identity: string };
 export const hookProviderActor = async (subject: string) =>
   "hq_" + (await credentialHash(subject));
 
-function catalog(env: Env): Map<string, Descriptor> {
+function readCatalog(raw: string | undefined): Map<string, Descriptor> {
   try {
-    if (
-      !env.HOOKRELAY_CREDENTIALS ||
-      env.HOOKRELAY_CREDENTIALS.length > HOOK_LIMITS.CATALOG_BYTES
-    )
-      return new Map();
-    const entries = Object.entries(
-      z
-        .record(idSchema, descriptorSchema)
-        .parse(JSON.parse(env.HOOKRELAY_CREDENTIALS)),
-    );
-    return entries.length <= HOOK_LIMITS.PROVIDERS
-      ? new Map(entries)
-      : new Map();
+    if (!raw || raw.length > HOOK_LIMITS.CATALOG_BYTES) return new Map();
+    const entries = Object.entries(z.record(idSchema, descriptorSchema).parse(JSON.parse(raw)));
+    return entries.length <= HOOK_LIMITS.PROVIDERS ? new Map(entries) : new Map();
   } catch {
     return new Map();
   }
+}
+function catalog(env: Env): Map<string, Descriptor> {
+  const primary = readCatalog(env.HOOKRELAY_CREDENTIALS);
+  const tokens = new Set([...primary.values()].map(value => value.token));
+  for (const [reference, value] of readCatalog(env.HOOKRELAY_CREDENTIALS_ADDITIONAL)) {
+    if (primary.has(reference) || tokens.has(value.token)) continue;
+    primary.set(reference, value);
+    tokens.add(value.token);
+  }
+  return primary;
 }
 function binding(env: Env, name: string): Fetcher | null {
   const value = (env as unknown as Record<string, unknown>)[name] as
