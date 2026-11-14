@@ -30,6 +30,7 @@ import {
 import type { ResourceLinks } from "../shared/resource-links";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
+import { ActionMenu } from "./components/ui/action-menu";
 import { Badge } from "./components/ui/badge";
 import { Disclosure } from "./components/ui/disclosure";
 import {
@@ -92,12 +93,7 @@ function MonitoringSummary({
 }) {
   return (
     <section className="hook-summary" aria-label="Endpoint Monitor evidence">
-      <MonitorExecution data={data} />
       <dl className="hook-metrics">
-        <div>
-          <dt>Targets</dt>
-          <dd>{data.configuration?.targetCount ?? "Not configured"}</dd>
-        </div>
         <div>
           <dt>Open incidents</dt>
           <dd>
@@ -115,27 +111,39 @@ function MonitoringSummary({
             {data.pendingDeliveries.truncated ? "+" : ""}
           </dd>
         </div>
-        <div>
-          <dt>Probe intent</dt>
-          <dd className="monitor-metric-label">
-            {!data.runtimeConfigured
-              ? "Not configured"
-              : data.enabled
-                ? "Enabled"
-                : "Disabled"}
-          </dd>
-        </div>
       </dl>
-      <p className="hook-muted">
+      <MonitorExecution data={data} compact />
+      {!data.runtimeConfigured || !data.enabled ? (
+        <p className="hook-signal-alert">
+          {!data.runtimeConfigured ? "Scheduled checks are not configured." : "Scheduled checks are disabled."}
+        </p>
+      ) : null}
+      <p className="hook-summary-coverage">
         Read <MonitorTime value={data.readAt} />.{" "}
-        {data.configuration
-          ? "Configuration revision " + data.configuration.revision + "."
-          : "No executing target configuration is saved."}{" "}
         {data.openIncidents.truncated || data.pendingDeliveries.truncated
-          ? "A plus sign marks a bounded count; additional records are not included."
-          : "Counts cover retained records at read time."}
+          ? "Limited counts (+); more records may exist."
+          : null}
       </p>
       <Disclosure title="Schedule and evidence details" icon={Clock3}>
+        <p>
+          Scheduled checks: {!data.runtimeConfigured ? "not configured" : data.enabled ? "enabled" : "disabled"}.
+          {" "}This setting does not verify execution.
+        </p>
+        <p>
+          {data.configuration
+            ? data.configuration.targetCount + " targets. Configuration revision " + data.configuration.revision + "."
+            : "No target configuration is saved."}{" "}
+          Counts cover retained records at read time.
+        </p>
+        {data.execution.lastRun ? (
+          <p>
+            Last completed run: <MonitorTime value={data.execution.lastRun.completedAt} />.
+            {" "}Scheduled for <MonitorTime value={data.execution.lastRun.scheduledAt} />.
+            {" "}{data.execution.lastRun.enabled
+              ? `Checks passed: ${data.execution.lastRun.succeededProbes}; failed: ${data.execution.lastRun.failedProbes}; phase errors: ${data.execution.lastRun.phaseErrors}; notification failures: ${data.execution.lastRun.deliveriesFailed}.`
+              : "Probing was disabled for this run."}
+          </p>
+        ) : null}
         <p>
           Scheduler runs are expected every minute, with two minutes of grace.
           Target checks follow their configured interval.
@@ -147,13 +155,13 @@ function MonitoringSummary({
           after a failed refresh.
         </p>
         <p>
-          Notification intent:{" "}
+          Notifications:{" "}
           {data.deliveryEnabled === null
             ? "not configured"
             : data.deliveryEnabled
               ? "enabled"
               : "disabled"}
-          . Analytics signal intent:{" "}
+          . Analytics signals:{" "}
           {data.analyticsEnabled === null
             ? "not configured"
             : data.analyticsEnabled
@@ -170,15 +178,11 @@ function MonitoringTargets({
   connection,
   canConfigure,
   onInspect,
-  onAdd,
-  onDefaults,
 }: {
   snapshot: Snapshot;
   connection: MonitorConnection;
-  canConfigure: boolean;
   onInspect: (id: string) => void;
-  onAdd: () => void;
-  onDefaults: () => void;
+  canConfigure: boolean;
 }) {
   const workspaceId = snapshot.workspace.id;
   const client = useQueryClient();
@@ -226,7 +230,6 @@ function MonitoringTargets({
       <div className="hook-section-heading">
         <div>
           <h2 id="monitor-targets-title">Monitor targets</h2>
-          <p>Endpoint intent, retained evidence, and related repositories.</p>
         </div>
         <div className="hook-actions">
           <Button
@@ -236,16 +239,6 @@ function MonitoringTargets({
           >
             <RefreshCw size={16} aria-hidden="true" /> Refresh targets
           </Button>
-          {canConfigure ? (
-            <>
-              <Button variant="outline" onClick={onDefaults}>
-                <Settings2 size={16} aria-hidden="true" /> Schedule and defaults
-              </Button>
-              <Button onClick={onAdd}>
-                <Plus size={16} aria-hidden="true" /> Add target
-              </Button>
-            </>
-          ) : null}
         </div>
       </div>
       <MonitorTargetFilters
@@ -266,26 +259,15 @@ function MonitoringTargets({
         <>
           <div className="monitor-card-list">
             {items.map((target) => (
-              <article className="monitor-card" key={target.id}>
-                <div className="hook-section-heading">
+              <article className="monitor-card monitor-target-row" key={target.id}>
+                <div className="monitor-target-identity">
                   <h3>{target.id}</h3>
-                  <MonitorEvidence evidence={target.evidence} />
+                  <p className="monitor-private-url">{target.url}</p>
                 </div>
-                <p className="monitor-private-url">{target.url}</p>
-                <MonitorCheckTimes evidence={target.evidence} />
-                <p className="hook-muted">
-                  {target.method} /{" "}
-                  {target.expectedStatuses?.join(", ") ?? "Reachability"} /{" "}
-                  {target.timeoutMilliseconds / 1000}s timeout
-                </p>
-                <RelatedRepositoryLinks
-                  snapshot={snapshot}
-                  ids={
-                    query.data!.repositoryLinks.find(
-                      (value) => value.resourceKey === target.id,
-                    )?.repositoryIds ?? []
-                  }
-                />
+                <div className="monitor-target-evidence">
+                  <MonitorEvidence evidence={target.evidence} />
+                  <MonitorCheckTimes evidence={target.evidence} compact />
+                </div>
                 <Button variant="outline" onClick={() => onInspect(target.id)}>
                   Inspect target
                 </Button>
@@ -434,8 +416,7 @@ function MonitoringTargetDetail({
           <DialogHeader>
             <DialogTitle>{targetId}</DialogTitle>
             <DialogDescription>
-              Saved endpoint intent and retained evidence. Repository links are
-              HQ metadata and do not change probes or notifications.
+              Endpoint configuration and recorded checks.
             </DialogDescription>
           </DialogHeader>
           {query.isPending ? <p role="status">Loading target...</p> : null}
@@ -451,7 +432,9 @@ function MonitoringTargetDetail({
             <>
               <MonitorEvidence evidence={target.evidence} />
               <MonitorCheckTimes evidence={target.evidence} />
-              <MonitorTargetFacts target={target} />
+              <Disclosure title="Check configuration" icon={Settings2}>
+                <MonitorTargetFacts target={target} />
+              </Disclosure>
               <p className="hook-muted">
                 Evidence recorded{" "}
                 <MonitorTime value={target.evidence.observedAt} />.{" "}
@@ -739,16 +722,39 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
             <Monitor size={28} aria-hidden="true" /> Monitoring
           </h1>
         </div>
-        {canAdmin && connections.data?.length ? (
-          <Button
-            onClick={() => {
+        <div className="hook-actions">
+          {active && canConfigure ? (
+            <Button onClick={() => {
               rememberFocus();
-              setEditingConnection(":new");
-            }}
-          >
-            <Plus size={16} aria-hidden="true" /> Connect Endpoint Monitor
-          </Button>
-        ) : null}
+              setEditingTarget(":new");
+            }}>
+              <Plus size={16} aria-hidden="true" /> Add target
+            </Button>
+          ) : null}
+          <ActionMenu
+            label="Monitoring actions"
+            actions={[
+              ...(active && canConfigure ? [
+                {
+                  label: "Schedule and defaults",
+                  onSelect: (trigger: HTMLButtonElement) => {
+                    focus.current = trigger;
+                    setEditingTarget(":defaults");
+                  },
+                },
+              ] : []),
+              ...(canAdmin && connections.data?.length ? [
+                {
+                  label: "Connect Endpoint Monitor",
+                  onSelect: (trigger: HTMLButtonElement) => {
+                    focus.current = trigger;
+                    setEditingConnection(":new");
+                  },
+                },
+              ] : []),
+            ]}
+          />
+        </div>
       </div>
       {notice ? (
         <p className="save-notice" role="status">
@@ -802,7 +808,7 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
       {connections.data?.length ? (
         <div className="hook-connection-bar">
           <div className="hook-field">
-            <label htmlFor="monitor-connection">Connection</label>
+            <label className="sr-only" htmlFor="monitor-connection">Connection</label>
             <Select
               value={selected?.id ?? ""}
               onValueChange={(id) =>
@@ -838,18 +844,18 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
                     ? "Configured"
                     : "Provider unavailable"}
               </Badge>
-              <span className="hook-muted">
-                {selected.providerName ?? "Saved provider reference"}
-              </span>
               {canAdmin ? (
                 <Button
-                  variant="outline"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Connection settings"
+                  title="Connection settings"
                   onClick={() => {
                     rememberFocus();
                     setEditingConnection(selected.id);
                   }}
                 >
-                  <Settings2 size={16} aria-hidden="true" /> Connection settings
+                  <Settings2 size={16} aria-hidden="true" />
                 </Button>
               ) : null}
             </>
@@ -920,14 +926,6 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
                 onInspect={(id) => {
                   rememberFocus();
                   navigate({ target: id });
-                }}
-                onAdd={() => {
-                  rememberFocus();
-                  setEditingTarget(":new");
-                }}
-                onDefaults={() => {
-                  rememberFocus();
-                  setEditingTarget(":defaults");
                 }}
               />
             ) : (

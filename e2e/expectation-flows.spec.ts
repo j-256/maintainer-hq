@@ -488,7 +488,10 @@ test("creates a GitHub connection and keeps its new identity in the resolution U
     .getByLabel("Connection name", { exact: true })
     .fill("New repository connection");
   await page
-    .getByRole("combobox", { name: "Server-side credential", exact: true })
+    .getByRole("button", { name: "Advanced token configuration", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Credential reference", exact: true })
     .click();
   await page
     .getByRole("option", { name: "Synthetic read access", exact: true })

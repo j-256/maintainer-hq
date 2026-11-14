@@ -5,7 +5,8 @@ const HOOKS_URL = "/hooks?workspace=development";
 test("reviews private destination creation, clears credentials, and opens an addressable receipt", async ({ page }) => {
   const state = await mockHookLifecycle(page);
   await page.goto(HOOKS_URL);
-  await page.getByRole("button", { name: "Manage destinations", exact: true }).click();
+  await page.getByRole("button", { name: "More Hooks actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Manage destinations", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Destination name").fill("Synthetic phone");
   await dialog.getByRole("button", { name: "Review destination", exact: true }).click();
@@ -42,8 +43,9 @@ test("reports missing provider grants and retains mobile keyboard return focus i
   for (const theme of ["light", "dark"]) {
     await page.emulateMedia({ colorScheme: theme as "light" | "dark" });
     await page.goto(HOOKS_URL);
-    const trigger = page.getByRole("button", { name: "Manage destinations", exact: true });
+    const trigger = page.getByRole("button", { name: "More Hooks actions", exact: true });
     await trigger.focus(); await page.keyboard.press("Enter");
+    await page.getByRole("menuitem", { name: "Manage destinations", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("provider credential needs lifecycle grants");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -54,7 +56,8 @@ test("reports missing provider grants and retains mobile keyboard return focus i
 test("clears private drafts on close and reload without persisting them", async ({ page }) => {
   await mockHookLifecycle(page);
   await page.goto(HOOKS_URL);
-  await page.getByRole("button", { name: "Manage destinations", exact: true }).click();
+  await page.getByRole("button", { name: "More Hooks actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Manage destinations", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Destination name").fill("Synthetic private draft");
   await dialog.getByRole("button", { name: "Review destination", exact: true }).click();
@@ -82,7 +85,8 @@ test("keeps retired subscriptions discoverable and restoration separate from rou
 test("lists enabled destination references and prevents retirement until routing unlinks them", async ({ page }) => {
   await mockHookLifecycle(page, { referenced: true });
   await page.goto(HOOKS_URL);
-  await page.getByRole("button", { name: "Manage destinations", exact: true }).click();
+  await page.getByRole("button", { name: "More Hooks actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Manage destinations", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Review retirement", exact: true }).click();
   await expect(dialog).toContainText("Synthetic enabled subscription");
@@ -93,7 +97,8 @@ test("lists enabled destination references and prevents retirement until routing
 test("destination retirement and restoration use provision authority independently of routing", async ({ page }) => {
   await mockHookLifecycle(page, { configure: true, provision: false });
   await page.goto(HOOKS_URL);
-  await page.getByRole("button", { name: "Manage destinations", exact: true }).click();
+  await page.getByRole("button", { name: "More Hooks actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Manage destinations", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Review retirement", exact: true })).toBeDisabled();
   await expect(dialog.getByRole("button", { name: "Review restoration", exact: true })).toBeDisabled();
@@ -102,7 +107,8 @@ test("destination retirement and restoration use provision authority independent
 test("clears a private draft when refreshed eligibility is withdrawn", async ({ page }) => {
   const state = await mockHookLifecycle(page);
   await page.goto(HOOKS_URL);
-  await page.getByRole("button", { name: "Manage destinations", exact: true }).click();
+  await page.getByRole("button", { name: "More Hooks actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Manage destinations", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Destination name").fill("Synthetic eligibility change");
   await dialog.getByRole("button", { name: "Review destination", exact: true }).click();
