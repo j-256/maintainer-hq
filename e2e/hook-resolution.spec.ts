@@ -67,6 +67,9 @@ async function fixture(
           },
         };
         break;
+      case "hooks_github_inventory":
+        result = { repository: repository.fullName, repositoryId: 101, items: [], page: input.page, nextPage: null, limited: false, observedAt: now() };
+        break;
       case "hooks_setup_configuration":
         result = {
           status: "supported",

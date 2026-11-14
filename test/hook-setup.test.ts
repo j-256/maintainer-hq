@@ -14,6 +14,9 @@ const resourceId = "00000000-0000-4000-8000-000000000001";
 const time = (offset = 0) => new Date(Date.now() + offset).toISOString();
 let runtime: Env;
 let calls: number;
+let inventoryReads: number;
+let inventoryFault: "name" | "page" | "private" | "denied" | "rate_limited" | null;
+let duringInventory: (() => Promise<void>) | null;
 let lost: boolean;
 let receipts: Map<string, HookSetupReceipt>;
 const as = (subject = "owner", extra: Partial<Principal> = {}) =>
@@ -34,6 +37,7 @@ const input = {
 beforeAll(() => applyD1Migrations(db, bindings.TEST_MIGRATIONS));
 beforeEach(async () => {
   calls = 0;
+  inventoryReads = 0; inventoryFault = null; duringInventory = null;
   lost = false;
   receipts = new Map();
   await db.batch([
@@ -65,7 +69,14 @@ beforeEach(async () => {
       expect(Object.keys(fields)).not.toContain("installationToken");
       expect(Object.keys(fields)).not.toContain("registrationId");
       let result: unknown;
-      if (command === "github_setup_configuration")
+      if (command === "github_repository_hooks") {
+        inventoryReads++;
+        if (inventoryFault === "denied" || inventoryFault === "rate_limited") return Response.json({ error: { code: inventoryFault, message: "private-provider-message-canary" } }, { status: inventoryFault === "denied" ? 403 : 429 });
+        expect(fields.repository).toBe("owner/repo");
+        expect(fields).not.toHaveProperty("repositoryId");
+        await duringInventory?.();
+        result = { repository: inventoryFault === "name" ? "owner/other" : fields.repository, repositoryId: 101, items: [{ id: 42, active: true, events: ["push"] }], page: inventoryFault === "page" ? 2 : fields.page, nextPage: null, limited: false, observedAt: time(), ...(inventoryFault === "private" ? { url: "https://private.invalid/receiver" } : {}) };
+      } else if (command === "github_setup_configuration")
         result = {
           authorityId,
           revision: 1,
@@ -336,4 +347,43 @@ it("recovers a saved provider review without applying it", async () => {
     await as().hooksSetupReconcile({ workspaceId: "alpha", planId: plan.id }),
   ).toMatchObject({ operation: null, provider: { status: "ready" } });
   expect(calls).toBe(0);
+});
+
+
+it("exposes bounded read-only GitHub webhook inventory through the shared CLI/MCP contract", async () => {
+  const name = "hooks_github_inventory" as const;
+  expect(commands[name].readOnly).toBe(true);
+  expect(commandAnnotations(name, true)).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
+  expect(await as("viewer").hooksGitHubInventory({ workspaceId: "alpha", connectionId: "hooks", repositoryId: "repo" })).toMatchObject({ repository: "owner/repo", repositoryId: 101, page: 1, items: [{ id: 42, active: true, events: ["push"] }] });
+  expect(inventoryReads).toBe(1);
+  expect(calls).toBe(0);
+});
+it("authorizes workspace, enrolled repository, connection, and page before reading GitHub", async () => {
+  const fields = { workspaceId: "alpha", connectionId: "hooks", repositoryId: "repo" };
+  await expect(as("other").hooksGitHubInventory(fields)).rejects.toMatchObject({ code: "not_found" });
+  await expect(as().hooksGitHubInventory({ ...fields, repositoryId: "missing" })).rejects.toMatchObject({ code: "not_found" });
+  await expect(as().hooksGitHubInventory({ ...fields, page: 101 })).rejects.toThrow();
+  expect(inventoryReads).toBe(0);
+});
+it.each(["name", "page", "private"] as const)("rejects unsafe or mismatched GitHub inventory %s without exposing provider data", async fault => {
+  inventoryFault = fault;
+  await expect(as().hooksGitHubInventory({ workspaceId: "alpha", connectionId: "hooks", repositoryId: "repo" })).rejects.toMatchObject({ code: fault === "private" ? "hooks_provider_unavailable" : "hooks_provider_metadata_invalid" });
+});
+it.each(["repository", "connection", "membership"])("rejects GitHub inventory when %s changes during the read", async target => {
+  duringInventory = async () => {
+    if (target === "repository") await db.prepare("UPDATE repositories SET revision=revision+1 WHERE id='repo'").run();
+    if (target === "connection") await db.prepare("UPDATE connections SET revision=revision+1 WHERE id='hooks'").run();
+    if (target === "membership") await db.prepare("DELETE FROM members WHERE subject='owner'").run();
+  };
+  await expect(as().hooksGitHubInventory({ workspaceId: "alpha", connectionId: "hooks", repositoryId: "repo" })).rejects.toMatchObject({ code: target === "membership" ? "not_found" : "revision_conflict" });
+});
+
+
+it.each([['denied', 'github_denied', 403], ['rate_limited', 'github_rate_limited', 429]] as const)("preserves actionable GitHub inventory %s failures without forwarding provider text", async (failure, code, status) => {
+  inventoryFault = failure;
+  const error = await as().hooksGitHubInventory({ workspaceId: "alpha", connectionId: "hooks", repositoryId: "repo" }).catch(error => error);
+  expect(error).toMatchObject({ code: "hooks_provider_" + code, status });
+  expect(error.message).not.toContain("private-provider-message-canary");
+  expect(error.message).not.toContain("Reconcile");
+  expect(error.message).toContain(failure === "denied" ? "repository" : "limit");
 });

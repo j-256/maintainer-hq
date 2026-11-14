@@ -470,6 +470,9 @@ export class WorkspaceService {
   hooksSetupConfiguration(input: unknown) {
     return new HookSetup(this).configuration(input);
   }
+  hooksGitHubInventory(input: unknown) {
+    return new HookSetup(this).inventory(input);
+  }
   hooksSetupStatus(input: unknown) {
     return new HookSetup(this).status(input);
   }

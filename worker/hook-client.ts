@@ -82,6 +82,8 @@ export async function hookProvider(
 }
 
 const providerMessages = {
+  github_denied: "GitHub access to this repository was denied. Check the App installation and the configured credential's repository scope.",
+  github_rate_limited: "GitHub's request limit was reached. Wait before retrying this read.",
   unauthorized: "The Hookrelay management credential is invalid or expired.",
   unconfigured: "Hookrelay has no valid management credential configuration.",
   forbidden: "The Hookrelay credential does not permit this operation.",
@@ -100,6 +102,7 @@ const providerMessages = {
   review_unavailable:
     "Hookrelay configuration changed or its pending review limit was reached. Refresh before reviewing again.",
 } as const;
+const githubInventoryErrors = Object.freeze({ denied: "github_denied", rate_limited: "github_rate_limited" });
 export const HOOK_PROVIDER_REJECTION_STATUS = Object.freeze({ validation: 400, unauthorized: 401, forbidden: 403, not_found: 404, conflict: 409, expired: 409, media_type: 415, too_large: 413, request_timeout: 408 });
 const rejectionSchema = z.object({ error: z.object({ code: z.enum(Object.keys(HOOK_PROVIDER_REJECTION_STATUS) as [keyof typeof HOOK_PROVIDER_REJECTION_STATUS, ...(keyof typeof HOOK_PROVIDER_REJECTION_STATUS)[]]), message: z.string().min(1).max(1000) }).strict() }).strict();
 const privateRejectionSchema = rejectionSchema.extend({ correlationId: z.uuid() }).strict();
@@ -114,7 +117,7 @@ export class HookProviderError extends DomainError {
       "hooks_provider_" + providerCode,
       providerMessages[providerCode as keyof typeof providerMessages] ??
         "Hookrelay could not complete the request. Reconcile any uncertain operation before acting again.",
-      [
+      providerCode === "github_denied" ? 403 : providerCode === "github_rate_limited" ? 429 : [
         "conflict",
         "expired",
         "payload_unavailable",
@@ -209,11 +212,10 @@ export async function callHookProvider<K extends HookCommand>(
           const error = z
             .object({ error: z.object({ code: z.string().max(80) }) })
             .safeParse(data);
-          const code =
-            error.success &&
-            Object.hasOwn(providerMessages, error.data.error.code)
-              ? error.data.error.code
-              : "unavailable";
+          const rawCode = error.success ? error.data.error.code : "";
+          const code = command === "github_repository_hooks" && Object.hasOwn(githubInventoryErrors, rawCode)
+            ? githubInventoryErrors[rawCode as keyof typeof githubInventoryErrors]
+            : Object.hasOwn(providerMessages, rawCode) ? rawCode : "unavailable";
           throw new HookProviderError(code, response.status, response.headers.get("cache-control") === "no-store" ? hookProviderRejection(response.status, data, "management") : null);
         }
         const envelope = z

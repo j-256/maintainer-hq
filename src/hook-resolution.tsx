@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./components/ui/select";
+import { HookGitHubInventory } from "./hook-github-inventory";
 import { HookError, HookTime } from "./hook-components";
 import { HookDestinations, HookPolicyEditor } from "./hook-policy-editor";
 import { HookPolicyReviewDialog } from "./hook-policy-review";
@@ -502,7 +503,7 @@ function SetupReview({
   );
 }
 
-function CreateHook({
+export function CreateHook({
   snapshot,
   repository,
   connection,
@@ -520,6 +521,7 @@ function CreateHook({
   onBusy: (busy: boolean) => void;
 }) {
   const [name, setName] = useState(repository.fullName.replaceAll("/", "-"));
+  const [inventoryReady, setInventoryReady] = useState(false);
   const [sinks, setSinks] = useState<string[]>([]);
   const [events, setEvents] = useState<string[]>(["push"]);
   const [busy, setBusy] = useState(false);
@@ -605,6 +607,7 @@ function CreateHook({
   }
   return (
     <div className="hook-resolution-stack">
+      <HookGitHubInventory snapshot={snapshot} connection={connection} repository={repository} onReady={setInventoryReady} />
       <h3>
         {oldReceipt?.routingConfigured
           ? "Install the GitHub webhook"
@@ -670,6 +673,7 @@ function CreateHook({
             busy ||
             !canOperate ||
             !configuration.canCreate ||
+            !inventoryReady ||
             !name.trim() ||
             !sinks.length ||
             !events.length ||
@@ -971,7 +975,7 @@ export function HookResolution({
                 {missing ? <p className="hook-notice">{missing}</p> : null}
                 {creating && selected && setup.data?.configuration ? (
                   <CreateHook
-                    key={selected.id + "/" + (params.get("resume") ?? "new")}
+                    key={[workspaceId, snapshot.principal.subject, repository.id, repository.revision, selected.id, selected.revision, params.get("resume") ?? "new"].join("/")}
                     snapshot={snapshot}
                     repository={repository}
                     connection={selected}
