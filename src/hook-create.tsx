@@ -37,7 +37,7 @@ export function HookCreateDialog({ snapshot, connection, repositoryId, returnFoc
       <DialogHeader><DialogTitle>New GitHub hook</DialogTitle><DialogDescription>Select a repository to inspect existing webhooks, then review automatic installation through HQ.</DialogDescription></DialogHeader>
       <div className="hook-resolution-scroll hook-resolution-stack">
         <label htmlFor="hook-create-repository">Repository</label>
-        <select id="hook-create-repository" disabled={busy} value={repository?.id ?? ""} onChange={event => onRepository(event.target.value)}>
+        <select id="hook-create-repository" className="min-w-0" disabled={busy} value={repository?.id ?? ""} onChange={event => onRepository(event.target.value)}>
           <option value="">Select a repository</option>
           {[...snapshot.repositories].sort((a, b) => a.fullName.localeCompare(b.fullName)).map(item => <option key={item.id} value={item.id}>{item.fullName}</option>)}
         </select>

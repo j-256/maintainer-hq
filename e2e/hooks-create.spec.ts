@@ -114,3 +114,16 @@ test("a failed later inventory page keeps backward navigation available", async 
   await dialog.getByRole("button", { name: "Previous GitHub hooks" }).click();
   await expect(dialog).toContainText("Webhook #1");
 });
+
+for (const theme of ["light", "dark"]) {
+  test(`long repository names keep the mobile setup form inside its scroll area in ${theme} theme`, async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(value => localStorage.setItem("hq.theme.v1", value), theme);
+    const { repos, dialog } = await fixture(page, request);
+    await dialog.getByLabel("Repository", { exact: true }).selectOption(repos[0].id);
+    await expect(dialog).toContainText("Webhook #1");
+    const area = await dialog.locator(".hook-resolution-scroll").evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+    expect(area.content).toBeLessThanOrEqual(area.width + 1);
+    expect((await new AxeBuilder({ page }).include('[role="dialog"]').analyze()).violations).toEqual([]);
+  });
+}
