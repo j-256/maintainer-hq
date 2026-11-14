@@ -155,7 +155,7 @@ test("opens retained failures beyond a zero-failure sample and renders rate-limi
   await page.goto(URL + "&subscription=Rare+subscription");
   const summary = page.getByRole("region", { name: "Hookrelay health sample" });
   await expect(
-    summary.getByText("Exhausted in sample", { exact: true }),
+    summary.getByText("Needs attention", { exact: true }),
   ).toBeVisible();
   const inspect = summary.getByRole("button", {
     name: "Inspect all exhausted deliveries, 0 in sample",
@@ -201,7 +201,7 @@ test("identifies a complete retained count without calling it a truncated sample
   state.snapshot.deliveries.totals.exhausted = 1;
   await page.goto(URL);
   const summary = page.getByRole("region", { name: "Hookrelay health sample" });
-  await expect(summary.getByText("Exhausted", { exact: true })).toBeVisible();
+  await expect(summary.getByText("Needs attention", { exact: true })).toBeVisible();
   await expect(
     summary.getByRole("button", {
       name: "Inspect all exhausted deliveries, 1 retained",
@@ -434,7 +434,7 @@ test("shows complete unresolved summaries separately from bounded history", asyn
     ),
   ).toBeVisible();
   await expect(
-    page.getByText("Unresolved operational signals in the recent sample.", {
+    page.getByText("Unresolved signals in the recent sample.", {
       exact: true,
     }),
   ).toHaveCount(0);

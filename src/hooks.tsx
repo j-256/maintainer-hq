@@ -36,6 +36,7 @@ import {
 } from "../shared/hooks";
 import { command } from "./lib/api";
 import { Button } from "./components/ui/button";
+import { ActionMenu } from "./components/ui/action-menu";
 import { Badge } from "./components/ui/badge";
 import { Disclosure } from "./components/ui/disclosure";
 import { Input } from "./components/ui/input";
@@ -121,9 +122,7 @@ function HookSummary({
     <section aria-label="Hookrelay health sample" className="hook-summary">
       <dl className="hook-metrics">
         <div>
-          <dt>
-            {data.deliveries.truncated ? "Exhausted in sample" : "Exhausted"}
-          </dt>
+          <dt>Needs attention</dt>
           <dd>
             <Button
               variant="ghost"
@@ -153,7 +152,7 @@ function HookSummary({
           <dd>{totals.filtered}</dd>
         </div>
       </dl>
-      <p className={data.deliveries.truncated ? "hook-notice" : "hook-muted"}>
+      <p className="hook-summary-coverage">
         {data.deliveries.truncated
           ? "Limited sample: latest " +
             data.deliveries.sampled +
@@ -171,11 +170,11 @@ function HookSummary({
           ? unresolved.length > 0
           : data.signals.items.some((value) => !value.resolvedAt)
       ) ? (
-        <p className="hook-notice">
+        <p className="hook-signal-alert">
+          <TriangleAlert size={16} aria-hidden="true" />
           {unresolved
-            ? "Unresolved operational signals in retained history."
-            : "Unresolved operational signals in the recent sample."}{" "}
-          Delivery status alone does not cover ingress or retention health.
+            ? "Unresolved signals in retained history."
+            : "Unresolved signals in the recent sample."}
         </p>
       ) : null}
       {unresolved ? (
@@ -186,7 +185,6 @@ function HookSummary({
             ")"
           }
           icon={TriangleAlert}
-          open={unresolved.length > 0}
         >
           <p className="hook-muted">
             All retained warning, error, and critical records, including older
@@ -356,7 +354,11 @@ function Deliveries({
             </SelectContent>
           </Select>
         </div>
-        <form onSubmit={filterSubscription} className="hook-filter-form">
+        <form
+          onSubmit={filterSubscription}
+          className="hook-filter-form"
+          data-filtered={Boolean(subscription)}
+        >
           <label htmlFor="hook-subscription-filter">Subscription name</label>
           <div>
             <Input
@@ -392,17 +394,16 @@ function Deliveries({
           <div
             className="hook-table-scroll"
             role="region"
-            aria-label="Delivery table, scroll horizontally on narrow screens"
-            tabIndex={0}
+            aria-label="Deliveries by subscription and destination"
           >
-            <table className="hook-table">
+            <table className="hook-table" role="table">
               <caption className="sr-only">
                 Hookrelay deliveries, most recently updated first
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Event and subscription</th>
-                  <th scope="col">Sink</th>
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th scope="col">Subscription and event</th>
+                  <th scope="col">Destination</th>
                   <th scope="col">State</th>
                   <th scope="col">Updated</th>
                   <th scope="col">
@@ -410,24 +411,28 @@ function Deliveries({
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {data.items.map((item) => (
-                  <tr key={item.eventId + "\u0000" + item.sinkName}>
-                    <td>
-                      <code>{item.eventId}</code>
-                      <span>{item.subscription}</span>
+                  <tr role="row" key={item.eventId + "\u0000" + item.sinkName}>
+                    <td role="cell" className="delivery-identity">
+                      <strong>{item.subscription}</strong>
+                      <span>
+                        <code>{item.eventId}</code>
+                      </span>
                     </td>
-                    <td>{item.sinkName}</td>
-                    <td>
+                    <td role="cell" className="delivery-destination" data-label="To">
+                      {item.sinkName}
+                    </td>
+                    <td role="cell" className="delivery-status">
                       <HookStatus
                         status={item.status}
                         resolvedAt={item.resolvedAt}
                       />
                     </td>
-                    <td>
+                    <td role="cell" className="delivery-time" data-label="Updated">
                       <HookTime value={item.updatedAt} />
                     </td>
-                    <td>
+                    <td role="cell" className="delivery-action">
                       <Button
                         variant="outline"
                         onClick={() => onInspect(item)}
@@ -625,9 +630,6 @@ function Subscriptions({
       <div className="hook-section-heading">
         <div>
           <h2 id="hook-subscriptions-title">Subscriptions</h2>
-          <p>
-            Control routing and keep related projects and repositories in view.
-          </p>
         </div>
         <Button
           variant="outline"
@@ -684,7 +686,7 @@ function Subscriptions({
               );
               return (
                 <article
-                  className="source-card"
+                  className="hook-subscription-row"
                   key={item.resourceId ?? item.name + "/" + index}
                 >
                   <div className="source-card-heading">
@@ -693,11 +695,8 @@ function Subscriptions({
                       {item.retired ? "Retired" : item.enabled ? "Enabled" : "Disabled"}
                     </Badge>
                   </div>
-                  <p>
-                    {item.source} &middot; {item.sinks.length}{" "}
-                    {item.sinks.length === 1 ? "destination" : "destinations"}
-                  </p>
-                  <div className="hook-sinks">
+                  <div className="hook-sinks" aria-label="Destinations">
+                    <span className="hook-muted">{item.source} &rarr;</span>
                     {item.sinks.length ? (
                       item.sinks.map((sink) => (
                         <Badge key={sink} variant="secondary">
@@ -794,10 +793,7 @@ function Subscriptions({
               treating this page as complete.
             </p>
           ) : null}
-          <p className="hook-muted">
-            Read <HookTime value={data.observedAt} />. Names and sink labels
-            only; bearer routes and credentials stay with Hookrelay.
-          </p>
+          <p className="hook-muted">Read <HookTime value={data.observedAt} />.</p>
           <HookPagination
             page={cursors.length}
             previous={
@@ -1001,18 +997,53 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
             <Webhook size={28} aria-hidden="true" /> Hooks
           </h1>
         </div>
-        {selected && active ? <Button variant="outline" onClick={() => { rememberFocus(); navigate({ lifecycle: "new", lifecycleResource: null }); }}>Manage destinations</Button> : null}
-        {selected && active ? <><Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.OPERATE) || !snapshot.capabilities.includes(CAPABILITY.EDIT)} onClick={() => { rememberFocus(); navigate({ githubHook: "new", handoff: null }); }}>New GitHub hook</Button><Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.SECRETS)} onClick={() => { rememberFocus(); navigate({ githubHook: null, handoff: "new" }); }}>Manual handoff</Button></> : null}
-        {canAdmin && connections.data?.length ? (
-          <Button
-            onClick={() => {
-              rememberFocus();
-              setEditing(":new");
-            }}
-          >
-            <Plus size={16} aria-hidden="true" /> Connect Hookrelay
-          </Button>
-        ) : null}
+        <div className="hook-actions">
+          {selected && active ? (
+            <Button
+              disabled={
+                !snapshot.capabilities.includes(CAPABILITY.OPERATE) ||
+                !snapshot.capabilities.includes(CAPABILITY.EDIT)
+              }
+              onClick={() => {
+                rememberFocus();
+                navigate({ githubHook: "new", handoff: null });
+              }}
+            >
+              <Plus size={16} aria-hidden="true" /> New GitHub hook
+            </Button>
+          ) : null}
+          <ActionMenu
+            label="Hooks actions"
+            actions={[
+              ...(selected && active ? [
+                {
+                  label: "Manage destinations",
+                  onSelect: (trigger: HTMLButtonElement) => {
+                    focus.current = trigger;
+                    navigate({ lifecycle: "new", lifecycleResource: null });
+                  },
+                },
+                {
+                  label: "Manual handoff",
+                  disabled: !snapshot.capabilities.includes(CAPABILITY.SECRETS),
+                  onSelect: (trigger: HTMLButtonElement) => {
+                    focus.current = trigger;
+                    navigate({ githubHook: null, handoff: "new" });
+                  },
+                },
+              ] : []),
+              ...(canAdmin && connections.data?.length ? [
+                {
+                  label: "Connect Hookrelay",
+                  onSelect: (trigger: HTMLButtonElement) => {
+                    focus.current = trigger;
+                    setEditing(":new");
+                  },
+                },
+              ] : []),
+            ]}
+          />
+        </div>
       </div>
       {notice ? (
         <p className="save-notice" role="status">
@@ -1063,7 +1094,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
       {connections.data?.length ? (
         <div className="hook-connection-bar">
           <div className="hook-field">
-            <label htmlFor="hook-connection">Connection</label>
+            <label className="sr-only" htmlFor="hook-connection">Connection</label>
             <Select
               value={selected?.id ?? ""}
               onValueChange={(id) =>
@@ -1102,18 +1133,18 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
                     ? "Configured"
                     : "Provider unavailable"}
               </Badge>
-              <span className="hook-muted">
-                {selected.providerName ?? "Saved provider reference"}
-              </span>
               {canAdmin ? (
                 <Button
-                  variant="outline"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Connection settings"
+                  title="Connection settings"
                   onClick={() => {
                     rememberFocus();
                     setEditing(selected.id);
                   }}
                 >
-                  <Settings2 size={16} aria-hidden="true" /> Connection settings
+                  <Settings2 size={16} aria-hidden="true" />
                 </Button>
               ) : null}
             </>

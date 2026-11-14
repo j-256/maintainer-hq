@@ -1,10 +1,13 @@
 .hooks-workspace {
   display: grid;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
 }
 .hooks-workspace .page-heading {
   margin-bottom: 0;
+}
+.hooks-workspace .page-title {
+  margin: 0;
 }
 .hook-connection-bar,
 .hook-section-heading,
@@ -16,18 +19,24 @@
   gap: 16px;
 }
 .hook-connection-bar {
-  flex-wrap: wrap;
-  padding: 20px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  justify-content: flex-start;
+  gap: 8px;
 }
 .hook-connection-bar .hook-field {
-  min-width: 220px;
-  flex: 1;
+  min-width: 0;
+  width: min(320px, 100%);
 }
 .hook-connection-bar .hook-field [role="combobox"] {
   width: 100%;
+}
+.hook-connection-bar [data-slot="select-value"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hooks-workspace .page-heading > .hook-actions {
+  margin-left: auto;
 }
 .hook-field,
 .hook-form,
@@ -58,11 +67,48 @@
 }
 .hook-views {
   border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
+  padding-bottom: 8px;
 }
 .hook-summary {
   display: grid;
-  gap: 14px;
+  gap: 8px;
+  font-size: var(--hq-text-ui);
+}
+.hook-summary .hq-disclosure {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.hook-summary .hq-disclosure + .hq-disclosure {
+  margin-top: 0;
+}
+.hook-summary .hq-disclosure > summary {
+  min-height: 32px;
+  padding: 4px 0;
+  gap: 8px;
+  font-weight: 400;
+}
+.hook-summary .hq-disclosure .disclosure-chevron {
+  margin-left: 0;
+}
+.hook-summary .disclosure-content {
+  padding: 12px 0;
+}
+.hook-summary-coverage {
+  color: var(--muted-foreground);
+  font-size: var(--hq-text-support);
+  line-height: 1.5;
+}
+.hook-signal-alert {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  font-size: var(--hq-text-support);
+}
+.hook-signal-alert > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--hq-warning);
 }
 .hook-signals {
   padding: 16px;
@@ -91,27 +137,22 @@
   flex-wrap: wrap;
 }
 .hook-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
 }
 .hook-metrics > div {
-  padding: 20px;
-  border-inline-end: 1px solid var(--border);
-}
-.hook-metrics > div:last-child {
-  border-inline-end: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
 }
 .hook-metrics dt {
   color: var(--muted-foreground);
   font-size: var(--hq-text-ui);
 }
 .hook-metrics dd {
-  margin-top: 8px;
-  font-size: 1.8rem;
+  font-size: var(--hq-text-ui);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -121,9 +162,8 @@
   color: var(--foreground);
 }
 .hook-notice {
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-inline-start: 3px solid var(--primary);
   border-radius: 8px;
   background: var(--card);
   font-size: var(--hq-text-ui);
@@ -134,19 +174,19 @@
 }
 .hook-section {
   display: grid;
-  gap: 20px;
+  gap: 12px;
   min-width: 0;
 }
 .hook-section h2 {
-  font-size: 1.3rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.02em;
 }
 .hook-filters {
   display: flex;
   align-items: end;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 12px;
 }
 .hook-filter-form {
   display: grid;
@@ -161,6 +201,7 @@
   gap: 8px;
 }
 .hook-table-scroll {
+  container: hook-deliveries / inline-size;
   position: relative;
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -169,7 +210,6 @@
 }
 .hook-table {
   width: 100%;
-  min-width: 700px;
   border-collapse: collapse;
   font-size: var(--hq-text-ui);
 }
@@ -181,7 +221,7 @@
 }
 .hook-table th,
 .hook-table td {
-  padding: 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
@@ -191,6 +231,12 @@
 .hook-table td:first-child {
   max-width: 300px;
   overflow-wrap: anywhere;
+}
+.hook-table td {
+  overflow-wrap: anywhere;
+}
+.delivery-identity strong {
+  font-weight: 550;
 }
 .hook-table td:first-child > span {
   display: block;
@@ -231,19 +277,41 @@
 }
 .hook-subscription-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  border-block: 1px solid var(--border);
 }
-.hook-subscription-grid .source-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.hook-subscription-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 24px;
+  padding-block: 16px;
+  font-size: var(--hq-text-ui);
+  min-width: 0;
 }
-.hook-subscription-grid .hook-actions {
-  margin-top: auto;
+.hook-subscription-row + .hook-subscription-row {
+  border-top: 1px solid var(--border);
+}
+.hook-subscription-row > * {
+  min-width: 0;
+}
+.hook-subscription-row h3 {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.hook-subscription-row .hook-actions {
+  grid-column: 1 / -1;
+}
+.hook-subscription-row > p {
+  color: var(--muted-foreground);
 }
 .hook-sinks {
   overflow-wrap: anywhere;
+}
+.hook-sinks [data-slot="badge"] {
+  height: auto;
+  min-height: 20px;
+  max-width: 100%;
+  white-space: normal;
 }
 .hook-history {
   border: 1px solid var(--border);
@@ -443,6 +511,39 @@
   flex-wrap: wrap;
 }
 @media (max-width: 720px) {
+  .hooks-workspace {
+    gap: 12px;
+  }
+  .hooks-workspace .page-heading {
+    align-items: center;
+    gap: 12px;
+  }
+  .hooks-workspace .page-title {
+    font-size: 1.4rem;
+  }
+  .hooks-workspace .page-heading > .hook-actions {
+    gap: 6px;
+  }
+  .hooks-workspace .page-heading > .hook-actions > button:first-child > svg {
+    display: none;
+  }
+  .hooks-workspace [data-slot="button"],
+  .hooks-workspace [role="combobox"] {
+    min-height: 40px;
+  }
+  .hook-connection-bar .hook-field {
+    flex: 1;
+    width: auto;
+  }
+  .hook-connection-bar > [data-slot="badge"] {
+    font-size: var(--hq-text-meta);
+  }
+  .hook-summary .hq-disclosure > summary {
+    min-height: 36px;
+  }
+  .hook-subscription-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .hook-policy-dialog {
     --hook-dialog-inset: 20px;
   }
@@ -455,16 +556,7 @@
     flex-wrap: wrap;
   }
   .hook-metrics {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .hook-metrics > div {
-    border-bottom: 1px solid var(--border);
-  }
-  .hook-metrics > div:nth-child(even) {
-    border-inline-end: 0;
-  }
-  .hook-metrics > div:nth-last-child(-n + 2) {
-    border-bottom: 0;
+    gap: 4px 16px;
   }
   .hook-subscription-grid {
     grid-template-columns: 1fr;
@@ -483,13 +575,68 @@
   }
   .hook-filter-form {
     min-width: 0;
-    flex-basis: 100%;
+  }
+  .hook-filters {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.6fr) minmax(0, 1fr);
+    align-items: end;
   }
   .hook-filter-form > div {
     flex-wrap: wrap;
   }
   .hook-filter-form input {
-    flex: 1;
-    min-width: 150px;
+    flex: 1 1 8rem;
+    min-width: min(100%, 8rem);
+  }
+  .hook-filter-form[data-filtered="true"],
+  .monitoring-workspace .hook-filter-form {
+    grid-column: 1 / -1;
+  }
+}
+
+@container hook-deliveries (max-width: 680px) {
+  .hook-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .hook-table tbody,
+  .hook-table tr,
+  .hook-table td {
+    display: block;
+  }
+  .hook-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "identity state" "destination destination" "time action";
+    gap: 8px 12px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hook-table tr:last-child {
+    border-bottom: 0;
+  }
+  .hook-table td {
+    padding: 0;
+    border: 0;
+    min-width: 0;
+    align-self: center;
+  }
+  .hook-table td:first-child {
+    max-width: none;
+  }
+  .delivery-identity { grid-area: identity; }
+  .delivery-status { grid-area: state; }
+  .delivery-destination { grid-area: destination; }
+  .delivery-time { grid-area: time; }
+  .delivery-action { grid-area: action; }
+  .hook-table td[data-label]::before {
+    content: attr(data-label) " ";
+    color: var(--muted-foreground);
+  }
+  .hook-table .delivery-time::before {
+    display: block;
   }
 }

@@ -5,7 +5,7 @@ description: Create a receiver for an external repository and privately hand cre
 
 # GitHub webhook handoff
 
-Use **Hooks -> Manual handoff** when a trusted third-party repository administrator will install the webhook. Choose a project, an exact `owner/repository` or HTTPS github.com repository URL, Activity/Stars/Security alerts, and existing destinations. An enrolled repository and local checkout are optional. Repository-context actions preselect the identity/project and can link accepted receivers to that saved repository.
+Use **Hooks -> More -> Manual handoff** when a trusted third-party repository administrator will install the webhook. Choose a project, an exact `owner/repository` or HTTPS github.com repository URL, Activity/Stars/Security alerts, and existing destinations. An enrolled repository and local checkout are optional. Repository-context actions preselect the identity/project and can link accepted receivers to that saved repository.
 
 **Review hook** saves the exact connection, repository, profile, destinations and authority revision. **Create hook** accepts that review once. HQ persists operation intent before configuring provider routing and reports incomplete associations as partial. The administrator still installs GitHub's webhook. The `handoff` URL parameter and Hooks operation history reopen safe receipts. After interruption, use **Reconcile saved operation** to read the original provider receipt without resubmitting Apply or replacing credentials.
 

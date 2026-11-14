@@ -13,6 +13,30 @@
   font-size: 1.25rem;
   font-weight: 600;
 }
+.monitor-run-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.monitor-run-compact h2 {
+  font-size: var(--hq-text-ui);
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+.monitor-run-compact .hook-section-heading {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.monitor-run-compact .hook-notice {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: var(--hq-text-support);
+}
 .monitor-evidence-badges {
   display: flex;
   flex-wrap: wrap;
@@ -24,22 +48,44 @@
 }
 .monitor-card-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  border-block: 1px solid var(--border);
 }
 .monitor-card {
   display: grid;
-  align-content: start;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 24px;
+  padding-block: 16px;
   min-width: 0;
   font-size: var(--hq-text-ui);
 }
+.monitor-card + .monitor-card {
+  border-top: 1px solid var(--border);
+}
+.monitor-card > .hook-section-heading,
+.monitor-card > p {
+  grid-column: 1;
+}
+.monitor-card > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.monitor-target-row {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr) auto;
+}
+.monitor-target-row > button {
+  grid-column: 3;
+  grid-row: 1;
+}
+.monitor-target-identity,
+.monitor-target-evidence {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
 .monitor-card h3 {
-  font-size: 1.1rem;
+  font-size: var(--hq-text-ui);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -60,10 +106,6 @@
 }
 .monitor-remove {
   color: var(--destructive);
-}
-.hook-metrics dd.monitor-metric-label {
-  font-size: 1.25rem;
-  line-height: 1.8;
 }
 .monitor-editor-dialog,
 .monitor-review-dialog {
@@ -198,6 +240,16 @@
   .monitoring-workspace .hook-section-heading {
     flex-wrap: wrap;
   }
+  .monitor-target-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .monitor-target-evidence {
+    grid-column: 1 / -1;
+  }
+  .monitor-target-row > button {
+    grid-column: 2;
+    grid-row: 1;
+  }
 }
 @media (max-width: 600px) {
   .monitor-form-grid,
@@ -222,7 +274,14 @@
     gap: 4px;
   }
   .monitor-card {
-    padding: 16px;
+    gap: 12px;
+  }
+  .monitor-target-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .monitor-target-row > button {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
 .monitor-target-filters {
@@ -230,11 +289,23 @@
   flex-wrap: wrap;
   align-items: end;
   gap: 0.75rem;
-  margin-block: 1rem;
+  margin-block: 0;
 }
 .monitor-target-filters > .form-field {
   flex: 1 1 14rem;
   min-width: 0;
+}
+@media (max-width: 720px) {
+  .monitor-target-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .monitor-target-filters [role="combobox"] {
+    width: 100%;
+  }
+  .monitor-linked-filter {
+    grid-column: 1 / -1;
+  }
 }
 .monitor-linked-filter {
   display: flex;

@@ -80,8 +80,10 @@ export function MonitorEvidence({
 }
 export function MonitorCheckTimes({
   evidence,
+  compact = false,
 }: {
   evidence: MonitorObservedTarget["evidence"];
+  compact?: boolean;
 }) {
   const { check } = evidence;
   return (
@@ -91,16 +93,16 @@ export function MonitorCheckTimes({
         {check.status ? " / HTTP " + check.status : ""}
         {check.errorCode ? " / " + check.errorCode : ""}
       </p>
-      <p>
+      {!compact || check.lastSuccessAt ? <p>
         Last retained pass: <MonitorTime value={check.lastSuccessAt} />
-      </p>
+      </p> : null}
       {check.configurationMatches === false ? (
         <p>
           The recorded check used an older configuration. Waiting for a check of
           the saved revision.
         </p>
       ) : null}
-      {check.freshUntil && check.configurationMatches ? (
+      {!compact && check.freshUntil && check.configurationMatches ? (
         <p>
           Check due by <MonitorTime value={check.freshUntil} />.
         </p>
@@ -110,15 +112,17 @@ export function MonitorCheckTimes({
 }
 export function MonitorExecution({
   data,
+  compact = false,
 }: {
   data: MonitorResult<"snapshot">;
+  compact?: boolean;
 }) {
   const now = useContext(EvidenceClock);
   const execution = data.execution;
   const state = monitorExecutionState(execution, now);
   const run = execution.lastRun;
   return (
-    <section className="monitor-run-status" aria-label="Scheduler status">
+    <section className={compact ? "monitor-run-status monitor-run-compact" : "monitor-run-status"} aria-label="Scheduler status">
       <div className="hook-section-heading">
         <h2>Scheduler</h2>
         <StatusBadge
@@ -137,10 +141,10 @@ export function MonitorExecution({
               : "No completed run"}
         </StatusBadge>
       </div>
-      <p>
+      {!compact ? <p>
         Last completed run: <MonitorTime value={run?.completedAt ?? null} />
-      </p>
-      {run ? (
+      </p> : null}
+      {!compact && run ? (
         <p className="hook-muted">
           Scheduled for <MonitorTime value={run.scheduledAt} />.{" "}
           {run.enabled
@@ -148,14 +152,22 @@ export function MonitorExecution({
             : "Probing was disabled for this run."}
         </p>
       ) : null}
-      {state === "stale" ? (
+      {compact && run && !run.enabled ? (
+        <p className="hook-notice">Probing was disabled for this run.</p>
+      ) : null}
+      {compact && run && (run.failedProbes || run.phaseErrors || run.deliveriesFailed) ? (
         <p className="hook-notice">
-          No fresh scheduler completion is available. Check Worker invocation
-          logs and the cron trigger. A successful dashboard refresh does not
-          clear this condition.
+          Last run: {run.failedProbes} failed checks; {run.phaseErrors} phase errors; {run.deliveriesFailed} notification failures.
         </p>
       ) : null}
-      {state === "unobserved" ? (
+      {state === "stale" ? (
+        <p className="hook-notice">
+          {compact
+            ? "Check the cron trigger and Worker logs; refreshing HQ does not run checks."
+            : "No fresh scheduler completion is available. Check Worker invocation logs and the cron trigger. A successful dashboard refresh does not clear this condition."}
+        </p>
+      ) : null}
+      {!compact && state === "unobserved" ? (
         <p className="hook-notice">Probe execution is unverified.</p>
       ) : null}
       {run?.enabled &&
