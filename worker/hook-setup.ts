@@ -8,6 +8,7 @@ import {
 import {
   HOOK_SETUP_KIND,
   hookSetupConnectionInput,
+  hookGitHubInventoryInput,
   hookSetupPlanInput,
   hookSetupReceiptSchema,
   hookSetupStatusInput,
@@ -119,6 +120,26 @@ export class HookSetup {
     if (response.result.resourceId !== resourceId)
       throw new HookProviderError("metadata_invalid");
     await this.hooks.unchanged(workspaceId, row);
+    await authorizeHooks(this.context, workspaceId);
+    return response.result;
+  }
+  async inventory(input: unknown) {
+    const { workspaceId, connectionId, repositoryId, page } = hookGitHubInventoryInput.parse(input);
+    await authorizeHooks(this.context, workspaceId);
+    const repository = await this.db.prepare(
+      "SELECT full_name AS fullName,revision FROM repositories WHERE workspace_id=? AND id=?",
+    ).bind(workspaceId, repositoryId).first<{ fullName: string; revision: number }>();
+    if (!repository) throw new DomainError("not_found", "Repository not found.", 404);
+    const { row, provider } = await this.hooks.active(workspaceId, connectionId);
+    const response = await callHookProvider(provider, "github_repository_hooks", workspaceId,
+      await hookProviderActor(this.context.principal.subject), { repository: repository.fullName, page });
+    if (response.result.repository !== repository.fullName || response.result.page !== page)
+      throw new HookProviderError("metadata_invalid");
+    await this.hooks.unchanged(workspaceId, row);
+    const current = await this.db.prepare(
+      "SELECT full_name AS fullName,revision FROM repositories WHERE workspace_id=? AND id=?",
+    ).bind(workspaceId, repositoryId).first<{ fullName: string; revision: number }>();
+    if (!current || current.fullName !== repository.fullName || current.revision !== repository.revision) this.conflict();
     await authorizeHooks(this.context, workspaceId);
     return response.result;
   }

@@ -4,6 +4,7 @@ import type { HookReview } from "./hooks";
 
 export const HOOK_SETUP_KIND = "hookrelay.github.setup";
 export const HOOK_SETUP_DESTINATIONS = 25;
+export const HOOK_GITHUB_INVENTORY_LIMITS = Object.freeze({ PAGE_SIZE: 25, MAX_PAGE: 100, EVENTS: 100, EVENT_NAME_CHARACTERS: 80 });
 export const HOOK_SETUP_EVENTS = [
   "push",
   "pull_request",
@@ -34,6 +35,29 @@ const timestamp = z.iso.datetime();
 export const hookSetupConnectionInput = workspaceInput
   .extend({ connectionId: idSchema })
   .strict();
+export const hookGitHubInventoryInput = hookSetupConnectionInput.extend({
+  repositoryId: idSchema,
+  page: z.number().int().min(1).max(HOOK_GITHUB_INVENTORY_LIMITS.MAX_PAGE).default(1),
+}).strict();
+export const hookGitHubInventorySchema = z.object({
+  repository: z.string().max(240),
+  repositoryId: z.number().int().positive().safe(),
+  items: z.array(z.object({
+    id: z.number().int().positive().safe(),
+    active: z.boolean(),
+    events: z.array(z.string().max(HOOK_GITHUB_INVENTORY_LIMITS.EVENT_NAME_CHARACTERS).regex(/^(?:[a-z][a-z0-9_-]*|\*)$/)).max(HOOK_GITHUB_INVENTORY_LIMITS.EVENTS),
+  }).strict()).max(HOOK_GITHUB_INVENTORY_LIMITS.PAGE_SIZE),
+  page: z.number().int().min(1).max(HOOK_GITHUB_INVENTORY_LIMITS.MAX_PAGE),
+  nextPage: z.number().int().min(2).max(HOOK_GITHUB_INVENTORY_LIMITS.MAX_PAGE).nullable(),
+  limited: z.boolean(),
+  observedAt: z.iso.datetime(),
+}).strict().refine(value => {
+  const full = value.items.length === HOOK_GITHUB_INVENTORY_LIMITS.PAGE_SIZE;
+  const limited = full && value.page === HOOK_GITHUB_INVENTORY_LIMITS.MAX_PAGE;
+  return new Set(value.items.map(item => item.id)).size === value.items.length &&
+    value.limited === limited && value.nextPage === (full && !limited ? value.page + 1 : null);
+});
+export type HookGitHubInventory = z.infer<typeof hookGitHubInventorySchema>;
 export const hookSetupPlanInput = hookSetupConnectionInput
   .extend({
     repositoryId: idSchema,
@@ -120,6 +144,7 @@ export const hookSetupStatusSchema = z
   })
   .strict();
 export const hookSetupResults = {
+  github_repository_hooks: hookGitHubInventorySchema,
   github_setup_configuration: hookSetupConfigurationSchema,
   github_setup_plan: hookSetupReceiptSchema,
   github_setup_apply: hookSetupReceiptSchema,

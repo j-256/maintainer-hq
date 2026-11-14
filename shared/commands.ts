@@ -20,6 +20,7 @@ import { dependabotChangeApplyInput, dependabotChangePlanInput, dependabotChange
 import { dependabotOperationInput, dependabotOperationsInput } from "./dependabot-operations";
 import {
   hookSetupConnectionInput,
+  hookGitHubInventoryInput,
   hookSetupPlanInput,
   hookSetupStatusInput,
 } from "./hook-setup";
@@ -922,6 +923,12 @@ export const commands = {
     title: "Read online hook setup availability and missing grants",
     readOnly: true,
   },
+  hooks_github_inventory: {
+    schema: hookGitHubInventoryInput,
+    method: "hooksGitHubInventory",
+    title: "Read a bounded page of live repository webhook metadata without private receiver URLs",
+    readOnly: true,
+  },
   hooks_setup_status: {
     schema: hookSetupStatusInput,
     method: "hooksSetupStatus",
@@ -1510,6 +1517,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "hooks_handoff_apply",
         "hooks_handoff_reconcile",
         "hooks_setup_configuration",
+        "hooks_github_inventory",
         "hooks_setup_status",
         "hooks_policy_subscriptions",
         "hooks_policy_destinations",

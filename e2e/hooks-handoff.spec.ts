@@ -30,7 +30,7 @@ test("creates a reviewed handoff and clears private reveal on close, navigation 
     await route.fulfill({ headers: { "cache-control": "no-store" }, json: { resourceId, repository: review!.repository, profile: review!.provider!.profile, url: "https://hooks.example/hook/github/synthetic-private-browser-route", secret, events: review!.provider!.profile === "stars" ? ["star"] : ["push", "workflow_run", "pull_request"], contentType: "application/json", sslVerification: true, settingsUrl: `https://github.com/${review!.repository}/settings/hooks/new` } });
   });
   await page.goto(`/hooks?workspace=development&connection=${HOOK_CONNECTION.id}&view=subscriptions`);
-  await page.getByRole("button", { name: "New GitHub hook", exact: true }).click();
+  await page.getByRole("button", { name: "Manual handoff", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
   await expect(dialog).toHaveCSS("opacity", "1");
@@ -39,7 +39,7 @@ test("creates a reviewed handoff and clears private reveal on close, navigation 
   await dialog.getByLabel("GitHub repository").fill("https://github.com/trusted/external");
   await dialog.getByRole("checkbox", { name: /Test phone/ }).check();
   await dialog.getByRole("button", { name: "Review hook", exact: true }).click();
-  await expect(dialog).toContainText("Review GitHub hook");
+  await expect(dialog).toContainText("Review manual GitHub handoff");
   await dialog.getByRole("button", { name: "Back to editing" }).click();
   await expect(dialog.getByLabel("GitHub repository")).toHaveValue("https://github.com/trusted/external");
   await dialog.getByRole("button", { name: "Review hook", exact: true }).click();
@@ -60,7 +60,7 @@ test("creates a reviewed handoff and clears private reveal on close, navigation 
   await expect(page.getByLabel("Signing secret")).toHaveCount(0);
   expect(applies).toBe(1);
   await dialog.getByRole("button", { name: "Close", exact: true }).last().click();
-  await page.getByRole("button", { name: "New GitHub hook", exact: true }).click();
+  await page.getByRole("button", { name: "Manual handoff", exact: true }).click();
   await dialog.getByLabel("GitHub repository").fill("trusted/external");
   await dialog.getByLabel("Profile", { exact: true }).selectOption("stars");
   await expect(dialog).toContainText("GitHub events: star");
@@ -78,6 +78,7 @@ test("creates a reviewed handoff and clears private reveal on close, navigation 
 test("viewers cannot start manual handoff", async ({ page }) => {
   await mockHookPolicies(page, { viewer: true });
   await page.goto(`/hooks?workspace=development&connection=${HOOK_CONNECTION.id}&view=subscriptions`);
+  await expect(page.getByRole("button", { name: "Manual handoff", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "New GitHub hook", exact: true })).toBeDisabled();
 });
 
@@ -87,7 +88,7 @@ test("restores opener focus after closing manual handoff", async ({ page }) => {
     status: "supported", configuration: { authorityId, revision: 1, mode: "active", canCreate: true, canReveal: true, reason: "ready", observedAt: new Date().toISOString() },
   } }));
   await page.goto(`/hooks?workspace=development&connection=${HOOK_CONNECTION.id}&view=subscriptions`);
-  const opener = page.getByRole("button", { name: "New GitHub hook", exact: true });
+  const opener = page.getByRole("button", { name: "Manual handoff", exact: true });
   const dialog = page.getByRole("dialog");
   for (const action of ["escape", "close"]) {
     await opener.focus();
@@ -98,4 +99,25 @@ test("restores opener focus after closing manual handoff", async ({ page }) => {
     await expect(dialog).toBeHidden();
     await expect(opener).toBeFocused();
   }
+});
+
+
+test("manual handoff automatically lists known receivers for the entered repository", async ({ page }) => {
+  await mockHookPolicies(page);
+  const reads: string[] = [];
+  await page.route("**/api/commands/hooks_handoff_configuration", route => route.fulfill({ json: { status: "supported", configuration: { authorityId, revision: 1, mode: "active", canCreate: true, canReveal: false, reason: "ready", observedAt: new Date().toISOString() } } }));
+  await page.route("**/api/commands/hooks_handoff_repository", async route => {
+    const input = route.request().postDataJSON(); reads.push(input.repository);
+    await route.fulfill({ json: { repository: input.repository, repositoryId, resources: input.repository === "owner/first" ? [{ resourceId, profile: "activity", authMode: "bundle" }] : [], adoptionRequired: false, observedAt: new Date().toISOString() } });
+  });
+  await page.goto(`/hooks?workspace=development&connection=${HOOK_CONNECTION.id}`);
+  await page.getByRole("button", { name: "Manual handoff", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("GitHub repository").fill("owner/first");
+  await expect(dialog.getByRole("region", { name: "Known Hookrelay receivers" })).toContainText("Open activity credentials");
+  expect(reads).toContain("owner/first");
+  await expect(dialog.getByRole("button", { name: "Find existing hooks" })).toHaveCount(0);
+  await dialog.getByLabel("GitHub repository").fill("owner/second");
+  await expect(dialog.getByRole("button", { name: "Open activity credentials" })).toHaveCount(0);
+  await expect(dialog).toContainText("No Hookrelay manual receivers found for this repository.");
 });

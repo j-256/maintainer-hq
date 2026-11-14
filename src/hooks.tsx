@@ -1,6 +1,7 @@
 import { HOOK_LIFECYCLE_KIND } from "../shared/hook-lifecycle";
 import { HookLifecycleDialog } from "./hook-lifecycle";
 import { HOOK_HANDOFF_KIND } from "../shared/hook-handoff";
+import { HookCreateDialog } from "./hook-create";
 import { HookHandoffDialog } from "./hook-handoff";
 import { HOOK_SETUP_KIND } from "../shared/hook-setup";
 import { HookSetupReviewDialog } from "./hook-resolution";
@@ -1001,7 +1002,7 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
           </h1>
         </div>
         {selected && active ? <Button variant="outline" onClick={() => { rememberFocus(); navigate({ lifecycle: "new", lifecycleResource: null }); }}>Manage destinations</Button> : null}
-        {selected && active ? <Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.SECRETS)} onClick={() => { rememberFocus(); navigate({ handoff: "new" }); }}>New GitHub hook</Button> : null}
+        {selected && active ? <><Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.OPERATE) || !snapshot.capabilities.includes(CAPABILITY.EDIT)} onClick={() => { rememberFocus(); navigate({ githubHook: "new", handoff: null }); }}>New GitHub hook</Button><Button variant="outline" disabled={!snapshot.capabilities.includes(CAPABILITY.SECRETS)} onClick={() => { rememberFocus(); navigate({ githubHook: null, handoff: "new" }); }}>Manual handoff</Button></> : null}
         {canAdmin && connections.data?.length ? (
           <Button
             onClick={() => {
@@ -1321,6 +1322,13 @@ export function HooksView({ snapshot }: { snapshot: Snapshot }) {
         key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision, params.get("lifecycle"), params.get("lifecycleResource")].join("/")}
         snapshot={snapshot} connection={selected} planId={params.get("lifecycle") === "new" ? null : params.get("lifecycle")} resourceId={params.get("lifecycleResource")} returnFocus={focus.current}
         onReview={id => navigate({ lifecycle: id })} onBack={() => navigate({ lifecycle: "new" })} onClose={() => navigate({ lifecycle: null, lifecycleResource: null })} /> : null}
+      {selected && params.get("githubHook") === "new" ? <HookCreateDialog
+        key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision].join("/")}
+        snapshot={snapshot} connection={selected} repositoryId={params.get("repository")} returnFocus={focus.current}
+        onRepository={id => navigate({ repository: id || null })}
+        onReview={id => navigate({ githubHook: null, setupReview: id })}
+        onManual={() => navigate({ githubHook: null, handoff: "new" })}
+        onClose={() => navigate({ githubHook: null })} /> : null}
       {selected && params.get("handoff") ? <HookHandoffDialog
         key={[workspaceId, snapshot.principal.subject, snapshot.capabilities.join(","), selected.id, selected.revision].join("/")}
         snapshot={snapshot} connection={selected} planId={params.get("handoff") === "new" ? null : params.get("handoff")} repositoryId={params.get("repository")} returnFocus={focus.current}

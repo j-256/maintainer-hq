@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CAPABILITY, type Snapshot } from "../shared/domain";
 import { HANDOFF_PROFILES, handoffPlanInput, handoffConfigurationSchema, normalizeHandoffRepository, type HandoffReview, type HandoffStatus } from "../shared/hook-handoff";
@@ -13,6 +13,7 @@ import { HandoffPrivatePanel } from "./hook-handoff-private";
 import type { z } from "zod";
 import "./hook-handoff.css";
 
+const RECEIVER_LOOKUP_DEBOUNCE_MS = 300;
 const PROFILE_EVENTS = Object.freeze({ activity: "push, workflow_run, pull_request", stars: "star", alerts: "code_scanning_alert, dependabot_alert, secret_scanning_alert" });
 const PROFILE_LABELS = Object.freeze({ activity: "Activity", stars: "Stars", alerts: "Security alerts" });
 type Configuration = z.infer<typeof handoffConfigurationSchema>;
@@ -25,10 +26,24 @@ export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, 
   const [profile, setProfile] = useState<(typeof HANDOFF_PROFILES)[number]>("activity");
   const [sinks, setSinks] = useState<string[]>([]);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>(null);
-  const [existing, setExisting] = useState<HookResult<"github_handoff_repository"> | null>(null);
+  let normalizedRepository: string | null = null;
+  try { normalizedRepository = normalizeHandoffRepository(repository); } catch { /* Incomplete repository input does not trigger a provider read */ }
+  const [lookupRepository, setLookupRepository] = useState<string | null>(null);
+  useEffect(() => {
+    const timeout = setTimeout(() => setLookupRepository(normalizedRepository), RECEIVER_LOOKUP_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [normalizedRepository]);
   const [existingResource, setExistingResource] = useState<string | null>(null);
   const attempt = useRef<{ serialized: string; id: string } | null>(null);
   const client = useQueryClient();
+  const receiverKey = (name: string | null) => ["hooks", workspaceId, "handoff-repository", snapshot.principal.subject, connection.id, connection.revision, name];
+  const existingQuery = useQuery({
+    queryKey: receiverKey(lookupRepository),
+    queryFn: ({ signal }) => command<HookResult<"github_handoff_repository">>("hooks_handoff_repository", { workspaceId, connectionId: connection.id, repository: lookupRepository! }, signal),
+    enabled: owner && !planId && lookupRepository !== null && lookupRepository === normalizedRepository,
+    retry: false, staleTime: 0, refetchOnWindowFocus: false,
+  });
+  const existing = normalizedRepository === lookupRepository && !existingQuery.error ? existingQuery.data : undefined;
   const configuration = useQuery({ queryKey: ["hooks", workspaceId, "handoff-configuration", connection.id, connection.revision], queryFn: ({ signal }) => command<{ status: "supported" | "unsupported"; configuration: Configuration | null }>("hooks_handoff_configuration", { workspaceId, connectionId: connection.id }, signal), retry: false, staleTime: 0 });
   const saved = useQuery({ queryKey: ["hooks", workspaceId, "handoff-review", planId], queryFn: ({ signal }) => command<HandoffReview>("hooks_handoff_get", { workspaceId, planId }, signal), enabled: Boolean(planId), retry: false, staleTime: 0 });
   const receipt = saved.data?.provider;
@@ -47,19 +62,12 @@ export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, 
       if (attempt.current?.serialized !== serialized) attempt.current = { serialized, id: crypto.randomUUID() };
       const input = handoffPlanInput.parse({ ...fields, reviewId: attempt.current.id });
       const scope = await command<HookResult<"github_handoff_repository">>("hooks_handoff_repository", { workspaceId, connectionId: connection.id, repository: normalized }, AbortSignal.timeout(30000));
-      setExisting(scope);
+      client.setQueryData(receiverKey(normalized), scope);
       if (scope.adoptionRequired) throw new Error("This repository has an existing legacy receiver. Use the trusted local adoption adapter to import its protected recovery record before adding profiles.");
       if (scope.resources.some(resource => resource.profile === profile)) throw new Error("This profile already exists. Open its saved receipt or use the existing receiver's private retrieval action.");
       const result = await command<HandoffReview>("hooks_handoff_plan", input, AbortSignal.timeout(30000));
       client.setQueryData(["hooks", workspaceId, "handoff-review", result.id], result); onReview(result.id);
     } catch (failure) { setError(failure); } finally { setBusy(false); }
-  }
-  async function findExisting() {
-    if (busy) return;
-    setBusy(true); setError(null); setExistingResource(null);
-    try { const normalized = normalizeHandoffRepository(repository); setExisting(await command<HookResult<"github_handoff_repository">>("hooks_handoff_repository", { workspaceId, connectionId: connection.id, repository: normalized }, AbortSignal.timeout(30000))); }
-    catch { setError(new Error("This repository could not be checked. Confirm its exact GitHub URL and retry.")); }
-    finally { setBusy(false); }
   }
   async function apply(reconcile: boolean) {
     if (busy || !saved.data || !planId) return;
@@ -72,7 +80,7 @@ export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, 
     } catch (failure) { setError(failure); } finally { setBusy(false); }
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="handoff-dialog" onCloseAutoFocus={event => { event.preventDefault(); restoreHookFocus(returnFocus); }} onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onInteractOutside={event => { if (busy) event.preventDefault(); }}>
-    <DialogHeader><DialogTitle>{planId ? "Review GitHub hook" : "New GitHub hook"}</DialogTitle><DialogDescription>Create a receiver for a trusted GitHub repository, then hand its credentials to the repository administrator.</DialogDescription></DialogHeader>
+    <DialogHeader><DialogTitle>{planId ? "Review manual GitHub handoff" : "Manual GitHub handoff"}</DialogTitle><DialogDescription>Create a receiver for a trusted GitHub repository, then hand its credentials to the repository administrator.</DialogDescription></DialogHeader>
     {connection.id === "handoff-demo" ? <p role="note">Synthetic demonstration. No GitHub hook or notification is created. Provider fixture state resets when the development server restarts.</p> : null}
     {error ? error instanceof Error && !("status" in error) ? <p role="alert">{error.message.startsWith("This ") ? error.message : "Check the repository, project and destination selection. Your draft is preserved."}</p> : <HookError error={error} /> : null}
     {!owner ? <p>Only a workspace owner can create hooks or retrieve credentials.</p> : null}
@@ -99,18 +107,23 @@ export function HookHandoffDialog({ snapshot, connection, planId, repositoryId, 
       <form className="handoff-form" onSubmit={event => { event.preventDefault(); void review(); }}>
         <fieldset disabled={busy || !owner || !config?.canCreate}>
           <label htmlFor="handoff-project">Project</label><select id="handoff-project" value={projectId} onChange={event => setProjectId(event.target.value)} required>{snapshot.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
-          <label htmlFor="handoff-repository">GitHub repository</label><Input id="handoff-repository" value={repository} onChange={event => { setRepository(event.target.value); setExisting(null); setExistingResource(null); }} placeholder="https://github.com/owner/repository" maxLength={512} required />
+          <label htmlFor="handoff-repository">GitHub repository</label><Input id="handoff-repository" value={repository} onChange={event => { setRepository(event.target.value); setError(null); setExistingResource(null); }} placeholder="https://github.com/owner/repository" maxLength={512} required />
           <p className="hook-muted">An enrolled repository or local checkout is optional. The exact repository identity is enforced on incoming events.</p>
           <label htmlFor="handoff-profile">Profile</label><select id="handoff-profile" value={profile} onChange={event => { const next = HANDOFF_PROFILES.find(value => value === event.target.value); if (next) setProfile(next); }}>
             {HANDOFF_PROFILES.map(value => <option key={value} value={value}>{PROFILE_LABELS[value]}</option>)}
           </select><p>GitHub events: <code>{PROFILE_EVENTS[profile]}</code>. {profile === "activity" ? "Push changes, workflow activity, and opened or closed pull requests." : profile === "alerts" ? "Security alert payloads are sent to the selected destinations." : "Star creation and removal."}</p>
           <h3>Destinations</h3>{config ? <HookDestinations workspaceId={workspaceId} connectionId={connection.id} base={config} selected={sinks} onChange={setSinks} disabled={busy || !owner || !config.canCreate} limit={25} /> : null}
           <Button type="submit" disabled={!repository.trim() || !projectId || sinks.length === 0}>{busy ? "Preparing review..." : "Review hook"}</Button>
-          <Button type="button" variant="outline" disabled={!repository.trim()} onClick={() => void findExisting()}>Find existing hooks</Button>
         </fieldset>
       </form>
-      {existing ? <section aria-label="Existing repository hooks"><h3>Existing hooks</h3><p>{existing.repository}</p>{existing.adoptionRequired ? <p>Import this repository's protected legacy recovery record with the trusted local adoption adapter before adding profiles.</p> : existing.resources.length === 0 ? <p>No manual hooks are configured for this repository.</p> : <div className="handoff-actions">{existing.resources.map(resource => <Button variant="outline" key={resource.resourceId} onClick={() => setExistingResource(resource.resourceId)}>Open {resource.profile} credentials</Button>)}</div>}
-        {existingResource && existing.repositoryId && owner && config?.canReveal ? <HandoffPrivatePanel key={existingResource} workspaceId={workspaceId} connectionId={connection.id} repositoryId={existing.repositoryId} resourceId={existingResource} /> : null}
+      {owner && normalizedRepository ? <section aria-label="Known Hookrelay receivers"><h3>Known Hookrelay receivers</h3>
+        <p>These are Hookrelay's manual receiver records. They do not establish which webhooks are installed in GitHub.</p>
+        {normalizedRepository !== lookupRepository || existingQuery.isFetching ? <p role="status">Reading known receivers...</p> : null}
+        {normalizedRepository === lookupRepository && existingQuery.error ? <><HookError error={existingQuery.error} /><Button variant="outline" onClick={() => void existingQuery.refetch()}>Retry receiver lookup</Button></> : null}
+        {existing ? <><p>{existing.repository}</p>{existing.adoptionRequired ? <p>Import this repository's protected legacy recovery record with the trusted local adoption adapter before adding profiles.</p> : existing.resources.length === 0 ? <p>No Hookrelay manual receivers found for this repository.</p> : <div className="handoff-actions">{existing.resources.map(resource => <Button variant="outline" key={resource.resourceId} onClick={() => setExistingResource(resource.resourceId)}>Open {resource.profile} credentials</Button>)}</div>}
+          <Button variant="outline" disabled={existingQuery.isFetching} onClick={() => void existingQuery.refetch()}>Refresh receivers</Button>
+          {existingResource && existing.repositoryId && config?.canReveal ? <HandoffPrivatePanel key={existingResource} workspaceId={workspaceId} connectionId={connection.id} repositoryId={existing.repositoryId} resourceId={existingResource} /> : null}
+        </> : null}
       </section> : null}
     </>}
     <Button variant="outline" disabled={busy} onClick={onClose}>Close</Button>
