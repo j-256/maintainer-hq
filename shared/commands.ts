@@ -108,6 +108,7 @@ import {
   monitorIncidentsInput,
   monitorReviewInput,
   monitorTargetInput,
+  monitorProbeInput,
   monitorTargetsInput,
   monitorTriagePlanInput,
 } from "./monitoring";
@@ -736,6 +737,12 @@ export const commands = {
     method: "monitoringTarget",
     title: "Read the exact selected monitor target and its evidence",
     readOnly: true,
+  },
+  monitoring_probe: {
+    schema: monitorProbeInput,
+    method: "monitoringProbe",
+    title: "Run one saved target diagnostic without changing incidents or scheduled evidence; reuse requestId to recover the same request",
+    readOnly: false,
   },
   monitoring_incidents: {
     schema: monitorIncidentsInput,
@@ -1534,6 +1541,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "hooks_retry_plan",
         "hooks_retry_apply",
         "hooks_retry_reconcile",
+        "monitoring_probe",
         "monitoring_snapshot",
         "monitoring_configuration",
         "monitoring_targets",
@@ -1588,6 +1596,7 @@ export function commandAnnotations(name: string, readOnly: boolean) {
         "hooks_retry_plan",
         "hooks_retry_apply",
         "hooks_retry_reconcile",
+        "monitoring_probe",
         "monitoring_apply",
         "hooks_policy_plan",
         "hooks_lifecycle_plan",

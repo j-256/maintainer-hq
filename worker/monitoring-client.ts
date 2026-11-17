@@ -83,6 +83,7 @@ export async function monitorProvider(
   };
 }
 const messages = {
+  indeterminate: "The diagnostic ran but its result is unavailable. Recover the original request before starting another check.",
   unauthorized: "The monitoring management credential is invalid or expired.",
   forbidden: "The monitoring credential does not allow this operation.",
   not_found:
@@ -128,7 +129,7 @@ export async function callMonitorProvider<K extends MonitorCommand>(
   command: K,
   workspaceId: string,
   input: Record<string, unknown> = {},
-  timeoutMs: number = MONITOR_LIMITS.PROVIDER_TIMEOUT_MS,
+  timeoutMs: number = command === "probe" ? MONITOR_LIMITS.PROBE_PROVIDER_TIMEOUT_MS : MONITOR_LIMITS.PROVIDER_TIMEOUT_MS,
 ): Promise<{
   result: MonitorResult<K>;
   capabilities: (typeof MONITOR_CAPABILITIES)[number][];
@@ -143,7 +144,7 @@ export async function callMonitorProvider<K extends MonitorCommand>(
         controller.abort();
         void reader?.cancel().catch(() => {});
       },
-      Math.min(MONITOR_LIMITS.PROVIDER_TIMEOUT_MS, timeoutMs),
+      Math.min(command === "probe" ? MONITOR_LIMITS.PROBE_PROVIDER_TIMEOUT_MS : MONITOR_LIMITS.PROVIDER_TIMEOUT_MS, timeoutMs),
     );
   });
   try {

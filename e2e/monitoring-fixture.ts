@@ -15,6 +15,7 @@ import {
   type MonitorTarget,
   type MonitorObservedTarget,
   type MonitorResult,
+  type MonitorProbeResponse,
 } from "../shared/monitoring";
 import type { ResourceLinks } from "../shared/resource-links";
 import { monitorTargetStatusMatches } from "../shared/monitoring-freshness";
@@ -124,6 +125,13 @@ export async function mockMonitoring(
       lastRun: null,
     } as MonitorResult<"snapshot">["execution"],
     failEvidenceRead: false,
+    probeAllowed: !options.viewer,
+    probeOutcome: "success" as "success" | "failure",
+    probeStatus: "succeeded" as MonitorProbeResponse["status"],
+    probeConfigurationMatches: true,
+    loseProbeResponse: false,
+    probeGate: null as Promise<void> | null,
+    probeResults: new Map<string, MonitorProbeResponse>(),
   };
   const links = (kind: "monitor" | "hook", key: string) => {
     const id = kind + "/" + key;
@@ -177,7 +185,7 @@ export async function mockMonitoring(
         result,
         capabilities: options.viewer
           ? ["read"]
-          : ["read", "configure", "triage"],
+          : ["read", "configure", "triage", ...(state.probeAllowed ? ["probe"] : [])],
       });
       const targets = (items: MonitorTarget[], nextCursor: string | null) => ({
         ...envelope({
@@ -201,6 +209,31 @@ export async function mockMonitoring(
       });
       let result: unknown;
       switch (name) {
+        case "monitoring_probe": {
+          const requestId = String(input.requestId);
+          const existing = state.probeResults.get(requestId);
+          if (existing) { result = existing; break; }
+          if (state.probeGate) await state.probeGate;
+          result = {
+            requestId, targetId: String(input.targetId), connectionRevision: Number(input.connectionRevision),
+            configurationRevision: Number(input.configurationRevision), status: state.probeStatus,
+            requestedAt: MONITOR_TIME, completedAt: MONITOR_TIME,
+            errorCode: state.probeStatus === "indeterminate" ? "monitoring_provider_unavailable" : null,
+            diagnostic: state.probeStatus === "succeeded" ? {
+              requestId, targetId: String(input.targetId), configurationRevision: Number(input.configurationRevision),
+              configFingerprint: "sha256:" + "a".repeat(64), targetFingerprint: "sha256:" + "b".repeat(64),
+              configurationMatches: state.probeConfigurationMatches,
+              startedAt: MONITOR_TIME, completedAt: MONITOR_TIME, durationMilliseconds: 128,
+              outcome: state.probeOutcome, httpStatus: state.probeOutcome === "success" ? 200 : 503, errorCode: null,
+            } : null,
+          } satisfies MonitorProbeResponse;
+          state.probeResults.set(requestId, result as MonitorProbeResponse);
+          if (state.loseProbeResponse) {
+            state.loseProbeResponse = false;
+            return route.abort("failed");
+          }
+          break;
+        }
         case "monitoring_connections":
           result = state.connections;
           break;

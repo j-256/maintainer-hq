@@ -2,6 +2,9 @@ import { z } from "zod";
 import { idSchema, workspaceInput } from "./domain";
 
 export const MONITOR_LIMITS = Object.freeze({
+  PROBE_PROVIDER_TIMEOUT_MS: 35000,
+  PROBE_REQUEST_TIMEOUT_MS: 45000,
+  PROBE_COOLDOWN_MS: 5000,
   CONNECTIONS: 20,
   PROVIDERS: 20,
   PAGE_SIZE: 50,
@@ -20,13 +23,14 @@ export const MONITOR_LIMITS = Object.freeze({
   JSON_BYTES: 4096,
   JSON_DEPTH: 8,
 });
+export const MONITOR_PROBE_INTERRUPTED = "Diagnostic response unavailable. Recover it using the same request ID before starting another check.";
 export const MONITOR_OPERATION_KIND = "endpoint-monitor.operation";
 export const MONITOR_ACTIONS = [
   "acknowledged",
   "snoozed",
   "dismissed",
 ] as const;
-export const MONITOR_CAPABILITIES = ["read", "configure", "triage"] as const;
+export const MONITOR_CAPABILITIES = ["read", "configure", "triage", "probe"] as const;
 export const MONITOR_DEFAULTS = Object.freeze({
   failureThreshold: 2,
   method: "GET" as const,
@@ -257,6 +261,36 @@ export type MonitorTargetScan = z.infer<typeof monitorTargetScanSchema>;
 export const monitorTargetInput = monitorConnectionInput
   .extend({ targetId: monitorTargetId })
   .strict();
+export const monitorProbeInput = monitorTargetInput.extend({
+  requestId: z.uuid(),
+  connectionRevision: revision,
+  configurationRevision: revision.refine((value) => value > 0),
+}).strict();
+export const monitorDiagnosticSchema = z.object({
+  requestId: z.uuid(), targetId: monitorTargetId,
+  configurationRevision: revision.refine((value) => value > 0),
+  configFingerprint: fingerprint, targetFingerprint: fingerprint,
+  configurationMatches: z.boolean(),
+  startedAt: timestamp, completedAt: timestamp,
+  durationMilliseconds: z.number().int().min(0).max(MONITOR_LIMITS.PROBE_PROVIDER_TIMEOUT_MS),
+  outcome: z.enum(["success", "failure"]),
+  httpStatus: z.number().int().min(100).max(599).nullable(),
+  errorCode: z.enum(["timeout", "network", "body-marker-missing", "response-body-too-large",
+    "response-body-unreadable", "content-type-mismatch", "response-json-invalid",
+    "json-subset-mismatch", "location-invalid", "location-mismatch", "location-missing"]).nullable(),
+}).strict().refine((value) => Date.parse(value.completedAt) >= Date.parse(value.startedAt)
+  && (value.outcome !== "success" || (value.httpStatus !== null && value.errorCode === null)),
+  "Inconsistent diagnostic result");
+export const monitorProbeResponseSchema = z.object({
+  requestId: z.uuid(), targetId: monitorTargetId,
+  connectionRevision: revision, configurationRevision: revision,
+  status: z.enum(["running", "succeeded", "failed", "indeterminate"]),
+  requestedAt: timestamp, completedAt: timestamp.nullable(),
+  diagnostic: monitorDiagnosticSchema.nullable(),
+  errorCode: z.string().regex(/^[a-z][a-z_]{0,79}$/).nullable(),
+}).strict();
+export type MonitorDiagnostic = z.infer<typeof monitorDiagnosticSchema>;
+export type MonitorProbeResponse = z.infer<typeof monitorProbeResponseSchema>;
 export const monitorIncidentsInput = monitorPageInput
   .extend({
     status: z.enum(["open", "resolved", "all"]).default("open"),
@@ -542,6 +576,7 @@ export const monitorReceiptSchema = z
     "Inconsistent operation receipt",
   );
 export const monitorResultSchemas = {
+  probe: monitorDiagnosticSchema,
   snapshot: z
     .object({
       readAt: timestamp,
