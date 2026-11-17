@@ -70,6 +70,7 @@ import { repositoryContext } from "./repository-context";
 import { RepositoryCoverageService } from "./repository-coverage";
 import { repositoryAccess } from "./repository-access";
 import { repositoryCredentialCoverage } from "./repository-credential-coverage";
+import { MonitoringProbe } from "./monitoring-probe";
 import { MonitoringService } from "./monitoring";
 import { MonitoringOperations } from "./monitoring-operations";
 import { hookProviderReferences } from "./hook-client";
@@ -343,6 +344,9 @@ export class WorkspaceService {
   }
   monitoringTarget(input: unknown) {
     return new MonitoringService(this).target(input);
+  }
+  monitoringProbe(input: unknown) {
+    return new MonitoringProbe(this).run(input);
   }
   monitoringIncidents(input: unknown) {
     return new MonitoringService(this).incidents(input);

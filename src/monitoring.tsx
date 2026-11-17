@@ -65,6 +65,7 @@ import {
   MonitoringEvidenceClock,
   useMonitoringClock,
 } from "./monitoring-evidence";
+import { MonitoringProbe } from "./monitoring-probe";
 import { MonitoringConfigurationEditor } from "./monitoring-editor";
 import { MonitoringConnectionEditor } from "./monitoring-connection";
 import { MonitoringReview } from "./monitoring-review";
@@ -93,6 +94,8 @@ function MonitoringSummary({
 }) {
   return (
     <section className="hook-summary" aria-label="Endpoint Monitor evidence">
+      <div className="monitor-status-strip">
+      <MonitorExecution data={data} compact />
       <dl className="hook-metrics">
         <div>
           <dt>Open incidents</dt>
@@ -112,19 +115,14 @@ function MonitoringSummary({
           </dd>
         </div>
       </dl>
-      <MonitorExecution data={data} compact />
+      </div>
       {!data.runtimeConfigured || !data.enabled ? (
         <p className="hook-signal-alert">
           {!data.runtimeConfigured ? "Scheduled checks are not configured." : "Scheduled checks are disabled."}
         </p>
       ) : null}
-      <p className="hook-summary-coverage">
-        Read <MonitorTime value={data.readAt} />.{" "}
-        {data.openIncidents.truncated || data.pendingDeliveries.truncated
-          ? "Limited counts (+); more records may exist."
-          : null}
-      </p>
       <Disclosure title="Schedule and evidence details" icon={Clock3}>
+        <p>Read <MonitorTime value={data.readAt} />. Counts with + are lower bounds.</p>
         <p>
           Scheduled checks: {!data.runtimeConfigured ? "not configured" : data.enabled ? "enabled" : "disabled"}.
           {" "}This setting does not verify execution.
@@ -149,10 +147,7 @@ function MonitoringSummary({
           Target checks follow their configured interval.
         </p>
         <p>
-          Scheduler runs and target checks have separate deadlines. A pass
-          proves that recorded check met its expectations; it does not establish
-          continuous uptime or resolve an incident. Cached evidence keeps aging
-          after a failed refresh.
+          A pass records one check, not continuous uptime. Incidents and scheduled checks remain separate from manual diagnostics.
         </p>
         <p>
           Notifications:{" "}
@@ -178,10 +173,12 @@ function MonitoringTargets({
   connection,
   canConfigure,
   onInspect,
+  onEdit,
 }: {
   snapshot: Snapshot;
   connection: MonitorConnection;
   onInspect: (id: string) => void;
+  onEdit: (id: string) => void;
   canConfigure: boolean;
 }) {
   const workspaceId = snapshot.workspace.id;
@@ -213,6 +210,7 @@ function MonitoringTargets({
     enabled: searchReady,
   });
   const data = query.data?.result;
+  const canProbe = snapshot.capabilities.includes(CAPABILITY.OPERATE) && Boolean(query.data?.capabilities.includes("probe"));
   const items =
     data?.items.filter((target) =>
       monitorTargetStatusMatches(target.evidence, status, now),
@@ -253,6 +251,9 @@ function MonitoringTargets({
           setCursors([null]);
         }}
       />
+      {!snapshot.capabilities.includes(CAPABILITY.OPERATE) ? (
+        <p className="permission-notice">Your role can view monitoring but cannot run diagnostics.</p>
+      ) : query.data && !canProbe ? <p className="permission-notice">Probe permission is not enabled for this connection.</p> : null}
       {query.error ? <MonitorError error={query.error} /> : null}
       {query.isPending ? <p role="status">Loading monitor targets...</p> : null}
       {data ? (
@@ -261,16 +262,24 @@ function MonitoringTargets({
             {items.map((target) => (
               <article className="monitor-card monitor-target-row" key={target.id}>
                 <div className="monitor-target-identity">
-                  <h3>{target.id}</h3>
+                  <h3><button className="monitor-target-name" onClick={() => onInspect(target.id)}>{target.id}</button></h3>
                   <p className="monitor-private-url">{target.url}</p>
                 </div>
                 <div className="monitor-target-evidence">
                   <MonitorEvidence evidence={target.evidence} />
                   <MonitorCheckTimes evidence={target.evidence} compact />
                 </div>
-                <Button variant="outline" onClick={() => onInspect(target.id)}>
-                  Inspect target
-                </Button>
+                <div className="monitor-row-actions">
+                  <MonitoringProbe
+                    key={snapshot.principal.subject + "/" + target.id}
+                    workspaceId={workspaceId} actor={snapshot.principal.subject}
+                    connectionId={connection.id} connectionRevision={connection.revision}
+                    configurationRevision={data.configuration?.revision ?? 0} targetId={target.id}
+                    allowed={canProbe && Boolean(data.configuration)}
+                    canOperate={snapshot.capabilities.includes(CAPABILITY.OPERATE)}
+                  />
+                  {canConfigure ? <Button variant="ghost" onClick={() => onEdit(target.id)}>Edit</Button> : null}
+                </div>
               </article>
             ))}
           </div>
@@ -440,7 +449,7 @@ function MonitoringTargetDetail({
                 <MonitorTime value={target.evidence.observedAt} />.{" "}
                 {target.evidence.configurationMatches === false
                   ? "This evidence belongs to a different configuration."
-                  : "Exceptional-state evidence is separate from completed-run check results."}
+                  : ""}
                 {target.evidence.status
                   ? " HTTP " + target.evidence.status + "."
                   : ""}
@@ -464,47 +473,14 @@ function MonitoringTargetDetail({
             </p>
           ) : null}
           <div className="hook-actions">
-            <Button
-              ref={linkButton}
-              variant="outline"
-              disabled={busy}
-              onClick={() => setLinking(true)}
-            >
-              Related repositories
-            </Button>
-            <Button
-              ref={projectButton}
-              variant="outline"
-              disabled={busy}
-              onClick={() => setProjectLinking(true)}
-            >
-              Project association
-            </Button>
-            <Button variant="outline" disabled={busy} onClick={onIncidents}>
-              View incidents
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={busy || query.isFetching}
-              onClick={() => void query.refetch()}
-            >
-              Reload target
-            </Button>
-            {target && canConfigure ? (
-              <>
-                <Button disabled={busy || query.isError} onClick={onEdit}>
-                  Edit target
-                </Button>
-                <Button
-                  variant="outline"
-                  className="monitor-remove"
-                  disabled={busy || query.isError}
-                  onClick={() => void remove()}
-                >
-                  {busy ? "Preparing review..." : "Review removal"}
-                </Button>
-              </>
-            ) : null}
+            {target && canConfigure ? <Button disabled={busy || query.isError} onClick={onEdit}>Edit target</Button> : null}
+            <Button variant="outline" disabled={busy} onClick={onIncidents}>View incidents</Button>
+            <ActionMenu label="target actions" actions={[
+              { label: "Related repositories", disabled: busy, onSelect: (trigger) => { linkButton.current = trigger; setLinking(true); } },
+              { label: "Project association", disabled: busy, onSelect: (trigger) => { projectButton.current = trigger; setProjectLinking(true); } },
+              { label: "Reload target", disabled: busy || query.isFetching, onSelect: () => { void query.refetch(); } },
+              ...(target && canConfigure ? [{ label: "Review removal", disabled: busy || query.isError, onSelect: () => { void remove(); } }] : []),
+            ]} />
           </div>
           {target && !canConfigure ? (
             <p className="permission-notice">
@@ -923,6 +899,7 @@ function MonitoringWorkspace({ snapshot }: { snapshot: Snapshot }) {
                 snapshot={snapshot}
                 connection={selected}
                 canConfigure={canConfigure}
+                onEdit={(id) => { rememberFocus(); setEditingTarget(id); }}
                 onInspect={(id) => {
                   rememberFocus();
                   navigate({ target: id });

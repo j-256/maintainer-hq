@@ -1,3 +1,4 @@
+import { MONITOR_LIMITS, MONITOR_PROBE_INTERRUPTED } from "../shared/monitoring";
 import { commands, type CommandName } from "../shared/commands";
 import { LIMITS, type ApiError } from "../shared/domain";
 import { apiErrorMessage } from "../shared/api-errors";
@@ -149,8 +150,8 @@ export async function callCommand(
   if (Buffer.byteLength(body) > LIMITS.BODY_BYTES)
     throw new ClientError("Input exceeds the request size limit", 2);
   let response: Response;
-  const timeout = fleetCommandTimeout(name) ?? secretCommandTimeout(name);
-  const interrupted = fleetCommandTimeout(name)
+  const timeout = name === "monitoring_probe" ? MONITOR_LIMITS.PROBE_REQUEST_TIMEOUT_MS : fleetCommandTimeout(name) ?? secretCommandTimeout(name);
+  const interrupted = name === "monitoring_probe" ? MONITOR_PROBE_INTERRUPTED : fleetCommandTimeout(name)
     ? FLEET_REQUEST_INTERRUPTED
     : SECRET_REQUEST_INTERRUPTED;
   try {

@@ -1,3 +1,4 @@
+import { MONITOR_LIMITS, MONITOR_PROBE_INTERRUPTED } from "../../shared/monitoring";
 import type { ApiError } from "../../shared/domain";
 import { apiErrorMessage } from "../../shared/api-errors";
 import type { CommandName } from "../../shared/commands";
@@ -71,7 +72,7 @@ export async function command<T>(
   input: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const timeout = secretCommandTimeout(name);
+  const timeout = name === "monitoring_probe" ? MONITOR_LIMITS.PROBE_REQUEST_TIMEOUT_MS : secretCommandTimeout(name);
   const deadline = timeout ? AbortSignal.timeout(timeout) : undefined;
   try {
     return await request<T>("/api/commands/" + name, {
@@ -91,9 +92,9 @@ export async function command<T>(
     )
       throw error;
     throw new RequestError(
-      SECRET_REQUEST_INTERRUPTED,
+      name === "monitoring_probe" ? MONITOR_PROBE_INTERRUPTED : SECRET_REQUEST_INTERRUPTED,
       0,
-      "secret_request_interrupted",
+      name === "monitoring_probe" ? "monitoring_probe_interrupted" : "secret_request_interrupted",
     );
   }
 }

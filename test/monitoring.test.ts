@@ -21,6 +21,7 @@ import { commands, commandAnnotations } from "../shared/commands";
 import { WorkspaceService } from "../worker/service";
 import { createApplication } from "../worker/app";
 import { credentialHash } from "../worker/credential-hash";
+import { MonitoringService } from "../worker/monitoring";
 import { canonicalMonitorConfiguration } from "../worker/monitoring-operations";
 import type { Env } from "../worker/types";
 
@@ -48,7 +49,7 @@ let receipts: Map<string, MonitorReceipt>;
 let candidates: Map<string, MonitorConfiguration>;
 let applies: number;
 let mode: "normal" | "before" | "after";
-let capabilities: ("read" | "configure" | "triage")[];
+let capabilities: ("read" | "configure" | "triage" | "probe")[];
 let fetcher: ReturnType<
   typeof vi.fn<(url: string, init: RequestInit) => Promise<Response>>
 >;
@@ -191,6 +192,17 @@ beforeEach(async () => {
     const fail = (code: string, status = 409) =>
       Response.json({ error: { code, message: PRIVATE } }, { status });
     switch (command) {
+      case "probe":
+        if (!capabilities.includes("probe")) return fail("forbidden", 403);
+        if (input.expectedRevision !== configurationRevision) return fail("conflict");
+        result = {
+          requestId: input.requestId, targetId: input.targetId,
+          configurationRevision, configFingerprint: (await metadata()).configFingerprint,
+          targetFingerprint: "sha256:" + "b".repeat(64), configurationMatches: true,
+          startedAt: time(), completedAt: time(), durationMilliseconds: 42,
+          outcome: "success", httpStatus: 200, errorCode: null,
+        };
+        break;
       case "snapshot":
         result = {
           readAt: time(),
@@ -1254,4 +1266,143 @@ it("keeps all monitoring controls in the shared CLI and MCP contract", () => {
   expect(
     commandAnnotations("monitoring_configuration_plan", false).idempotentHint,
   ).toBe(false);
+});
+
+
+describe("Manual monitoring diagnostics", () => {
+  const input = () => ({ ...connection, connectionRevision: 1, configurationRevision: 1,
+    targetId: target.id, requestId: crypto.randomUUID() });
+  const probe = (service: WorkspaceService, value: unknown) =>
+    service.monitoringProbe(value);
+  const probeCalls = () => fetcher.mock.calls.filter(([, init]) => JSON.parse(String(init.body)).command === "probe");
+
+  it("journals before probing and replays exact duplicate requests without another probe", async () => {
+    await save(); capabilities.push("probe");
+    const request = input();
+    const result = await probe(as("operator"), request);
+    expect(result).toMatchObject({ requestId: request.requestId, status: "succeeded",
+      diagnostic: { targetId: target.id, outcome: "success", httpStatus: 200, durationMilliseconds: 42 } });
+    expect(await probe(as("operator"), request)).toEqual(result);
+    expect(probeCalls()).toHaveLength(1);
+    const stored = await bindings.HQ_DB.prepare("SELECT status,result_json FROM operations WHERE id=?").bind(request.requestId).first();
+    expect(stored?.status).toBe("succeeded");
+    expect(JSON.stringify(stored)).not.toContain(token);
+    expect(JSON.stringify(stored)).not.toContain(target.url);
+    await expect(probe(as("operator"), { ...request, targetId: "different" })).rejects.toMatchObject({ status: 409 });
+    await expect(probe(as(), request)).rejects.toMatchObject({ status: 404 });
+    expect(incident.status).toBe("open");
+  });
+
+  it("denies viewers, source principals, cross-workspace access and changed connections before probing", async () => {
+    await save(); capabilities.push("probe");
+    const request = input();
+    for (const service of [as("viewer"), as("outside"), as("owner", { sourceId: "source" })]) {
+      await expect(probe(service, request)).rejects.toMatchObject({ status: expect.any(Number) });
+    }
+    await expect(probe(as(), { ...request, connectionRevision: 0 })).rejects.toMatchObject({ status: 409 });
+    expect(probeCalls()).toHaveLength(0);
+  });
+
+  it("claims concurrent duplicates once and bounds new checks while a probe runs", async () => {
+    await save(); capabilities.push("probe");
+    const original = fetcher.getMockImplementation()!;
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const pending = new Promise<void>((resolve) => { started = resolve; });
+    fetcher.mockImplementation(async (url, init) => {
+      if (JSON.parse(String(init.body)).command === "probe") {
+        const stored = await bindings.HQ_DB.prepare("SELECT COUNT(*) AS count FROM operations WHERE status='running'").first();
+        expect(stored?.count).toBe(1);
+        started(); await gate;
+      }
+      return original(url, init);
+    });
+    const request = input();
+    const first = probe(as(), request);
+    await pending;
+    expect(await probe(as(), request)).toMatchObject({ status: "running", diagnostic: null });
+    await expect(probe(as(), input())).rejects.toMatchObject({ status: 409 });
+    release();
+    expect(await first).toMatchObject({ status: "succeeded" });
+    expect(probeCalls()).toHaveLength(1);
+  });
+
+  it("preserves uncertain transport outcomes and never resubmits them on retry", async () => {
+    await save(); capabilities.push("probe");
+    fetcher.mockRejectedValue(new Error(PRIVATE));
+    const request = input();
+    const result = await probe(as(), request);
+    expect(result).toMatchObject({ status: "indeterminate", diagnostic: null, errorCode: "monitoring_provider_unavailable" });
+    expect(await probe(as(), request)).toEqual(result);
+    expect(probeCalls()).toHaveLength(1);
+    expect(JSON.stringify(result)).not.toContain(PRIVATE);
+  });
+
+  it("retains provider rejection as a failed check request and exposes shared client annotations", async () => {
+    await save();
+    const result = await probe(as(), input());
+    expect(result).toMatchObject({ status: "failed", diagnostic: null, errorCode: "monitoring_provider_forbidden" });
+    expect(commandAnnotations("monitoring_probe", false)).toEqual({ readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true });
+    expect(commands.monitoring_probe.schema.safeParse({ ...input(), url: target.url }).success).toBe(false);
+  });
+});
+
+it("diagnostics hide results after access revocation and keep interrupted requests recoverable", async () => {
+  await save(); capabilities.push("probe");
+  const request = { ...connection, connectionRevision: 1, configurationRevision: 1, targetId: target.id, requestId: crypto.randomUUID() };
+  const original = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url, init) => {
+    const response = await original(url, init);
+    if (JSON.parse(String(init.body)).command === "probe")
+      await bindings.HQ_DB.prepare("UPDATE members SET role='viewer',revision=revision+1 WHERE workspace_id='alpha' AND subject='operator'").run();
+    return response;
+  });
+  await expect(as("operator").monitoringProbe(request)).rejects.toMatchObject({ status: 403 });
+  await bindings.HQ_DB.prepare("UPDATE members SET role='operator',revision=revision+1 WHERE workspace_id='alpha' AND subject='operator'").run();
+  expect(await as("operator").monitoringProbe(request)).toMatchObject({ status: "succeeded", diagnostic: { httpStatus: 200 } });
+});
+
+it("diagnostics do not repeat stalled requests and reject malformed provider results", async () => {
+  await save(); capabilities.push("probe");
+  const request = { ...connection, connectionRevision: 1, configurationRevision: 1, targetId: target.id, requestId: crypto.randomUUID() };
+  fetcher.mockResolvedValueOnce(Response.json({ version: 1, capabilities, result: { private: PRIVATE } }));
+  expect(await as().monitoringProbe(request)).toMatchObject({ status: "indeterminate", errorCode: "monitoring_provider_metadata_invalid", diagnostic: null });
+  const stored = await bindings.HQ_DB.prepare("SELECT result_json FROM operations WHERE id=?").bind(request.requestId).first<{result_json: string}>();
+  const data = JSON.parse(stored!.result_json);
+  data.response.status = "running";
+  data.response.completedAt = null;
+  data.response.errorCode = null;
+  await bindings.HQ_DB.prepare("UPDATE operations SET status='running',result_json=? WHERE id=?").bind(JSON.stringify(data), request.requestId).run();
+  now += 46000;
+  expect(await as().monitoringProbe(request)).toMatchObject({ status: "indeterminate", errorCode: "monitoring_probe_interrupted" });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+
+it("rechecks operator authority after the final connection read and before dispatch", async () => {
+  await save(); capabilities.push("probe");
+  const original = MonitoringService.prototype.active;
+  let reads = 0;
+  const active = vi.spyOn(MonitoringService.prototype, "active").mockImplementation(async function (this: MonitoringService, workspaceId, connectionId) {
+    const result = await original.call(this, workspaceId, connectionId);
+    if (++reads === 2)
+      await bindings.HQ_DB.prepare("UPDATE members SET role='viewer',revision=revision+1 WHERE workspace_id='alpha' AND subject='operator'").run();
+    return result;
+  });
+  try {
+    await expect(as("operator").monitoringProbe({ ...connection, connectionRevision: 1, configurationRevision: 1,
+      targetId: target.id, requestId: crypto.randomUUID() })).rejects.toMatchObject({ status: 403 });
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally { active.mockRestore(); }
+});
+
+
+it("preserves provider post-execution authority loss as indeterminate", async () => {
+  await save(); capabilities.push("probe");
+  fetcher.mockResolvedValueOnce(Response.json({ error: { code: "indeterminate", message: PRIVATE } }, { status: 503 }));
+  const request = { ...connection, connectionRevision: 1, configurationRevision: 1, targetId: target.id, requestId: crypto.randomUUID() };
+  expect(await as().monitoringProbe(request)).toMatchObject({ status: "indeterminate", errorCode: "monitoring_provider_indeterminate", diagnostic: null });
+  expect(await as().monitoringProbe(request)).toMatchObject({ status: "indeterminate" });
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

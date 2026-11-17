@@ -230,9 +230,8 @@ test("repository link drafts survive conflicts and failed reloads without changi
 }) => {
   const state = await mockMonitoring(page);
   await page.goto(URL + "&target=" + MONITOR_TARGET.id);
-  await page
-    .getByRole("button", { name: "Related repositories", exact: true })
-    .click();
+  await page.getByRole("button", { name: "More target actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Related repositories", exact: true }).click();
   const editor = page.getByRole("dialog").filter({
     has: page.getByRole("heading", {
       name: "Related repositories",
@@ -266,7 +265,7 @@ test("repository link drafts survive conflicts and failed reloads without changi
   await editor.getByRole("button", { name: "Save links", exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Related repositories", exact: true }),
+    page.getByRole("button", { name: "More target actions", exact: true }),
   ).toBeFocused();
   expect(
     state.links.get("monitor/" + MONITOR_TARGET.id)!.repositoryIds,
@@ -547,7 +546,7 @@ test("monitoring and repository screens fit both themes and mobile with accessib
       ).toBe(true);
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
       const inspect = page.getByRole("button", {
-        name: "Inspect target",
+        name: MONITOR_TARGET.id,
         exact: true,
       });
       await inspect.focus();
