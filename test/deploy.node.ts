@@ -212,3 +212,52 @@ test("remote failure diagnostics retain known migration names and error categori
   assert.ok(result.categories.includes("FOREIGN KEY constraint failed"));
   assert.doesNotMatch(JSON.stringify(result), /secret-do-not-store|9999_untrusted/);
 });
+
+test("deployment files stay beneath the explicitly selected directory", async () => {
+  const { confinedPath, xdgRoot, profileFile } = await import("../scripts/deployment-paths");
+  const directory = await mkdtemp(join(tmpdir(), "hq-deployment-paths-"));
+  try {
+    assert.equal(confinedPath(directory, "hq-deploy", "config.json"), join(directory, "hq-deploy/config.json"));
+    for (const child of ["../escape", "../" + directory.split("/").at(-1) + "-sibling/file", "/outside/file"]) assert.throws(() => confinedPath(directory, child), /outside/);
+    assert.throws(() => xdgRoot("relative/path", directory), /absolute/);
+    const file = join(directory, "profile.json");
+    await writeFile(file, "{}");
+    assert.equal(await profileFile(file), file);
+    const { symlink } = await import("node:fs/promises");
+    await symlink(file, join(directory, "linked.json"));
+    await assert.rejects(profileFile(join(directory, "linked.json")), /regular/);
+    await assert.rejects(profileFile(directory), /regular/);
+    await assert.rejects(profileFile(join(directory, "missing.json")), { exitCode: 2 });
+  } finally { await rm(directory, { recursive: true }); }
+});
+
+test("saved configuration refuses shared directories and never writes through a config symlink", async () => {
+  const { mkdir, chmod, symlink } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+  const { saveProfile } = await import("../scripts/deployment");
+  const directory = await mkdtemp(join(tmpdir(), "hq-config-boundary-"));
+  const original = process.env.XDG_CONFIG_HOME;
+  try {
+    process.env.XDG_CONFIG_HOME = directory;
+    const parent = join(directory, "hq-deploy");
+    const path = join(parent, "config.json");
+    await mkdir(parent, { mode: 0o700 });
+    await writeFile(path, JSON.stringify({ profile: resolve("fixtures/release-profile.json") }));
+    await chmod(parent, 0o777);
+    await assert.rejects(savedConfiguration(path));
+    await chmod(parent, 0o700);
+    await rm(path);
+    const outside = join(directory, "outside.json");
+    const content = JSON.stringify({ profile: resolve("fixtures/release-profile.json") });
+    await writeFile(outside, content);
+    await symlink(outside, path);
+    await assert.rejects(saveProfile(resolve("fixtures/release-profile.json")));
+    assert.equal(await readFile(outside, "utf8"), content);
+    await rm(path);
+    await saveProfile(resolve("fixtures/release-profile.json"));
+    assert.equal((await savedConfiguration(path)).profile, resolve("fixtures/release-profile.json"));
+  } finally {
+    if (original === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = original;
+    await rm(directory, { recursive: true });
+  }
+});

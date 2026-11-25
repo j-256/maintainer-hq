@@ -1,12 +1,13 @@
 import { z } from "zod";
-import { readFile, writeFile, mkdir, readdir, lstat, open, unlink, chmod, cp } from "node:fs/promises";
-import { join, resolve, dirname, isAbsolute } from "node:path";
+import { readFile, writeFile, mkdir, readdir, lstat, open, unlink, chmod, cp, rename } from "node:fs/promises";
+import { join, dirname, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer } from "node:net";
 import { parse } from "jsonc-parser";
+import { confinedPath, xdgRoot, profileFile, privateDirectory, DeploymentPathError } from "./deployment-paths";
 import { wranglerDiagnostics } from "./deployment-diagnostics";
 import { verifyArtifact } from "./release-artifact";
 import { readReleaseProfile, sha256 } from "./release-profile";
@@ -25,23 +26,39 @@ export const configurationSchema = z.object({
   keychain: z.object({ path: absolutePath, account: z.string().min(1), tokenService: z.string().min(1), accessClientIdService: z.string().min(1), accessClientSecretService: z.string().min(1) }).strict().optional(),
 }).strict();
 export type DeploymentMode = "app" | "docs";
-export const configPath = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "hq-deploy", "config.json");
-export const statePath = () => join(process.env.XDG_STATE_HOME || join(homedir(), ".local/state"), "hq-deploy");
+export const configPath = () => confinedPath(xdgRoot(process.env.XDG_CONFIG_HOME, join(homedir(), ".config")), "hq-deploy", "config.json");
+export const statePath = () => confinedPath(xdgRoot(process.env.XDG_STATE_HOME, join(homedir(), ".local/state")), "hq-deploy");
 export class DeploymentError extends Error { constructor(message: string, readonly exitCode = 1) { super(message); } }
 
 export async function savedConfiguration(path = configPath()) {
-  try { return configurationSchema.parse(JSON.parse(await readFile(path, "utf8"))); }
-  catch { throw new DeploymentError("Missing or invalid deployment configuration; use --save-profile <absolute-profile.json> or --profile <absolute-profile.json>", 2); }
+  try {
+    await privateDirectory(dirname(path), false);
+    const file = await profileFile(path);
+    return configurationSchema.parse(JSON.parse(await readFile(file, "utf8")));
+  } catch { throw new DeploymentError("Missing, unsafe, or invalid deployment configuration; inspect it or configure a new installation with --save-profile <absolute-profile.json>", 2); }
 }
 export async function saveProfile(profile: string) {
+  profile = await profileFile(profile);
   try { await readReleaseProfile(profile); } catch { throw new DeploymentError("Use a readable valid deployment profile JSON file", 2); }
-  let existing = {};
-  try { existing = await savedConfiguration(); } catch { /* A first setup has no saved configuration */ }
   const path = configPath();
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, JSON.stringify({ ...existing, profile: resolve(profile) }, null, 2) + "\n", { mode: 0o600 });
+  await privateDirectory(dirname(path));
+  let existing = {};
+  try {
+    await lstat(path);
+    existing = await savedConfiguration(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const temporary = confinedPath(dirname(path), "config-" + randomUUID() + ".tmp");
+  try {
+    await writeFile(temporary, JSON.stringify({ ...existing, profile }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch(error => { if (error.code !== "ENOENT") throw error; });
+  }
   return path;
 }
+
 export function deploymentStages(mode: DeploymentMode, dryRun: boolean) {
   return ["checks", "build", "verify", ...dryRun ? [] : ["preflight", "backup", ...mode === "app" ? ["rehearse"] : [], "recheck", ...mode === "app" ? ["migrate"] : [], "upload", "readback", "smoke"]];
 }
@@ -56,7 +73,7 @@ export async function runStages(names: string[], directory: string, action: (nam
     process.stderr.write("hq-deploy: " + name + "\n");
     try { await action(name); stage.status = "complete"; }
     catch (error) {
-      metadata.failureReason = error instanceof DeploymentError || error instanceof DeploymentProviderError ? error.message : "Stage failed; unsupported input or response (details suppressed)";
+      metadata.failureReason = error instanceof DeploymentError || error instanceof DeploymentProviderError || error instanceof DeploymentPathError ? error.message : "Stage failed; unsupported input or response (details suppressed)";
       stage.status = "failed";
       stage.durationMs = Math.round(performance.now() - start);
       await persist();
@@ -168,9 +185,9 @@ export async function rehearseDatabase(root: string, backup: string, persist: st
 
 export async function deploy(root: string, mode: DeploymentMode, options: { profile?: string; dryRun?: boolean }) {
   let saved: z.infer<typeof configurationSchema>;
-  if (options.profile) saved = { profile: resolve(options.profile) };
+  if (options.profile) saved = { profile: await profileFile(options.profile) };
   else saved = await savedConfiguration();
-  const profilePath = saved.profile;
+  const profilePath = await profileFile(saved.profile);
   const { profile, fingerprint } = await readReleaseProfile(profilePath).catch(() => { throw new DeploymentError("Use a readable valid deployment profile JSON file", 2); });
   for (const tool of ["git", "npm"]) {
     try { await execute(tool, ["--version"]); } catch { throw new DeploymentError("Deployment requires " + tool, 3); }
@@ -185,7 +202,7 @@ export async function deploy(root: string, mode: DeploymentMode, options: { prof
     catch { throw new DeploymentError("Application migration rehearsal requires Python 3 with sqlite3", 3); }
   }
   const state = statePath();
-  await mkdir(state, { recursive: true, mode: 0o700 });
+  await privateDirectory(state);
   const target: Target = { accountId: profile.accountId, workerName: profile.workerName, hostname: profile.intendedHostname, profile };
   let docsConfig: Record<string, unknown> = {};
   if (mode === "docs") {

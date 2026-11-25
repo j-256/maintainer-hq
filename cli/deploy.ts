@@ -1,4 +1,5 @@
 import { Command, CommanderError } from "commander";
+import { DeploymentPathError } from "../scripts/deployment-paths";
 import { ClientError } from "./client";
 import { fileURLToPath } from "node:url";
 import { deploy, saveProfile, DeploymentError, type DeploymentMode } from "../scripts/deployment";
@@ -21,7 +22,7 @@ try {
 } catch (error) {
   if (error instanceof CommanderError) process.exitCode = error.exitCode === 0 ? 0 : 2;
   else {
-    console.error((error instanceof DeploymentError || error instanceof ClientError) ? error.message : "Deployment input or operation failed; check the profile, dependencies, credentials, and retained receipt");
-    process.exitCode = (error instanceof DeploymentError || error instanceof ClientError) ? error.exitCode : 1;
+    console.error((error instanceof DeploymentError || error instanceof ClientError || error instanceof DeploymentPathError) ? error.message : "Deployment input or operation failed; check the profile, dependencies, credentials, and retained receipt");
+    process.exitCode = (error instanceof DeploymentError || error instanceof ClientError || error instanceof DeploymentPathError) ? error.exitCode : 1;
   }
 }
