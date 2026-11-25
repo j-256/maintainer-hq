@@ -55,6 +55,8 @@ After bootstrap, manage membership and automation credentials through structured
 
 The publisher workflow does not grant goal-writing authority. The implemented Reporter profile grants only `goals:write` and `activity:write`, binds a stable reporter ID, and does not grant workspace reads or metadata edits. Reader grants only `read`. Owner controls issue and revoke these profiles through expiring exact reviews; see [automation access](automation.md). The agent must copy the active goal's exact objective and source timestamps into `goal_sync`, retain its IDs when retrying, and report transitions and periodic confirmations. Dashboard polling does not establish that an agent is still working. Keep stale reports and completed goal history visible.
 
+For routine updates to an established installation, use the [deployment wrapper](release.md#deploy-an-existing-installation): `npm run deploy` for the application and `npm run docs:deploy` for documentation. Initial provisioning and changes to identity, ingress, or resource ownership still follow the gates below.
+
 ## Deployment prerequisites
 
 Before requesting a production cutover, complete and verify these gates:
