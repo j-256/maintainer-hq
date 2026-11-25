@@ -28,10 +28,10 @@
           "replacement": "7.30.1",
           "advisory": "GHSA-xjj6-f33q-929c",
           "vulnerable": ">=7.18.0 <7.30.1",
-          "reason": "Miniflare pins an Undici release whose response content-encoding error handling can terminate the process. The development and test toolchains must use the patched release while retaining the WebSocket decompression mitigation.",
+          "reason": "The installed Workers test adapter pins Miniflare 5.20260815.0-alpha, which requests Undici 7.29.0. Retain the verified Undici 7.30.1 resolution to mitigate response content-encoding failures and WebSocket decompression until every installed Miniflare adopts a patched request.",
           "owner": "HQ maintainers",
-          "reviewedAt": "2026-10-26T16:36:41.000Z",
-          "reviewBy": "2026-11-25T16:36:41.000Z",
+          "reviewedAt": "2026-11-25T21:32:12.000Z",
+          "reviewBy": "2026-12-25T21:32:12.000Z",
           "removeWhen": "Remove the override after every installed Miniflare release stops requesting Undici 7.29.0, and the regenerated lockfile contains no Undici version affected by the response-handling advisories."
         },
         {
@@ -43,10 +43,10 @@
           "replacement": "4.6.7",
           "advisory": "GHSA-mrhx-c7xc-m3w5",
           "vulnerable": "<4.6.6",
-          "reason": "The Workers test adapter pins a Zod release with unbounded validation issue accumulation for constrained collections. Use the patched version already selected by the application while verifying the adapter's configuration and test behavior.",
+          "reason": "The installed Workers test adapter 0.23.0 requests Zod 4.4.3. Retain the verified Zod 4.6.7 resolution to prevent unbounded validation issue accumulation for constrained collections until the test toolchain adopts a patched request.",
           "owner": "HQ maintainers",
-          "reviewedAt": "2026-10-26T16:36:41.000Z",
-          "reviewBy": "2026-11-25T16:36:41.000Z",
+          "reviewedAt": "2026-11-25T21:32:12.000Z",
+          "reviewBy": "2026-12-25T21:32:12.000Z",
           "removeWhen": "Remove the override after the installed Workers test adapter stops requesting Zod 4.4.3, and the regenerated lockfile contains no Zod version affected by this advisory."
         }
       ]
