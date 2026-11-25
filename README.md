@@ -42,7 +42,7 @@ npm run test:e2e
 npm run test:release
 ```
 
-Production requires a reviewed [release artifact](docs/release.md), protected identity, storage, and deployment verification. Synthetic tests are not proof of live provider permissions or health.
+For an established installation, configure its deployment settings once, then run `npm run deploy` for the application or `npm run docs:deploy` for documentation. Both support `-- --dry-run` for local verification. See the [deployment and release guide](docs/release.md#deploy-an-existing-installation) for setup, checks, recovery, and production authorization. Production requires a reviewed [release artifact](docs/release.md), protected identity, storage, and deployment verification. Synthetic tests are not proof of live provider permissions or health.
 
 ## Maintain the docs
 

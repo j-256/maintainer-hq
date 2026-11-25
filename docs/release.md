@@ -5,7 +5,36 @@ description: Build a reviewed production artifact and preserve compatible recove
 
 # Offline release artifacts
 
-`npm run release --` inspects an explicit deployment profile, builds a portable artifact, or verifies that artifact. It has no deploy command. The default `npm run build` is a development verification build with a placeholder database, not a deployment candidate. Do not deploy its generated configuration.
+`npm run deploy` builds, tests, migrates, uploads, and verifies an existing installation using its saved deployment settings. The separate `npm run release --` command inspects an explicit deployment profile, builds a portable artifact, or verifies that artifact without contacting production. The default `npm run build` is a development verification build with a placeholder database, not a deployment candidate. Do not deploy its generated configuration.
+
+## Deploy an existing installation
+
+A deployment profile is a secret-free JSON file identifying the Cloudflare account, Worker, D1 database, hostname, Access issuer and audience, schedule, and private service bindings. Configure its path once; the wrapper reads it on subsequent invocations:
+
+```sh
+npm ci
+npm --prefix site ci
+npx playwright install chromium
+npm run deploy -- --save-profile /absolute/path/production-profile.json
+npm run deploy -- --dry-run
+npm run deploy
+```
+
+The deployment command intentionally publishes to production. Running it requires authorization for that installation's migration and upload. `--dry-run` performs local checks, builds the profile-specific artifact, verifies it, and runs Wrangler's upload preparation without production reads, credential loading, or remote writes. It does not establish production readiness. `--profile /absolute/path/other-profile.json` overrides the saved path for one invocation and requires smoke credentials from the environment.
+
+Install Node.js 22.22 or later, Git, Python 3 with its standard `sqlite3` module, both locked dependency sets, and Playwright's Chromium before deploying. Start from a clean committed checkout. The wrapper uses installed tools and never installs dependencies implicitly. Application deployment runs `npm run check`, the portable-release runtime test, the reviewed profile build, and artifact verification. Those tests exercise production-entrypoint behavior locally; the wrapper also checks the hosted installation separately.
+
+Live deployment requires `CLOUDFLARE_API_TOKEN` with permission to inspect the account's Workers, Custom Domains, deployments, and Access applications, export and migrate the selected D1 database, and upload the selected Worker. The profile selects the account explicitly. Supply either a read-scoped `HQ_TOKEN` with `HQ_ACCESS_CLIENT_ID` and `HQ_ACCESS_CLIENT_SECRET`, or a signed-in human `HQ_ACCESS_TOKEN`, for authenticated smoke checks. Reporter-only credentials cannot read a session. Keep values out of arguments and configuration files.
+
+Private configuration lives at `${XDG_CONFIG_HOME:-$HOME/.config}/hq-deploy/config.json`. It accepts only an absolute `profile` path and an optional `keychain` object with `path`, `account`, `tokenService`, `accessClientIdService`, and `accessClientSecretService`. These fields name existing items; they never contain credential values. On macOS, the optional reader uses `/usr/bin/security` against that exact Keychain when neither HQ environment credential is supplied. It does not change item access rules or the Keychain's locking policy. Other platforms use the environment transport. Restore credentials deliberately before deploying; the wrapper never grants access or provisions secrets.
+
+Before mutation, the wrapper checks exact hostname ownership, existing Worker and D1 identity, disabled alternate ingress, configured Access coverage, and anonymous denial plus an authenticated shell, health, and workspace session. It exports D1 into private recovery storage, restores that export into isolated SQLite and local D1, compares every exported application table's rows using SQLite value projections, applies the packaged migrations locally, and checks database integrity and foreign keys. It rechecks source, profile, artifact, and target state before applying ordered remote migrations and uploading with `--keep-vars`. The upload uses the sealed portable configuration and a unique version tag. Readback requires that tag to serve all traffic, preserves secret names and non-secret variables, and checks hosted behavior again. No resource creation, owner bootstrap, hostname attachment, Access-policy change, or credential grant is part of this command.
+
+Recovery artifacts and receipts live under `${XDG_STATE_HOME:-$HOME/.local/state}/hq-deploy/<run-id>/` in a private directory. A receipt records source and target identities, digests, previous and uploaded version references, stage status, and timings. Local check logs are retained there. A Wrangler failure additionally records bounded known migration filenames, numeric provider error codes, and recognized error categories in `wrangler-failure.json`; raw provider responses, SQL values, and credential values are excluded. Exported databases and rehearsal state are private operator data and require deliberate retention and backup. The export is a snapshot; concurrent application writes after it are not part of that recovery point.
+
+A failed stage stops the run. Inspect `receipt.json`, its failure reason, and any named local check log. A timeout during migration or upload is an uncertain outcome, even if the CLI exits with failure. Inspect the selected database and serving version before invoking deployment again; the wrapper never retries these operations automatically or restores an old database. Uploaded code followed by a failed smoke check remains a failed run with the uploaded version recorded. A process interruption can leave a target lock: inspect its PID and receipt, establish that no deployment is active, then remove only that stale lock. Retain a schema-compatible code recovery artifact; rolling back code does not reverse database writes or provider actions.
+
+The wrapper introduces no hosted resource or recurring charge. Its exports and remote migrations consume D1 operations, its hosted smoke checks consume ordinary requests, and its asset uploads retain the documentation site's existing Free-plan limits. The application's existing Workers Paid requirement remains described in [diagnostics](diagnostics.md#cloudflare-free-plan-compatibility).
 
 ## Profile and review
 
