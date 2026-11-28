@@ -16,6 +16,7 @@ test("exposes guided registration and bounded repository selection through share
     "github_app_installations_list",
     "github_app_repositories_list",
     "github_app_grant_plan",
+    "github_app_grant_narrow_plan",
     "github_app_grant_accept",
     "github_app_connection_request",
     "github_app_connection_request_finish",

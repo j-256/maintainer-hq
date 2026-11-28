@@ -39,6 +39,80 @@ type RegistrationPage = {
   limited: boolean;
 };
 type RequestCursor = { createdAt: string; id: string; workspaceId: string };
+const GRANT_REVIEW_LABELS = {
+  offer: {
+    pending: "Workspace grant offered",
+    description: "Offer access to",
+    action: "Accept workspace grant",
+    notice: "Workspace grant accepted. Select its reference in a connection to use it.",
+  },
+  revoke: {
+    pending: "Pending local revocation",
+    description: "Revoke local access for",
+    action: "Revoke workspace grant",
+    notice: "Workspace grant revoked locally. GitHub installation and other workspace grants remain separate.",
+  },
+  narrow: {
+    pending: "Pending repository removal",
+    description: "Keep only the listed repositories for",
+    action: "Apply repository removal",
+    notice: "Workspace grant narrowed to the listed repositories.",
+  },
+};
+
+function GrantRepositoryPicker({
+  grant,
+  disabled,
+  onReview,
+}: {
+  grant: GitHubAppGrant;
+  disabled: boolean;
+  onReview: (repositoryIds: number[], trigger: HTMLButtonElement) => void;
+}) {
+  const [removed, setRemoved] = useState<number[]>([]);
+  return (
+    <details>
+      <summary>Remove repositories</summary>
+      <fieldset className="github-app-choices" disabled={disabled}>
+        <legend>Repositories to remove</legend>
+        {grant.repositories.map((repo) => (
+          <label key={repo.id}>
+            <input
+              type="checkbox"
+              checked={removed.includes(repo.id)}
+              onChange={(event) =>
+                setRemoved(
+                  event.target.checked
+                    ? [...removed, repo.id]
+                    : removed.filter((id) => id !== repo.id),
+                )
+              }
+            />
+            <span>{repo.fullName}</span>
+          </label>
+        ))}
+      </fieldset>
+      <p>Keep at least one repository or revoke the entire grant.</p>
+      <Button
+        variant="outline"
+        disabled={
+          disabled || !removed.length || removed.length === grant.repositories.length
+        }
+        onClick={(event) =>
+          onReview(
+            grant.repositories
+              .filter((repo) => !removed.includes(repo.id))
+              .map((repo) => repo.id),
+            event.currentTarget,
+          )
+        }
+      >
+        Review repository removal
+      </Button>
+    </details>
+  );
+}
+
 type RequestsPage = {
   requests: {
     id: string;
@@ -504,11 +578,7 @@ export function GitHubApps({
         },
       );
       setGrantReview(result);
-      setNotice(
-        result.kind === "revoke"
-          ? "Workspace grant revoked locally. GitHub installation and other workspace grants remain separate."
-          : "Workspace grant accepted. Select its reference in a connection to use it.",
-      );
+      setNotice(GRANT_REVIEW_LABELS[result.kind].notice);
       await refresh();
     });
   }
@@ -601,9 +671,7 @@ export function GitHubApps({
               <div className="github-app-row" key={review.id}>
                 <div>
                   <h3>
-                    {review.kind === "revoke"
-                      ? "Pending local revocation"
-                      : "Workspace grant offered"}
+                    {GRANT_REVIEW_LABELS[review.kind].pending}
                   </h3>
                   <p>
                     {review.repositories
@@ -647,6 +715,29 @@ export function GitHubApps({
                       ? "Local expiry: " + dates.dateTime(grant.expiresAt)
                       : "No local expiry."}
                   </p>
+                  {grant.state === "active" && grant.repositories.length > 1 ? (
+                    <GrantRepositoryPicker
+                      key={grant.revision}
+                      grant={grant}
+                      disabled={busy || activeForm}
+                      onReview={(repositoryIds, trigger) => {
+                        returnFocus.current = trigger;
+                        void action(async () =>
+                          setGrantReview(
+                            await command<GitHubAppGrantReview>(
+                              "github_app_grant_narrow_plan",
+                              {
+                                workspaceId,
+                                grantId: grant.id,
+                                revision: grant.revision,
+                                repositoryIds,
+                              },
+                            ),
+                          ),
+                        );
+                      }}
+                    />
+                  ) : null}
                 </div>
                 {grant.state === "active" ? (
                   <Button
@@ -1148,9 +1239,7 @@ export function GitHubApps({
             Workspace grant review
           </h3>
           <p>
-            {grantReview.kind === "revoke"
-              ? "Revoke local access for"
-              : "Offer access to"}{" "}
+            {GRANT_REVIEW_LABELS[grantReview.kind].description}{" "}
             <code>{grantReview.targetWorkspaceId}</code> through installation{" "}
             {grantReview.installationId}.
           </p>
@@ -1161,6 +1250,16 @@ export function GitHubApps({
               </li>
             ))}
           </ul>
+          {grantReview.removedRepositories ? (
+            <>
+              <p>Remove access to these repositories from this workspace grant</p>
+              <ul>
+                {grantReview.removedRepositories.map((repo) => (
+                  <li key={repo.id}>{repo.fullName}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           <p>
             {grantReview.capabilities
               .map((capability) => GITHUB_CAPABILITY_LABELS[capability])
@@ -1172,8 +1271,10 @@ export function GitHubApps({
           </p>
           <p>
             Review <code>{grantReview.id}</code> expires{" "}
-            {dates.dateTime(grantReview.expiresAt)}. Acceptance authorizes this
-            exact scope, not every repository accessible to the App.
+            {dates.dateTime(grantReview.expiresAt)}.{" "}
+            {grantReview.kind === "narrow"
+              ? "Applying this review updates the workspace grant."
+              : "Acceptance authorizes the scope shown above."}
           </p>
           {grantReview.targetWorkspaceId !== workspaceId ? (
             <p>
@@ -1191,9 +1292,7 @@ export function GitHubApps({
                 }
                 onClick={() => void acceptGrant()}
               >
-                {grantReview.kind === "revoke"
-                  ? "Revoke workspace grant"
-                  : "Accept workspace grant"}
+                {GRANT_REVIEW_LABELS[grantReview.kind].action}
               </Button>
             ) : null}
             <AppReviewClose

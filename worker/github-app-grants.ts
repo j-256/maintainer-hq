@@ -13,6 +13,7 @@ import {
   githubAppGrantSchema,
   githubAppGrantPlanInput,
   githubAppGrantRevokeInput,
+  githubAppGrantNarrowInput,
   githubAppGrantListInput,
   githubAppRegistrationSelectionInput,
   githubAppConnectionRequestInput,
@@ -66,7 +67,7 @@ type ReviewRow = {
 };
 const capturedSchema = z
   .object({
-    kind: z.enum(["offer", "revoke"]),
+    kind: z.enum(["offer", "revoke", "narrow"]),
     request: githubAppGrantPlanInput,
     registrationRevision: z.number().int().positive(),
     keyRevision: z.number().int().positive(),
@@ -76,6 +77,7 @@ const capturedSchema = z
       .array(githubAppRepositoryIdentitySchema)
       .min(1)
       .max(LIMITS.REPOSITORIES),
+    removedRepositories: z.array(githubAppRepositoryIdentitySchema).optional(),
     account: githubAppGrantSchema.shape.account,
   })
   .strict();
@@ -112,6 +114,9 @@ export class GitHubAppGrants {
       revision: captured.request.revision,
       kind: captured.kind,
       repositories: captured.repositories,
+      ...(captured.removedRepositories
+        ? { removedRepositories: captured.removedRepositories }
+        : {}),
       capabilities: captured.request.capabilities,
       expiresAt: row.expires_at,
       grantExpiresAt: captured.request.expiresAt ?? null,
@@ -462,9 +467,19 @@ export class GitHubAppGrants {
       .all<GitHubAppGrantRow>();
     const reviews = await this.db
       .prepare(
-        `SELECT ${reviewColumns} FROM github_app_grant_reviews WHERE workspace_id=? AND applied_at IS NULL AND expires_at>? AND ${guard.sql} ORDER BY created_at DESC,id LIMIT ?`,
+        `SELECT ${reviewColumns} FROM github_app_grant_reviews
+        WHERE workspace_id=? AND applied_at IS NULL AND expires_at>? AND ${guard.sql}
+        AND (json_extract(input_json,'$.kind')='offer' OR (issuing_workspace_id=? AND actor_subject=?))
+        ORDER BY created_at DESC,id LIMIT ?`,
       )
-      .bind(workspaceId, this.timestamp(), ...guard.values, LIMITS.GRANTS + 1)
+      .bind(
+        workspaceId,
+        this.timestamp(),
+        ...guard.values,
+        workspaceId,
+        this.context.principal.subject,
+        LIMITS.GRANTS + 1,
+      )
       .all<ReviewRow>();
     return {
       grants: rows.results.slice(0, LIMITS.GRANTS).map((row) => {
@@ -675,6 +690,53 @@ export class GitHubAppGrants {
       account: grant.account,
     });
   }
+  async narrowPlan(input: unknown) {
+    const request = githubAppGrantNarrowInput.parse(input);
+    const ownerRevision = await authorizeHooks(
+      this.context,
+      request.workspaceId,
+      CAPABILITY.ADMIN,
+    );
+    const current = await this.row(request.grantId);
+    if (
+      !current ||
+      current.workspace_id !== request.workspaceId ||
+      current.revision !== request.revision ||
+      current.state !== "active" ||
+      (current.expires_at && current.expires_at <= this.timestamp())
+    )
+      githubAppConflict();
+    const grant = githubAppGrantSchema.parse(JSON.parse(current.metadata_json));
+    const retained = new Set(request.repositoryIds);
+    const repositories = grant.repositories.filter((repo) => retained.has(repo.id));
+    if (
+      repositories.length !== retained.size ||
+      repositories.length >= grant.repositories.length
+    )
+      githubAppConflict();
+    const registration = await new GitHubApps(this.context).registration(
+      current.registration_id,
+    );
+    if (!registration) githubAppConflict();
+    return this.saveReview({
+      kind: "narrow",
+      request: {
+        ...request,
+        targetWorkspaceId: request.workspaceId,
+        registrationId: current.registration_id,
+        installationId: current.installation_id,
+        capabilities: grant.capabilities,
+        ...(grant.expiresAt ? { expiresAt: grant.expiresAt } : {}),
+      },
+      registrationRevision: registration.revision,
+      keyRevision: registration.key_revision,
+      authority: null,
+      ownerRevision,
+      repositories,
+      removedRepositories: grant.repositories.filter((repo) => !retained.has(repo.id)),
+      account: grant.account,
+    });
+  }
   private async saveReview(captured: Captured) {
     const { request, authority } = captured;
     if (authority) await assertGitHubAppIssuer(this.context, authority);
@@ -761,7 +823,7 @@ export class GitHubAppGrants {
     if (captured.kind === "offer" && selection.workspaceId !== row.workspace_id)
       githubAppConflict();
     if (
-      captured.kind === "revoke" &&
+      captured.kind !== "offer" &&
       (selection.workspaceId !== row.issuing_workspace_id ||
         this.context.principal.subject !== row.actor_subject)
     )
@@ -839,7 +901,7 @@ export class GitHubAppGrants {
       state: captured.kind === "revoke" ? "revoked" : "active",
       expiresAt: request.expiresAt ?? null,
       issuerSubject:
-        captured.kind === "revoke" && current
+        captured.kind !== "offer" && current
           ? githubAppGrantSchema.parse(JSON.parse(current.metadata_json))
               .issuerSubject
           : row.actor_subject,
@@ -942,9 +1004,11 @@ export class GitHubAppGrants {
           this.context.principal.subject,
           this.context.principal.displayName,
           "github.app.grant",
-          captured.kind === "offer"
-            ? "GitHub App grant accepted"
-            : "GitHub App grant revoked",
+          {
+            offer: "GitHub App grant accepted",
+            revoke: "GitHub App grant revoked",
+            narrow: "GitHub App grant narrowed",
+          }[captured.kind],
           "Local workspace authority changed",
           grant.id,
           this.timestamp(),

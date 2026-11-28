@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 import { GitHubAppGrants } from "../worker/github-app-grants";
+import { readGitHubAppAuthorityScope } from "../worker/github-app-authority";
 import { GitHubApps } from "../worker/github-app-registrations";
 import { sealGitHubAppMaterial } from "../worker/github-app-crypto";
 import { commands } from "../shared/commands";
@@ -85,7 +86,12 @@ beforeEach(async () => {
           token: "synthetic-ephemeral-token",
           expires_at: new Date(fixture.clock.now + 3600000).toISOString(),
           permissions: JSON.parse(String(init?.body)).permissions,
-          repositories: [repository],
+          repositories: [
+            repository,
+            { ...repository, id: 102, full_name: "example/second" },
+          ].filter((repo) =>
+            (JSON.parse(String(init?.body)).repository_ids ?? [101]).includes(repo.id),
+          ),
         });
       if (url.includes("/app/installations?"))
         return Response.json([installation]);
@@ -108,6 +114,7 @@ const offer = (
   targetWorkspaceId = "alpha",
   grantId = "grant-a",
   revision = 0,
+  repositoryIds = [101],
 ) =>
   grants().plan({
     workspaceId: "administration",
@@ -116,7 +123,7 @@ const offer = (
     installationId: 91,
     grantId,
     revision,
-    repositoryIds: [101],
+    repositoryIds,
     capabilities: ["collection"],
   });
 const selection = (
@@ -124,6 +131,91 @@ const selection = (
   workspaceId = "alpha",
 ) => ({ workspaceId, planId: review.id, fingerprint: review.fingerprint });
 describe("GitHub App workspace grants", () => {
+  it("lets a workspace owner narrow an active grant without a deployment permit or provider calls", async () => {
+    const accepted = await grants().accept(
+      selection(await offer("alpha", "grant-a", 0, [101, 102])),
+    );
+    fixture.clock.now += 3600001;
+    provider.mockClear();
+    const request = {
+      workspaceId: "alpha",
+      grantId: "grant-a",
+      revision: 1,
+      repositoryIds: [102],
+    };
+    const removedScope = {
+      workspaceId: request.workspaceId,
+      grantId: request.grantId,
+      grantRevision: request.revision,
+      registrationId: "app-a",
+      installationId: 91,
+      repositoryId: 101,
+    };
+    await expect(
+      readGitHubAppAuthorityScope(fixture.operator, removedScope),
+    ).resolves.toBeDefined();
+    await expect(
+      fixture.operator.githubAppGrantNarrowPlan({
+        ...request,
+        repositoryIds: [101, 102],
+      }),
+    ).rejects.toMatchObject({ code: "github_app_conflict" });
+    await expect(
+      fixture.operator.githubAppGrantNarrowPlan({ ...request, repositoryIds: [103] }),
+    ).rejects.toMatchObject({ code: "github_app_conflict" });
+    await expect(
+      fixture.as(githubAppTestPrincipal("other")).githubAppGrantNarrowPlan({
+        ...request,
+        workspaceId: "beta",
+      }),
+    ).rejects.toMatchObject({ code: "github_app_conflict" });
+    await fixture.runtime.HQ_DB.prepare(
+      "INSERT INTO members(workspace_id,subject,display_name,role) VALUES ('alpha','other','Other','owner'),('alpha','viewer','Viewer','viewer')",
+    ).run();
+    await expect(
+      fixture.as(githubAppTestPrincipal("viewer")).githubAppGrantNarrowPlan(request),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    const review = await fixture.operator.githubAppGrantNarrowPlan(request);
+    expect(review).toMatchObject({
+      kind: "narrow",
+      state: "offered",
+      repositories: [{ id: 102 }],
+      removedRepositories: [{ id: 101 }],
+    });
+    const other = fixture.as(githubAppTestPrincipal("other"));
+    expect((await other.githubAppGrantList({ workspaceId: "alpha" })).offers).toEqual([]);
+    await expect(other.githubAppGrantAccept(selection(review))).rejects.toMatchObject({
+      code: "github_app_conflict",
+    });
+    const competing = await fixture.operator.githubAppGrantNarrowPlan(request);
+    const narrowed = await grants().accept(selection(review));
+    expect(narrowed.grant).toEqual({
+      ...accepted.grant,
+      repositories: [{ id: 102, fullName: "example/second", ownerId: 50, private: true }],
+      revision: 2,
+      acceptedAt: new Date(fixture.clock.now).toISOString(),
+    });
+    expect(await grants().accept(selection(review))).toEqual(narrowed);
+    await expect(grants().accept(selection(competing))).rejects.toMatchObject({
+      code: "github_app_conflict",
+    });
+    expect((await grants().list({ workspaceId: "alpha" })).grants).toEqual([
+      narrowed.grant,
+    ]);
+    for (const grantRevision of [1, 2]) {
+      await expect(
+        readGitHubAppAuthorityScope(fixture.operator, { ...removedScope, grantRevision }),
+      ).rejects.toMatchObject({ code: "github_app_conflict" });
+    }
+    await expect(
+      readGitHubAppAuthorityScope(fixture.operator, {
+        ...removedScope,
+        grantRevision: 2,
+        repositoryId: 102,
+      }),
+    ).resolves.toBeDefined();
+    expect(provider).not.toHaveBeenCalled();
+  });
   it("requires both approvals but allows one actor to satisfy both", async () => {
     const review = await offer();
     expect(review).toMatchObject({
