@@ -71,6 +71,35 @@ test("requires workspace-owner acceptance of the exact offered repository scope"
     state.calls.filter((call) => call.name === "github_app_grant_accept"),
   ).toHaveLength(1);
 });
+test("lets an owner review and remove a repository from a workspace grant", async ({
+  page,
+}) => {
+  const state = await mockGitHubApps(page);
+  const grant = appGrant();
+  grant.repositories.push({
+    id: 102,
+    fullName: "example/retired",
+    ownerId: 50,
+    private: false,
+  });
+  state.grants.push(grant);
+  await page.goto(BASE);
+  await page.getByText("Remove repositories", { exact: true }).click();
+  const reviewButton = page.getByRole("button", { name: "Review repository removal" });
+  await expect(reviewButton).toBeDisabled();
+  await page.getByRole("checkbox", { name: "example/retired" }).focus();
+  await page.keyboard.press("Space");
+  await expect(reviewButton).toBeEnabled();
+  await reviewButton.click();
+  const review = page.getByRole("region", { name: "Workspace grant review" });
+  await expect(review).toContainText("example/project");
+  await expect(review).toContainText("example/retired");
+  expect(state.calls.find((call) => call.name === "github_app_grant_narrow_plan")?.input)
+    .toMatchObject({ grantId: grant.id, revision: grant.revision, repositoryIds: [101] });
+  await review.getByRole("button", { name: "Apply repository removal" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Workspace grant narrowed" })).toBeVisible();
+  expect(state.grants[0].repositories.map((repo) => repo.id)).toEqual([101]);
+});
 test("keeps an import draft after a concurrent registration conflict", async ({
   page,
 }) => {

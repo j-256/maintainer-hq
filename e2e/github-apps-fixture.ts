@@ -173,6 +173,25 @@ export async function mockGitHubApps(
       case "github_app_grant_get":
         result = grantReviews.get(input.planId);
         break;
+      case "github_app_grant_narrow_plan": {
+        const grant = state.grants.find((item) => item.id === input.grantId)!;
+        const retained = new Set<number>(input.repositoryIds);
+        const review: GitHubAppGrantReview = {
+          ...offer,
+          id: "narrow-review",
+          kind: "narrow",
+          grantId: grant.id,
+          revision: grant.revision,
+          repositories: grant.repositories.filter((repo) => retained.has(repo.id)),
+          removedRepositories: grant.repositories.filter((repo) => !retained.has(repo.id)),
+          capabilities: grant.capabilities,
+          grantExpiresAt: grant.expiresAt,
+        };
+        state.offers.push(review);
+        grantReviews.set(review.id, review);
+        result = review;
+        break;
+      }
       case "github_app_grant_accept": {
         const selected = state.offers.find((item) => item.id === input.planId)!;
         const grant: GitHubAppGrant = {
@@ -186,13 +205,14 @@ export async function mockGitHubApps(
           account: { id: 50, login: "example", type: "Organization" },
           repositories: selected.repositories,
           capabilities: selected.capabilities,
-          revision: 1,
+          revision: selected.revision + 1,
           state: "active",
           expiresAt: null,
           issuerSubject: "operator",
           acceptedBy: "owner",
           acceptedAt: new Date().toISOString(),
         };
+        state.grants = state.grants.filter((item) => item.id !== grant.id);
         state.grants.push(grant);
         state.offers = state.offers.filter((item) => item.id !== input.planId);
         result = { ...selected, grant, state: "active" };

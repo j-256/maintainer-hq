@@ -154,6 +154,7 @@ export class WorkspaceService {
   githubAppGrantAccept(input: unknown) { return new GitHubAppGrants(this).accept(input); }
   githubAppGrantList(input: unknown) { return new GitHubAppGrants(this).list(input); }
   githubAppGrantRevokePlan(input: unknown) { return new GitHubAppGrants(this).revokePlan(input); }
+  githubAppGrantNarrowPlan(input: unknown) { return new GitHubAppGrants(this).narrowPlan(input); }
 
   githubAppList(input: unknown) { return new GitHubApps(this).list(input); }
   githubAppRegistrationPlan(input: unknown) { return new GitHubApps(this).plan(input); }

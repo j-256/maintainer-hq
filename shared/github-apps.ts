@@ -323,6 +323,13 @@ export const githubAppGrantRevokeInput = workspaceInput
     targetWorkspaceId: idSchema.optional(),
   })
   .strict();
+export const githubAppGrantNarrowInput = workspaceInput
+  .extend({
+    grantId: idSchema,
+    revision: z.number().int().positive(),
+    repositoryIds: githubAppGrantPlanInput.shape.repositoryIds,
+  })
+  .strict();
 export const githubAppGrantListInput = workspaceInput.strict();
 export const githubAppRepositoryIdentitySchema = z
   .object({
@@ -370,8 +377,9 @@ export type GitHubAppGrantReview = {
   installationId: number;
   grantId: string;
   revision: number;
-  kind: "offer" | "revoke";
+  kind: "offer" | "revoke" | "narrow";
   repositories: z.infer<typeof githubAppRepositoryIdentitySchema>[];
+  removedRepositories?: z.infer<typeof githubAppRepositoryIdentitySchema>[];
   capabilities: GitHubCapability[];
   expiresAt: string;
   grantExpiresAt: string | null;

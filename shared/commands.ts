@@ -8,6 +8,7 @@ import {
   githubAppConnectionRequestsInput,
   githubAppGrantPlanInput,
   githubAppGrantRevokeInput,
+  githubAppGrantNarrowInput,
   githubAppGrantListInput,
   githubAppListInput,
   githubAppRegistrationPlanInput,
@@ -375,7 +376,7 @@ export const commands = {
   github_app_grant_accept: {
     schema: githubAppRegistrationSelectionInput,
     method: "githubAppGrantAccept",
-    title: "Accept an exact App grant or apply its reviewed local revocation",
+    title: "Accept an exact App grant or apply a reviewed local restriction",
     readOnly: false,
   },
   github_app_grant_list: {
@@ -388,6 +389,12 @@ export const commands = {
     schema: githubAppGrantRevokeInput,
     method: "githubAppGrantRevokePlan",
     title: "Review revocation of one workspace App grant",
+    readOnly: false,
+  },
+  github_app_grant_narrow_plan: {
+    schema: githubAppGrantNarrowInput,
+    method: "githubAppGrantNarrowPlan",
+    title: "Review removing repositories from one workspace App grant",
     readOnly: false,
   },
   github_apps_list: {
